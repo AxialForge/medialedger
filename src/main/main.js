@@ -113,17 +113,44 @@ if (!gotLock) {
     ];
     await new Promise(r => win.webContents.once('did-finish-load', r));
     await sleep(1500);
+    // `--social=WxH`: one dashboard capture at that exact size (GitHub social preview is 1280x640).
+    const social = (process.argv.find(a => a.startsWith('--social=')) || '').slice('--social='.length);
+    if (/^\d+x\d+$/.test(social)) {
+      const [w, hgt] = social.split('x').map(Number);
+      win.setContentSize(w, hgt); await sleep(1500);
+      // capturePage returns device pixels; resize so the file is exactly WxH regardless of display scaling.
+      fs.writeFileSync(path.join(dir, `social-preview-${w}x${hgt}.png`), (await win.webContents.capturePage()).resize({ width: w, height: hgt, quality: 'best' }).toPNG());
+      log('screenshot social preview'); return;
+    }
+    // Wait until the router has swapped the hash in and the view is no longer "Loading…", then let two frames paint.
+    const settle = async (hash) => {
+      // Blank the view first so the old page can't be mistaken for the new one, then navigate
+      // (dispatching hashchange by hand when the hash is already the target).
+      await win.webContents.executeJavaScript(`(() => { document.querySelector('#view').textContent = 'Loading…'; if (location.hash === ${JSON.stringify(hash)}) window.dispatchEvent(new HashChangeEvent('hashchange')); else location.hash = ${JSON.stringify(hash)}; })()`);
+      for (let i = 0; i < 100; i++) {
+        const ok = await win.webContents.executeJavaScript(`location.hash === ${JSON.stringify(hash)} && !document.querySelector('#view')?.textContent.startsWith('Loading')`);
+        if (ok) break;
+        await sleep(100);
+      }
+      await win.webContents.executeJavaScript('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))');
+      await sleep(400);
+    };
+    const capture = async (file) => {
+      for (let i = 0; i < 5; i++) {
+        const img = await win.webContents.capturePage();
+        if (!img.isEmpty()) { fs.writeFileSync(file, img.toPNG()); return true; }
+        await sleep(300);
+      }
+      log('screenshot FAILED (empty capture): ' + file); return false;
+    };
     for (const [name, hash] of shots) {
-      await win.webContents.executeJavaScript(`location.hash = ${JSON.stringify(hash)}; true`);
-      await sleep(1800);
-      const img = await win.webContents.capturePage();
-      fs.writeFileSync(path.join(dir, `${name}.png`), img.toPNG());
-      log('screenshot ' + name);
+      await settle(hash);
+      if (await capture(path.join(dir, `${name}.png`))) log('screenshot ' + name);
     }
     // Fix modal on top of the Problems view
-    await win.webContents.executeJavaScript(`location.hash = '#problems'; true`); await sleep(1500);
+    await settle('#problems');
     const opened = await win.webContents.executeJavaScript(`(() => { const b = document.querySelector('.fixbtn'); if (!b) return false; b.click(); return true; })()`);
-    if (opened) { await sleep(1200); fs.writeFileSync(path.join(dir, 'fix-modal.png'), (await win.webContents.capturePage()).toPNG()); }
+    if (opened) { await sleep(1200); await capture(path.join(dir, 'fix-modal.png')); log('screenshot fix-modal'); }
   }
 
   app.on('window-all-closed', () => { app.quit(); });
