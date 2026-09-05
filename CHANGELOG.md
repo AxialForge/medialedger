@@ -8,6 +8,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Automatic re-parse of the whole database when the parser rules change, so
+  improvements apply without a rescan (26 → 4 unparsed files on the reference
+  library).
+- `--screenshots=<dir>` mode that renders every view and saves PNGs; used for
+  the README gallery in `docs/screenshots/`.
+- README: badges, screenshot gallery, scan timings, CSV reference, privacy
+  notes, FAQ and roadmap.
+
 ### Changed
 
 ### Fixed

@@ -147,4 +147,7 @@ function movieGroupKey(title, year) {
 
 function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
-module.exports = { parseEpisode, parseMovie, seasonFromDir, movieGroupKey };
+// Bump whenever parse rules change; main.js re-parses the whole DB on mismatch.
+const PARSER_VERSION = 2;
+
+module.exports = { parseEpisode, parseMovie, seasonFromDir, movieGroupKey, PARSER_VERSION };

@@ -9,6 +9,7 @@ const { Scanner } = require('./scanner');
 const { Scheduler } = require('./scheduler');
 const { exportAll } = require('./exportCsv');
 const { findFfprobe } = require('./ffprobe');
+const { PARSER_VERSION } = require('./parse');
 const ffmpegdl = require('./ffmpegdl');
 const updater = require('./updater');
 const plex = require('./plex');
@@ -78,6 +79,11 @@ if (!gotLock) {
     scanner = new Scanner(db, settings, { log });
     scheduler = new Scheduler(app, settings, runScan);
     scanner.onProgress(p => send('scan:progress', p));
+    if (settings.get().parserVersion !== PARSER_VERSION) {
+      const n = scanner.reparseAll();
+      settings.set({ parserVersion: PARSER_VERSION });
+      log(`parser v${PARSER_VERSION}: re-parsed ${n} indexed files`);
+    }
 
     if (HEADLESS) {
       try { await runScan('task'); } catch (e) { log('headless scan failed: ' + e.message); }
@@ -86,6 +92,8 @@ if (!gotLock) {
     }
 
     createWindow();
+    const shotArg = process.argv.find(a => a.startsWith('--screenshots='));
+    if (shotArg) { captureScreenshots(shotArg.slice('--screenshots='.length)).then(() => app.quit()); return; }
     scheduler.start();
     // Silent auto-update (installed builds only). A manual "check now" lives on the About page.
     const s = settings.get();
@@ -93,6 +101,30 @@ if (!gotLock) {
     updater.start({ enabled: s.updates.enabled, onStatus: st => { updateStatus = st; log('update: ' + JSON.stringify(st)); send('update:status', st); } });
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
   });
+
+  // `--screenshots=<dir>`: render each view with the live database and save PNGs (used for the README).
+  async function captureScreenshots(dir) {
+    fs.mkdirSync(dir, { recursive: true });
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const shots = [
+      ['dashboard', '#dashboard'], ['tv', '#tv'], ['anime', '#anime'], ['movies', '#movies'],
+      ['episodes', '#anime/' + encodeURIComponent('One Piece')], ['movie-versions', '#movies/' + encodeURIComponent('pacificrim|2013')],
+      ['changes', '#changes'], ['problems', '#problems'], ['export', '#export'], ['settings', '#settings'], ['about', '#about'],
+    ];
+    await new Promise(r => win.webContents.once('did-finish-load', r));
+    await sleep(1500);
+    for (const [name, hash] of shots) {
+      await win.webContents.executeJavaScript(`location.hash = ${JSON.stringify(hash)}; true`);
+      await sleep(1800);
+      const img = await win.webContents.capturePage();
+      fs.writeFileSync(path.join(dir, `${name}.png`), img.toPNG());
+      log('screenshot ' + name);
+    }
+    // Fix modal on top of the Problems view
+    await win.webContents.executeJavaScript(`location.hash = '#problems'; true`); await sleep(1500);
+    const opened = await win.webContents.executeJavaScript(`(() => { const b = document.querySelector('.fixbtn'); if (!b) return false; b.click(); return true; })()`);
+    if (opened) { await sleep(1200); fs.writeFileSync(path.join(dir, 'fix-modal.png'), (await win.webContents.capturePage()).toPNG()); }
+  }
 
   app.on('window-all-closed', () => { app.quit(); });
   app.on('before-quit', () => { scheduler && scheduler.stop(); try { db && db.close(); } catch { /* ignore */ } });

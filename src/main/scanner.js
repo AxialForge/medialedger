@@ -263,6 +263,25 @@ class Scanner {
     }
   }
 
+  // Re-run the parser (plus overrides) over every indexed row. Used when the
+  // parser improves so users get the fix without waiting for a rescan.
+  reparseAll() {
+    const rows = this.db.all('SELECT id, root_id, rel_path, library_type FROM files');
+    const ovCache = new Map();
+    let changed = 0;
+    this.db.transaction(() => {
+      for (const f of rows) {
+        if (!ovCache.has(f.root_id)) ovCache.set(f.root_id, this.db.allOverridesForRoot(f.root_id));
+        const ov = ovCache.get(f.root_id).get(f.rel_path);
+        const base = f.library_type === 'movie' ? parseMovie(f.rel_path) : parseEpisode(f.rel_path);
+        const merged = applyOverride(base, ov, f.library_type);
+        this.db.updateFile(f.id, { ...merged, ignored: ov && ov.ignore ? 1 : 0 });
+        changed++;
+      }
+    });
+    return changed;
+  }
+
   // Re-apply overrides to already-indexed rows without touching the share.
   reapplyOverride(rootId, relPath) {
     const f = this.db.getFileByPath(rootId, relPath);
