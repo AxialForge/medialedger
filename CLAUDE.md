@@ -21,9 +21,13 @@ local app.
   `missing=1`; only the explicit "Forget missing files" button purges them. A
   root that is unreachable is skipped and logged as `root_offline`, never
   treated as empty.
-- **Read-only against the share.** The scanner only lists, stats and probes.
-  Renaming files on the share is a possible future feature; it must be opt-in
-  and previewed, never automatic.
+- **Read-only against the share, with one gated exception.** The scanner only
+  lists, stats and probes. The rename tool (`renamer.js`) is the single write
+  path: off by default (`settings.renaming.enabled`), renames in place only,
+  never overwrites, logs every attempt to `renames`. Never add another write
+  path without the same gate.
+- **No paid services.** No code-signing certificates, no paid API tiers. Free,
+  keyless sources only (TVmaze, AniList, BtbN ffmpeg builds, GitHub Releases).
 - **Schema changes go through `MIGRATIONS` in `db.js`.** Never edit an old
   migration; append a new one. `Db.migrate()` backs the file up first.
 - **Manual fixes must survive everything.** `overrides` is keyed by
@@ -41,6 +45,8 @@ npm start              # GUI
 npm run scan           # headless: scan → export → exit (what Task Scheduler runs)
 npm test               # parser + updater unit tests (plain Node)
 node test/scan.harness.js    # end-to-end threaded scan of real roots into a temp DB
+node test/metadata.live.js   # live TVmaze/AniList lookups for real series (network)
+npx electron . --profile=.devprofile   # run against a separate data folder (see Gotchas)
 npm run build:win      # electron-builder → dist/ (NSIS one-click installer + latest.yml)
 node tools/make-icon.js      # regenerate build/icon.ico + icon.png (no deps)
 ```
@@ -67,6 +73,9 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 | `src/main/ffmpegdl.js` | Download BtbN ffmpeg zip, extract with PowerShell `Expand-Archive` |
 | `src/main/exportCsv.js` | Eight CSVs per export, timestamped dir + `latest\` copy |
 | `src/main/scheduler.js` | In-app interval timer + `schtasks.exe` create/query/delete |
+| `src/main/watcher.js` | Optional `fs.watch` (recursive, UNC ok) per root; debounced scan trigger |
+| `src/main/metadata.js` | TVmaze / AniList lookups → `{season: count}`; `missingEpisodes()` diff with absolute-numbering guard |
+| `src/main/renamer.js` | Plex-standard name proposals + gated in-place rename with logging |
 | `src/main/updater.js` | Template silent auto-updater (electron-updater), plus pure version helpers |
 | `src/main/plex.js` | Placeholder: connection test only (later: match to Plex items) |
 | `src/preload.js` | `window.ledger.*` API surface |
@@ -104,6 +113,25 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   instance opens the window itself (`promotedToGui`) and keeps going.
 
 ## Gotchas
+
+- **The installed app holds the single-instance lock.** If `MediaLedger.exe` is
+  running, `npx electron .` quits instantly with no log line and no error (both
+  use `%APPDATA%\MediaLedger`). Do not kill the user's app; run the dev build
+  with `--profile=<dir>` (copy the DB in first if you need real data).
+  `.devprofile/` is git-ignored for this.
+- **Migration SQL is split on `;` after comments are stripped.** A `--` comment
+  containing a semicolon or odd unicode broke v2 until the splitter stripped
+  comments first. Keep comments out of statements if in doubt.
+- **AniList models cours, not seasons.** "Attack on Titan" comes back as six TV
+  entries; `isPart()` merges "Part 2 / Cour 2 / 2nd Half" titles into the
+  previous season. Ongoing series have `episodes: null`; `aniCount()` uses
+  `nextAiringEpisode.episode - 1`. TVmaze numbers anime by broadcast season, so
+  the Match dialog lets the user switch source per series.
+- **Absolute numbering.** Folders like `One Piece S1 East Blue (1-61)` continue
+  numbering across seasons; `missingEpisodes()` skips a season whose max
+  on-disk number is > 1.5× the expected count and flags `absolute`.
+- **Duplicate "keep" marks live in `overrides.keep`**, so they follow the file
+  through renames (renamer updates `overrides.rel_path`).
 
 - **Bash heredocs / `node -e` strings on this box collapse `\\` to `\`.**
   Writing JS with UNC paths or `split('\\')` through Bash produced octal-escape

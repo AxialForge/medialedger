@@ -3,6 +3,7 @@
 // can always point at the same file name.
 const fs = require('fs');
 const path = require('path');
+const { missingEpisodes } = require('./metadata');
 
 function csvCell(v) {
   if (v === null || v === undefined) return '';
@@ -64,7 +65,9 @@ function unionList(vals) {
   return [...s].join(';');
 }
 
-function exportEpisodes(db, type, dir, prefix) {
+function exportEpisodes(db, type, dir, prefix, settings) {
+  const metas = new Map(db.all('SELECT * FROM series_meta WHERE library_type=?', type).map(m => [m.show_name, m]));
+  const thr = (settings && settings.quality && settings.quality.minKbps) || {};
   const rows = db.all('SELECT * FROM files WHERE library_type = ? AND ignored=0 ORDER BY show_name, season, episode, file_name', type);
   const header = ['show', 'season', 'episode', 'episode_end', 'episode_title', 'file_name', 'rel_path', 'edition_tag', 'parse_ok', 'parse_note', ...TECH_COLS];
   writeCsv(path.join(dir, `${prefix}_episodes.csv`), header, rows.map(r => ({
@@ -92,9 +95,16 @@ function exportEpisodes(db, type, dir, prefix) {
       captions_pct: probed.length ? Math.round(withCaps / list.length * 100) : null,
       episode_gaps: episodeGaps(list),
       probe_errors: list.filter(r => r.probe_ok === 0 && r.probed_at).length,
+      ...(() => { const m = metas.get(show); const r = m && m.seasons ? missingEpisodes(list.filter(x => x.parse_ok), m.seasons) : null; return {
+        meta_source: m ? m.source : '', meta_title: m ? m.matched_title : '', meta_status: m ? m.status : '',
+        expected_episodes: r ? r.expectedTotal : '', missing_episodes: r ? r.missingCount : '',
+        missing_list: r ? r.missing.map(x => `S${x.season}: ${x.missing.length > 15 ? x.missing.slice(0, 15).join(',') + ',…' : x.missing.join(',')}`).join('; ') : '',
+        absolute_numbering: r && r.absolute ? 'yes' : '' }; })(),
+      mixed_resolution: new Set(list.map(r => r.resolution).filter(Boolean)).size > 1 ? 'yes' : 'no',
+      low_bitrate_files: list.filter(r => r.resolution && thr[r.resolution] && r.bitrate_kbps != null && r.bitrate_kbps < thr[r.resolution]).length,
     });
   }
-  writeCsv(path.join(dir, `${prefix}_series.csv`), ['show', 'seasons', 'season_list', 'episodes', 'unparsed_files', 'total_duration_h', 'total_size_gb', 'avg_episode_min', 'resolutions', 'video_codecs', 'audio_langs', 'sub_langs', 'captions_pct', 'episode_gaps', 'probe_errors'], summary);
+  writeCsv(path.join(dir, `${prefix}_series.csv`), ['show', 'seasons', 'season_list', 'episodes', 'unparsed_files', 'total_duration_h', 'total_size_gb', 'avg_episode_min', 'resolutions', 'video_codecs', 'audio_langs', 'sub_langs', 'captions_pct', 'episode_gaps', 'probe_errors', 'meta_source', 'meta_title', 'meta_status', 'expected_episodes', 'missing_episodes', 'missing_list', 'absolute_numbering', 'mixed_resolution', 'low_bitrate_files'], summary);
   return [`${prefix}_episodes.csv`, `${prefix}_series.csv`];
 }
 
@@ -134,13 +144,13 @@ function exportChanges(db, dir, scanId) {
   return ['changes.csv'];
 }
 
-function exportAll(db, outDir, scanId) {
+function exportAll(db, outDir, scanId, settings) {
   const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '').replace(/(\d{8})(\d{4})/, '$1_$2');
   const dir = path.join(outDir, stamp);
   fs.mkdirSync(dir, { recursive: true });
   const written = [
-    ...exportEpisodes(db, 'tv', dir, 'tv'),
-    ...exportEpisodes(db, 'anime', dir, 'anime'),
+    ...exportEpisodes(db, 'tv', dir, 'tv', settings),
+    ...exportEpisodes(db, 'anime', dir, 'anime', settings),
     ...exportMovies(db, dir),
     ...exportChanges(db, dir, scanId),
   ];

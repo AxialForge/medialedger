@@ -15,9 +15,14 @@
       <a href="#tv" data-view="tv"><i>▤</i>TV Shows</a>
       <a href="#anime" data-view="anime"><i>▥</i>Anime</a>
       <a href="#movies" data-view="movies"><i>▦</i>Movies</a>
+      <div class="navgroup">Review</div>
+      <a href="#missing" data-view="missing"><i>◌</i>Missing episodes <span class="pill" id="missingCount" hidden></span></a>
+      <a href="#duplicates" data-view="duplicates"><i>⧉</i>Duplicates <span class="pill" id="dupCount" hidden></span></a>
+      <a href="#quality" data-view="quality"><i>◔</i>Quality</a>
+      <a href="#problems" data-view="problems"><i>⚠</i>Problems <span class="pill" id="problemCount" hidden></span></a>
       <div class="navgroup">Maintenance</div>
       <a href="#changes" data-view="changes"><i>↹</i>Change log</a>
-      <a href="#problems" data-view="problems"><i>⚠</i>Problems <span class="pill" id="problemCount" hidden></span></a>
+      <a href="#rename" data-view="rename" id="navRename"><i>✎</i>Rename files</a>
       <a href="#export" data-view="export"><i>⇩</i>CSV export</a>
       <div class="navgroup">App</div>
       <a href="#settings" data-view="settings"><i>⚙</i>Settings</a>
@@ -31,6 +36,11 @@
           <div id="scanMsg" class="muted small"></div>
           <div id="scanFile" class="muted tiny"></div>
         </div>
+        <div id="metaProgress" class="progress" hidden>
+          <div class="bar"><div id="metaBar"></div></div>
+          <div id="metaMsg" class="muted tiny"></div>
+        </div>
+        <div id="watchLine" class="muted tiny" hidden></div>
       </div>
       <div class="version muted tiny" id="versionLine"></div>
     </nav>

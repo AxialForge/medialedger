@@ -7,14 +7,20 @@ const { Settings } = require('./settings');
 const { Db } = require('./db');
 const { Scanner } = require('./scanner');
 const { Scheduler } = require('./scheduler');
+const { Watcher } = require('./watcher');
 const { exportAll } = require('./exportCsv');
 const { findFfprobe } = require('./ffprobe');
 const { PARSER_VERSION } = require('./parse');
 const ffmpegdl = require('./ffmpegdl');
 const updater = require('./updater');
+const metadata = require('./metadata');
+const renamer = require('./renamer');
 const plex = require('./plex');
 
 const HEADLESS = process.argv.includes('--scan');
+// `--profile=<dir>`: use a separate data folder (dev/testing next to an installed copy).
+const profileArg = process.argv.find(a => a.startsWith('--profile='));
+if (profileArg) app.setPath('userData', profileArg.slice('--profile='.length));
 const gotLock = app.requestSingleInstanceLock({ scan: HEADLESS });
 
 if (!gotLock) {
@@ -22,8 +28,9 @@ if (!gotLock) {
   app.quit();
 } else {
   let win = null;
-  let settings, db, scanner, scheduler;
+  let settings, db, scanner, scheduler, watcher;
   let updateStatus = { state: 'idle' };
+  let metaJob = { running: false, done: 0, total: 0, message: '' };
   const userData = app.getPath('userData');
   const logFile = path.join(userData, 'medialedger.log');
   const log = (...a) => { const line = `[${new Date().toISOString()}] ${a.join(' ')}\n`; try { fs.appendFileSync(logFile, line); } catch { /* ignore */ } if (!app.isPackaged) process.stdout.write(line); };
@@ -33,7 +40,7 @@ if (!gotLock) {
   function ffprobePath() { return findFfprobe(settings.get().ffprobePath) || ffmpegdl.installedFfprobe(userData); }
 
   function runExport(scanId, trigger) {
-    const out = exportAll(db, exportDir(), scanId);
+    const out = exportAll(db, exportDir(), scanId, settings.get());
     db.addExport({ scan_id: scanId, dir: out.dir, files: out.files, rows: out.rows, trigger });
     return out;
   }
@@ -44,12 +51,84 @@ if (!gotLock) {
     const result = await scanner.scan(trigger);
     scheduler.noteRun();
     log(`scan ${result.status} in ${Math.round(result.duration_ms / 1000)}s: seen=${result.files_seen} added=${result.added} removed=${result.removed} modified=${result.modified} probed=${result.probed} errors=${result.errors}`);
+    if (result.status === 'done' && settings.get().metadata.enabled) {
+      try { await refreshMetadata({ onlyNew: true }); } catch (e) { log('metadata failed: ' + e.message); }
+    }
     if (settings.get().autoExportAfterScan && result.status === 'done') {
       try { const out = runExport(result.scanId, trigger); log('exported to ' + out.dir); result.export = out; }
       catch (e) { log('export failed: ' + e.message); }
     }
     db.checkpoint();
     return result;
+  }
+
+  // ---- series metadata (expected episode counts) ---------------------------------
+  async function refreshMetadata({ onlyNew = true, type = null, shows = null } = {}) {
+    if (metaJob.running) return { skipped: true };
+    const cfg = settings.get().metadata;
+    const types = type ? [type] : ['tv', 'anime'];
+    const todo = [];
+    const staleBefore = new Date(Date.now() - (Number(cfg.refreshDays) || 14) * 86400000).toISOString();
+    for (const t of types) {
+      const have = db.allSeriesMeta(t);
+      const series = db.all(`SELECT DISTINCT show_name FROM files WHERE library_type=? AND missing=0 AND ignored=0 AND show_name IS NOT NULL ORDER BY show_name`, t).map(r => r.show_name);
+      for (const s of series) {
+        if (shows && !shows.includes(s)) continue;
+        const m = have.get(s);
+        if (m && m.locked) continue;
+        if (onlyNew && m && m.fetched_at && !(m.status && /running|releasing|airing/i.test(m.status) && m.fetched_at < staleBefore)) continue;
+        todo.push({ type: t, show: s });
+      }
+    }
+    metaJob = { running: true, done: 0, total: todo.length, message: 'Looking up expected episode counts…' };
+    send('meta:progress', metaJob);
+    let found = 0, missed = 0, failed = 0;
+    try {
+      for (const { type: t, show } of todo) {
+        try {
+          const r = await metadata.lookupSeries(t, show);
+          if (r.found) { found++; db.saveSeriesMeta({ library_type: t, show_name: show, source: r.source, source_id: r.source_id, matched_title: r.matched_title, status: r.status, seasons: r.seasons, total_episodes: r.total_episodes, url: r.url, fetched_at: new Date().toISOString(), locked: 0 }); }
+          else { missed++; db.saveSeriesMeta({ library_type: t, show_name: show, source: 'none', fetched_at: new Date().toISOString(), locked: 0, note: r.candidates ? 'no confident match' : 'not found' }); }
+        } catch (e) { failed++; log(`metadata ${t} "${show}": ${e.message}`); if (/HTTP 429/.test(e.message)) await new Promise(r => setTimeout(r, 10000)); }
+        metaJob.done++; metaJob.message = `Looking up ${t === 'anime' ? 'AniList' : 'TVmaze'}: ${show}`;
+        if (metaJob.done % 3 === 0 || metaJob.done === metaJob.total) send('meta:progress', metaJob);
+        await new Promise(r => setTimeout(r, t === 'anime' ? 800 : 550)); // stay under both rate limits
+      }
+    } finally {
+      metaJob = { running: false, done: metaJob.done, total: metaJob.total, message: `Done: ${found} matched, ${missed} unmatched, ${failed} errors` };
+      send('meta:progress', metaJob);
+      log(`metadata: ${found} matched, ${missed} unmatched, ${failed} errors of ${todo.length}`);
+    }
+    return { found, missed, failed, total: todo.length };
+  }
+
+  // Missing-episode summary for every series of a type (used by dashboard, series list, CSV, Missing view).
+  function missingSummary(type) {
+    const metas = db.allSeriesMeta(type);
+    const rows = db.all(`SELECT show_name, season, episode, episode_end FROM files WHERE library_type=? AND missing=0 AND ignored=0 AND parse_ok=1`, type);
+    const byShow = new Map();
+    for (const r of rows) { if (!byShow.has(r.show_name)) byShow.set(r.show_name, []); byShow.get(r.show_name).push(r); }
+    const out = [];
+    for (const [show, list] of byShow) {
+      const m = metas.get(show);
+      const res = m && m.seasons ? metadata.missingEpisodes(list, m.seasons) : { missing: [], missingCount: 0, expectedTotal: 0, haveTotal: 0, absolute: false };
+      out.push({ library_type: type, show_name: show, source: m ? m.source : null, matched_title: m ? m.matched_title : null, status: m ? m.status : null, url: m ? m.url : null, locked: m ? m.locked : 0, note: m ? m.note : null,
+        expected: res.expectedTotal, have: res.haveTotal, missing_count: res.missingCount, missing: res.missing, absolute: res.absolute, seasons: m && m.seasons ? JSON.parse(m.seasons) : null });
+    }
+    return out.sort((a, b) => b.missing_count - a.missing_count || a.show_name.localeCompare(b.show_name));
+  }
+
+  function qualityReport() {
+    const thr = settings.get().quality.minKbps || {};
+    const mixed = db.all(`SELECT library_type, show_name, COUNT(*) files, COUNT(DISTINCT resolution) res_n, GROUP_CONCAT(DISTINCT resolution) resolutions, COUNT(DISTINCT video_codec) codec_n, GROUP_CONCAT(DISTINCT video_codec) codecs
+      FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 AND library_type IN ('tv','anime') GROUP BY library_type, show_name HAVING res_n > 1 ORDER BY res_n DESC, files DESC`);
+    const perSeasonMixed = db.all(`SELECT library_type, show_name, season, COUNT(*) files, GROUP_CONCAT(DISTINCT resolution) resolutions FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 AND library_type IN ('tv','anime') GROUP BY library_type, show_name, season HAVING COUNT(DISTINCT resolution) > 1 ORDER BY show_name, season`);
+    const all = db.all(`SELECT id, root_id, library_type, rel_path, file_name, show_name, movie_title, movie_year, resolution, bitrate_kbps, video_codec, duration_s, size FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 AND bitrate_kbps IS NOT NULL AND resolution IS NOT NULL`);
+    const low = all.filter(f => thr[f.resolution] && f.bitrate_kbps < thr[f.resolution]).sort((a, b) => (a.bitrate_kbps / thr[a.resolution]) - (b.bitrate_kbps / thr[b.resolution]));
+    const undAudio = db.all(`SELECT library_type, COUNT(*) n FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 AND (audio_langs IS NULL OR audio_langs='und') GROUP BY library_type`);
+    const short = db.all(`SELECT id, root_id, library_type, rel_path, file_name, duration_s, size FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 AND duration_s < 120 ORDER BY duration_s LIMIT 500`);
+    const noAudio = db.all(`SELECT id, root_id, library_type, rel_path, file_name FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 AND (audio_count IS NULL OR audio_count=0) LIMIT 500`);
+    return { thresholds: thr, mixed, perSeasonMixed, low: low.slice(0, 2000), lowTotal: low.length, undAudio, short, noAudio };
   }
 
   function createWindow() {
@@ -69,7 +148,7 @@ if (!gotLock) {
   app.on('second-instance', (_e, argv, _cwd, extra) => {
     const wantsScan = (extra && extra.scan) || (argv || []).includes('--scan');
     if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
-    else if (!wantsScan) { promotedToGui = true; createWindow(); scheduler.start(); }
+    else if (!wantsScan) { promotedToGui = true; createWindow(); scheduler.start(); watcher.apply(); }
     if (wantsScan) runScan('task').catch(e => log('task scan failed: ' + e.message));
   });
 
@@ -78,6 +157,7 @@ if (!gotLock) {
     db = new Db(path.join(userData, 'medialedger.db'), { log });
     scanner = new Scanner(db, settings, { log });
     scheduler = new Scheduler(app, settings, runScan);
+    watcher = new Watcher(settings, runScan, log);
     scanner.onProgress(p => send('scan:progress', p));
     if (settings.get().parserVersion !== PARSER_VERSION) {
       const n = scanner.reparseAll();
@@ -95,10 +175,12 @@ if (!gotLock) {
     const shotArg = process.argv.find(a => a.startsWith('--screenshots='));
     if (shotArg) { captureScreenshots(shotArg.slice('--screenshots='.length)).then(() => app.quit()); return; }
     scheduler.start();
-    // Silent auto-update (installed builds only). A manual "check now" lives on the About page.
+    watcher.apply();
     const s = settings.get();
     if (s.githubToken) { try { const { autoUpdater } = require('electron-updater'); autoUpdater.setFeedURL({ provider: 'github', owner: 'AxialForge', repo: 'medialedger', private: true, token: s.githubToken }); } catch (e) { log('feed url: ' + e.message); } }
     updater.start({ enabled: s.updates.enabled, onStatus: st => { updateStatus = st; log('update: ' + JSON.stringify(st)); send('update:status', st); } });
+    // First-time metadata fill runs in the background once the window is up.
+    if (s.metadata.enabled) setTimeout(() => refreshMetadata({ onlyNew: true }).catch(e => log('metadata: ' + e.message)), 4000);
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
   });
 
@@ -109,23 +191,19 @@ if (!gotLock) {
     const shots = [
       ['dashboard', '#dashboard'], ['tv', '#tv'], ['anime', '#anime'], ['movies', '#movies'],
       ['episodes', '#anime/' + encodeURIComponent('One Piece')], ['movie-versions', '#movies/' + encodeURIComponent('pacificrim|2013')],
+      ['missing', '#missing'], ['duplicates', '#duplicates'], ['quality', '#quality'], ['rename', '#rename'],
       ['changes', '#changes'], ['problems', '#problems'], ['export', '#export'], ['settings', '#settings'], ['about', '#about'],
     ];
     await new Promise(r => win.webContents.once('did-finish-load', r));
     await sleep(1500);
-    // `--social=WxH`: one dashboard capture at that exact size (GitHub social preview is 1280x640).
     const social = (process.argv.find(a => a.startsWith('--social=')) || '').slice('--social='.length);
     if (/^\d+x\d+$/.test(social)) {
       const [w, hgt] = social.split('x').map(Number);
       win.setContentSize(w, hgt); await sleep(1500);
-      // capturePage returns device pixels; resize so the file is exactly WxH regardless of display scaling.
       fs.writeFileSync(path.join(dir, `social-preview-${w}x${hgt}.png`), (await win.webContents.capturePage()).resize({ width: w, height: hgt, quality: 'best' }).toPNG());
       log('screenshot social preview'); return;
     }
-    // Wait until the router has swapped the hash in and the view is no longer "Loading…", then let two frames paint.
     const settle = async (hash) => {
-      // Blank the view first so the old page can't be mistaken for the new one, then navigate
-      // (dispatching hashchange by hand when the hash is already the target).
       await win.webContents.executeJavaScript(`(() => { document.querySelector('#view').textContent = 'Loading…'; if (location.hash === ${JSON.stringify(hash)}) window.dispatchEvent(new HashChangeEvent('hashchange')); else location.hash = ${JSON.stringify(hash)}; })()`);
       for (let i = 0; i < 100; i++) {
         const ok = await win.webContents.executeJavaScript(`location.hash === ${JSON.stringify(hash)} && !document.querySelector('#view')?.textContent.startsWith('Loading')`);
@@ -147,14 +225,13 @@ if (!gotLock) {
       await settle(hash);
       if (await capture(path.join(dir, `${name}.png`))) log('screenshot ' + name);
     }
-    // Fix modal on top of the Problems view
     await settle('#problems');
     const opened = await win.webContents.executeJavaScript(`(() => { const b = document.querySelector('.fixbtn'); if (!b) return false; b.click(); return true; })()`);
     if (opened) { await sleep(1200); await capture(path.join(dir, 'fix-modal.png')); log('screenshot fix-modal'); }
   }
 
   app.on('window-all-closed', () => { app.quit(); });
-  app.on('before-quit', () => { scheduler && scheduler.stop(); try { db && db.close(); } catch { /* ignore */ } });
+  app.on('before-quit', () => { scheduler && scheduler.stop(); watcher && watcher.stop(); try { db && db.close(); } catch { /* ignore */ } });
 
   // ---- IPC ---------------------------------------------------------------------
   const h = (ch, fn) => ipcMain.handle(ch, async (_e, ...args) => fn(...args));
@@ -163,11 +240,11 @@ if (!gotLock) {
     version: app.getVersion(), electron: process.versions.electron, node: process.versions.node, chrome: process.versions.chrome,
     platform: `${os.type()} ${os.release()} (${os.arch()})`, cpus: os.cpus().length, userData, logFile, dbFile: db.file, exportDir: exportDir(),
     ffprobe: ffprobePath(), ffprobeVersion: await ffmpegdl.ffprobeVersion(ffprobePath()), packaged: app.isPackaged, repo: 'https://github.com/AxialForge/medialedger',
-    updateStatus, db: db.stats(),
+    updateStatus, db: db.stats(), watch: watcher.status(), metaJob,
   }));
   h('settings:get', () => settings.get());
-  h('settings:set', (patch) => settings.set(patch));
-  h('settings:replace', (next) => settings.replace(next));
+  h('settings:set', (patch) => { const s = settings.set(patch); watcher.apply(); return s; });
+  h('settings:replace', (next) => { const s = settings.replace(next); watcher.apply(); return s; });
   h('dialog:pickFolder', async (initial) => { const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'], defaultPath: initial || undefined }); return r.canceled ? null : r.filePaths[0]; });
   h('dialog:pickFile', async () => { const r = await dialog.showOpenDialog(win, { properties: ['openFile'], filters: [{ name: 'ffprobe', extensions: ['exe'] }] }); return r.canceled ? null : r.filePaths[0]; });
   h('shell:open', (p) => shell.openPath(p));
@@ -187,6 +264,7 @@ if (!gotLock) {
   h('schedule:removeTask', async () => { const r = await scheduler.removeTask(); settings.set({ schedule: { taskSchedulerEnabled: false } }); return r; });
   h('schedule:runTaskNow', () => scheduler.runTaskNow());
   h('schedule:nextInApp', () => scheduler.nextInAppRun());
+  h('watch:status', () => watcher.status());
 
   h('ffmpeg:download', async () => {
     const p = await ffmpegdl.downloadFfmpeg(userData, prog => send('ffmpeg:progress', prog));
@@ -213,11 +291,58 @@ if (!gotLock) {
   h('override:save', (o) => { const saved = db.saveOverride(o); const file = scanner.reapplyOverride(o.root_id, o.rel_path); return { override: saved, file }; });
   h('override:delete', (id) => { const ov = db.get('SELECT * FROM overrides WHERE id=?', id); if (!ov) return false; db.deleteOverride(id); scanner.reapplyOverride(ov.root_id, ov.rel_path); return true; });
   h('override:suggest', (rootId, relPath) => {
-    // What the parser thinks, so the fix form can be pre-filled with the current guess.
     const f = db.getFileByPath(rootId, relPath);
     if (!f) return null;
     return { file: f, override: db.getOverride(rootId, relPath), shows: db.all(`SELECT DISTINCT show_name FROM files WHERE library_type=? AND show_name IS NOT NULL ORDER BY show_name`, f.library_type).map(r => r.show_name) };
   });
+
+  // ---- expected episodes / missing ------------------------------------------------
+  h('meta:refresh', (opts) => refreshMetadata(opts || {}));
+  h('meta:status', () => metaJob);
+  h('meta:get', (type, show) => db.getSeriesMeta(type, show));
+  h('meta:search', (type, q) => metadata.searchCandidates(type, q));
+  h('meta:setMatch', async (type, show, source, id) => {
+    const r = await metadata.fetchById(source, id);
+    if (!r.found) throw new Error('That entry could not be loaded');
+    return db.saveSeriesMeta({ library_type: type, show_name: show, source: r.source, source_id: r.source_id, matched_title: r.matched_title, status: r.status, seasons: r.seasons, total_episodes: r.total_episodes, url: r.url, fetched_at: new Date().toISOString(), locked: 1 });
+  });
+  h('meta:setManual', (type, show, seasons, note) => db.saveSeriesMeta({ library_type: type, show_name: show, source: 'manual', seasons, total_episodes: Object.entries(seasons).filter(([s]) => s !== '0').reduce((a, [, n]) => a + Number(n || 0), 0), fetched_at: new Date().toISOString(), locked: 1, note }));
+  h('meta:setNone', (type, show) => db.saveSeriesMeta({ library_type: type, show_name: show, source: 'none', fetched_at: new Date().toISOString(), locked: 1, note: 'no expected counts' }));
+  h('meta:unlock', (type, show) => { db.deleteSeriesMeta(type, show); return true; });
+  h('data:missing', (type) => type ? missingSummary(type) : [...missingSummary('tv'), ...missingSummary('anime')]);
+
+  // ---- duplicates review -------------------------------------------------------------
+  h('data:duplicates', () => {
+    const groups = db.all(`SELECT library_type, show_name, season, episode, COUNT(*) n FROM files WHERE missing=0 AND ignored=0 AND library_type IN ('tv','anime') AND parse_ok=1 GROUP BY library_type, show_name, season, episode HAVING n>1 ORDER BY show_name, season, episode`);
+    const out = [];
+    for (const g of groups) {
+      const files = db.all(`SELECT f.id, f.root_id, f.rel_path, f.abs_path, f.file_name, f.size, f.resolution, f.width, f.height, f.video_codec, f.bit_depth, f.hdr, f.bitrate_kbps, f.duration_s, f.audio_langs, f.audio_codecs, f.sub_count, f.sub_langs, f.ext, o.keep
+        FROM files f LEFT JOIN overrides o ON o.root_id=f.root_id AND o.rel_path=f.rel_path WHERE f.library_type=? AND f.show_name=? AND f.season=? AND f.episode=? AND f.missing=0 AND f.ignored=0 ORDER BY f.size DESC`, g.library_type, g.show_name, g.season, g.episode);
+      out.push({ ...g, decided: files.some(f => f.keep === 1), files });
+    }
+    return out;
+  });
+  h('dup:keep', (rootId, relPath, keepId) => {
+    // Mark one file as keep=1 and the rest of its group keep=0 (nothing is deleted).
+    const f = db.getFileByPath(rootId, relPath); if (!f) return false;
+    const group = db.all(`SELECT id, root_id, rel_path, library_type FROM files WHERE library_type=? AND show_name=? AND season=? AND episode=? AND missing=0 AND ignored=0`, f.library_type, f.show_name, f.season, f.episode);
+    db.transaction(() => { for (const g of group) { const ov = db.getOverride(g.root_id, g.rel_path) || { root_id: g.root_id, rel_path: g.rel_path, library_type: g.library_type }; db.saveOverride({ ...ov, keep: g.id === keepId ? 1 : 0 }); } });
+    return true;
+  });
+  h('dup:clear', (rootId, relPath) => {
+    const f = db.getFileByPath(rootId, relPath); if (!f) return false;
+    const group = db.all(`SELECT id, root_id, rel_path FROM files WHERE library_type=? AND show_name=? AND season=? AND episode=? AND missing=0 AND ignored=0`, f.library_type, f.show_name, f.season, f.episode);
+    db.transaction(() => { for (const g of group) { const ov = db.getOverride(g.root_id, g.rel_path); if (ov) db.saveOverride({ ...ov, keep: null }); } });
+    return true;
+  });
+
+  // ---- quality ------------------------------------------------------------------------
+  h('data:quality', () => qualityReport());
+
+  // ---- rename tool (opt-in) -------------------------------------------------------------
+  h('rename:proposals', (opts) => { if (!settings.get().renaming.enabled) return { disabled: true, list: [] }; return { list: renamer.proposals(db, opts || {}) }; });
+  h('rename:apply', (ids) => { if (!settings.get().renaming.enabled) throw new Error('Renaming is disabled in Settings'); return renamer.applyRenames(db, ids, log); });
+  h('rename:history', () => db.listRenames(500));
 
   // ---- data queries ------------------------------------------------------------------
   h('data:dashboard', () => {
@@ -233,11 +358,14 @@ if (!gotLock) {
     };
     const multiples = db.get(`SELECT COUNT(*) n, COALESCE(SUM(c-1),0) extra, COALESCE(SUM(b),0) bytes FROM (SELECT group_key, COUNT(*) c, SUM(size) b FROM files WHERE library_type='movie' AND missing=0 AND ignored=0 GROUP BY group_key HAVING c>1)`);
     const breakdown = (col) => db.all(`SELECT library_type, ${col} k, COUNT(*) n FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 GROUP BY library_type, ${col} ORDER BY n DESC`);
+    const missing = [...missingSummary('tv'), ...missingSummary('anime')];
+    const q = qualityReport();
+    const dups = db.get(`SELECT COUNT(*) n FROM (SELECT 1 FROM files WHERE missing=0 AND ignored=0 AND library_type IN ('tv','anime') AND parse_ok=1 GROUP BY library_type, show_name, season, episode HAVING COUNT(*)>1)`).n;
     return {
       byType, titles, multiples,
       resolution: breakdown('resolution'), videoCodec: breakdown('video_codec'), container: breakdown('ext'),
       audioCodec: breakdown('audio_codecs'), hdr: breakdown('hdr'), fps: breakdown('ROUND(fps)'),
-      audioLang: db.all(`SELECT library_type, audio_langs k, COUNT(*) n FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 GROUP BY library_type, audio_langs ORDER BY n DESC LIMIT 40`),
+      audioLang: db.all(`SELECT library_type, COALESCE(NULLIF(audio_langs,'und'),'undefined') k, COUNT(*) n FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 GROUP BY library_type, k ORDER BY n DESC LIMIT 40`),
       subLang: db.all(`SELECT library_type, COALESCE(sub_langs,'none') k, COUNT(*) n FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 GROUP BY library_type, sub_langs ORDER BY n DESC LIMIT 40`),
       lastScans: db.recentScans(8),
       recentChanges: db.recentChanges(25),
@@ -247,18 +375,25 @@ if (!gotLock) {
       biggestMovies: db.all(`SELECT movie_title, movie_year, size, resolution, video_codec FROM files WHERE missing=0 AND ignored=0 AND library_type='movie' ORDER BY size DESC LIMIT 10`),
       recentlyAdded: db.all(`SELECT library_type, show_name, movie_title, movie_year, season, episode, file_name, first_seen, size FROM files WHERE missing=0 AND ignored=0 ORDER BY first_seen DESC, id DESC LIMIT 12`),
       lowRes: db.all(`SELECT library_type, COUNT(*) n FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 AND resolution IN ('SD','480p','576p') GROUP BY library_type`),
-      gaps: db.all(`SELECT library_type, show_name, season, COUNT(*) have, MIN(episode) mn, MAX(episode) mx FROM files WHERE missing=0 AND ignored=0 AND library_type IN ('tv','anime') AND season>0 AND episode IS NOT NULL GROUP BY library_type, show_name, season HAVING (mx-mn+1) > have ORDER BY (mx-mn+1)-have DESC LIMIT 12`),
+      missingEpisodes: { series: missing.filter(m => m.missing_count > 0).length, episodes: missing.reduce((a, m) => a + m.missing_count, 0), matched: missing.filter(m => m.expected > 0).length, unmatched: missing.filter(m => m.source === 'none').length, pending: missing.filter(m => !m.source).length, top: missing.filter(m => m.missing_count > 0).slice(0, 12) },
+      quality: { mixedSeries: q.mixed.length, lowBitrate: q.lowTotal, undAudio: q.undAudio.reduce((a, r) => a + r.n, 0), short: q.short.length, noAudio: q.noAudio.length },
+      duplicates: dups,
       lastExport: db.listExports(1)[0] || null,
+      watch: watcher.status(),
     };
   });
 
-  h('data:series', (type) => db.all(`SELECT show_name, COUNT(*) episodes, COUNT(DISTINCT season) seasons, MIN(season) min_season, MAX(season) max_season,
+  h('data:series', (type) => {
+    const rows = db.all(`SELECT show_name, COUNT(*) episodes, COUNT(DISTINCT season) seasons, MIN(season) min_season, MAX(season) max_season,
       SUM(size) bytes, SUM(duration_s) seconds, SUM(CASE WHEN probe_ok=1 THEN 1 ELSE 0 END) probed,
       SUM(CASE WHEN has_captions=1 THEN 1 ELSE 0 END) captioned, SUM(CASE WHEN parse_ok=0 THEN 1 ELSE 0 END) unparsed,
       GROUP_CONCAT(DISTINCT resolution) resolutions, GROUP_CONCAT(DISTINCT video_codec) codecs, GROUP_CONCAT(DISTINCT audio_langs) audio_langs, GROUP_CONCAT(DISTINCT sub_langs) sub_langs,
       MAX(last_seen) last_seen
-    FROM files WHERE library_type=? AND missing=0 AND ignored=0 GROUP BY show_name ORDER BY show_name COLLATE NOCASE`, type));
-  h('data:episodes', (type, show) => db.all(`SELECT * FROM files WHERE library_type=? AND show_name=? AND ignored=0 ORDER BY missing, season, episode, file_name`, type, show));
+    FROM files WHERE library_type=? AND missing=0 AND ignored=0 GROUP BY show_name ORDER BY show_name COLLATE NOCASE`, type);
+    const miss = new Map(missingSummary(type).map(m => [m.show_name, m]));
+    return rows.map(r => { const m = miss.get(r.show_name); return { ...r, expected: m ? m.expected : 0, missing_count: m ? m.missing_count : 0, meta_source: m ? m.source : null, meta_status: m ? m.status : null }; });
+  });
+  h('data:episodes', (type, show) => ({ files: db.all(`SELECT * FROM files WHERE library_type=? AND show_name=? AND ignored=0 ORDER BY missing, season, episode, file_name`, type, show), missing: missingSummary(type).find(m => m.show_name === show) || null }));
   h('data:movies', () => db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, SUM(size) bytes, MAX(duration_s) seconds,
       GROUP_CONCAT(DISTINCT resolution) resolutions, GROUP_CONCAT(DISTINCT video_codec) codecs, GROUP_CONCAT(DISTINCT audio_langs) audio_langs, GROUP_CONCAT(DISTINCT sub_langs) sub_langs,
       MAX(has_captions) has_captions, SUM(CASE WHEN probe_ok=1 THEN 1 ELSE 0 END) probed, GROUP_CONCAT(edition_tag, ' | ') editions
@@ -270,7 +405,7 @@ if (!gotLock) {
     byKind: db.all(`SELECT kind, COUNT(*) n FROM changes GROUP BY kind`),
     last7: db.all(`SELECT kind, COUNT(*) n FROM changes WHERE ts >= datetime('now','-7 days') GROUP BY kind`),
     perDay: db.all(`SELECT substr(ts,1,10) day, SUM(kind='added') added, SUM(kind='removed') removed, SUM(kind='modified') modified FROM changes WHERE ts >= datetime('now','-30 days') GROUP BY day ORDER BY day`),
-    scans: db.get(`SELECT COUNT(*) n, AVG(duration_ms) avg_ms, MAX(finished) last FROM scans WHERE status='done'`),
+    scans: db.get(`SELECT COUNT(*) n, AVG(duration_ms) avg_ms, MAX(finished) last FROM scans WHERE status='done' AND duration_ms IS NOT NULL`),
   }));
   h('data:search', (q) => db.all(`SELECT id, library_type, show_name, season, episode, movie_title, movie_year, file_name, rel_path, resolution, duration_s, size, missing FROM files
       WHERE file_name LIKE ? OR show_name LIKE ? OR movie_title LIKE ? ORDER BY missing, library_type, file_name LIMIT 300`, `%${q}%`, `%${q}%`, `%${q}%`));
@@ -278,7 +413,7 @@ if (!gotLock) {
     unparsed: db.all(`SELECT id, root_id, library_type, rel_path, file_name, parse_note, show_name, season, episode, movie_title, movie_year FROM files WHERE missing=0 AND ignored=0 AND parse_ok=0 ORDER BY library_type, rel_path LIMIT 2000`),
     probeErrors: db.all(`SELECT id, root_id, library_type, rel_path, probe_error FROM files WHERE missing=0 AND ignored=0 AND probed_at IS NOT NULL AND probe_ok=0 ORDER BY library_type, rel_path LIMIT 2000`),
     missing: db.all(`SELECT id, root_id, library_type, rel_path, last_seen FROM files WHERE missing=1 ORDER BY last_seen DESC LIMIT 2000`),
-    duplicates: db.all(`SELECT library_type, show_name, season, episode, COUNT(*) n, GROUP_CONCAT(rel_path, ' | ') paths FROM files WHERE missing=0 AND ignored=0 AND library_type IN ('tv','anime') AND parse_ok=1 GROUP BY library_type, show_name, season, episode HAVING n>1 ORDER BY show_name LIMIT 2000`),
+    duplicates: db.get(`SELECT COUNT(*) n FROM (SELECT 1 FROM files WHERE missing=0 AND ignored=0 AND library_type IN ('tv','anime') AND parse_ok=1 GROUP BY library_type, show_name, season, episode HAVING COUNT(*)>1)`).n,
     ignored: db.all(`SELECT id, root_id, library_type, rel_path FROM files WHERE ignored=1 ORDER BY rel_path LIMIT 2000`),
     overrides: db.listOverrides(),
   }));

@@ -8,18 +8,61 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Automatic re-parse of the whole database when the parser rules change, so
-  improvements apply without a rescan (26 → 4 unparsed files on the reference
-  library).
-- `--screenshots=<dir>` mode that renders every view and saves PNGs; used for
-  the README gallery in `docs/screenshots/`.
+### Changed
+
+### Fixed
+
+## [0.3.0] - 2026-09-05
+
+### Added
+
+- **Missing episodes.** Expected episode counts per season are fetched from
+  TVmaze (TV) and AniList (anime) — both free, no key — in the background after
+  each scan. New *Missing episodes* page, a *Missing* column on the series
+  lists, a per-season episode grid on the series page, dashboard tiles, and
+  `expected_episodes` / `missing_episodes` / `missing_list` columns in the
+  series CSVs. A *Match…* dialog lets you search either source, pick the right
+  entry, enter counts by hand, or mark a series as having none; those choices
+  are locked and never overwritten. AniList split-cour "Part 2" entries are
+  merged into their season; ongoing series count aired episodes; absolute
+  numbering on disk is detected and skipped rather than reported as missing.
+- **Duplicate review.** New *Duplicates* page shows every season/episode that
+  exists as several files side by side (size, length, resolution, bitrate,
+  codec, HDR, audio, subtitles) with the best-quality candidate flagged. Mark
+  one as *Keep*; the decision is remembered across scans. Nothing is deleted.
+- **Quality report.** New *Quality* page: series and seasons that mix
+  resolutions, files below a per-resolution bitrate threshold (editable in
+  Settings), files with no audio track, undefined audio language, and files
+  under two minutes. `mixed_resolution` and `low_bitrate_files` columns in the
+  series CSVs.
+- **Rename tool (opt-in, off by default).** New *Rename files* page proposes
+  Plex-standard names (`Show - S01E02 - Title.ext`, `Title (Year) - Edition.ext`)
+  from the parsed details and manual fixes. Tick the files, confirm, and they
+  are renamed in place — never moved, never overwritten — with every attempt
+  logged. The only feature that writes to the share; gated by a setting.
+- **Folder watch (setting).** Windows change notifications on each root start a
+  scan once the folder has been quiet for a configurable number of seconds.
+- Automatic re-parse of the whole database when parser rules change (26 → 4
+  unparsed files on the reference library without a rescan).
+- `--screenshots=<dir>` and `--social=WxH` modes for README images;
+  `--profile=<dir>` to run a second copy against a separate data folder.
 - README: badges, screenshot gallery, scan timings, CSV reference, privacy
   notes, FAQ and roadmap.
 
 ### Changed
 
+- Dashboard: "Season gaps" panel replaced by "Most missing episodes"; new tiles
+  for missing episodes, duplicates, mixed quality, low bitrate, undefined audio
+  language and folder watch. Audio-language chart labels `und` as "undefined".
+- Sidebar regrouped into Library / Review / Maintenance / App with counters on
+  Missing episodes, Duplicates and Problems.
+
 ### Fixed
 
+- Scan-history average duration no longer counts scans from before the column
+  existed.
+- Database migrations strip SQL comments before splitting statements (a comment
+  containing a semicolon broke the v2 upgrade).
 ## [0.2.0] - 2026-09-05
 
 ### Added

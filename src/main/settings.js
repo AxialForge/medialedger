@@ -16,6 +16,18 @@ const DEFAULTS = {
   multiThreaded: true,        // walk roots with worker threads (scanThreads of them)
   scanThreads: 0,             // 0 = auto (CPU count - 1, min 2, max 32)
   updates: { enabled: true }, // silent auto-update from GitHub Releases (installed app only)
+  metadata: {                 // expected episode counts (free, keyless APIs)
+    enabled: true,
+    tvSource: 'tvmaze',       // TV shows → TVmaze
+    animeSource: 'anilist',   // Anime → AniList
+    refreshDays: 14,          // re-fetch series that are still airing after this many days
+  },
+  watchFolders: false,        // fs.watch on each root; triggers a scan after changes settle
+  watchSettleSeconds: 90,
+  renaming: { enabled: false, template: 'plex' }, // opt-in rename tool (writes to the share!)
+  quality: {                  // low-bitrate thresholds in kbps by resolution label
+    minKbps: { '4K': 6000, '1440p': 3000, '1080p': 1500, '720p': 700, '576p': 400, '480p': 350, SD: 250 },
+  },
   githubToken: '',            // only needed while the GitHub repo is private
   videoExtensions: ['mp4', 'mkv', 'avi', 'mov', 'm4v', 'wmv', 'ts', 'webm', 'flv', 'mpg', 'mpeg'],
   subtitleExtensions: ['srt', 'ass', 'ssa', 'sub', 'idx', 'vtt', 'sup'],

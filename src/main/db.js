@@ -132,6 +132,38 @@ const MIGRATIONS = [
       ALTER TABLE scans ADD COLUMN threads INTEGER;
     `,
   },
+  {
+    version: 2, name: 'series metadata, duplicate keep marks, rename history',
+    sql: `
+      -- Expected episode counts per series from TVmaze / AniList (or entered by hand).
+      CREATE TABLE IF NOT EXISTS series_meta (
+        id            INTEGER PRIMARY KEY,
+        library_type  TEXT NOT NULL,
+        show_name     TEXT NOT NULL,
+        source        TEXT,               -- tvmaze | anilist | manual | none
+        source_id     TEXT,
+        matched_title TEXT,
+        status        TEXT,               -- Running | Ended | RELEASING | FINISHED …
+        seasons       TEXT,               -- JSON {"1": 12, "2": 13}
+        total_episodes INTEGER,
+        url           TEXT,
+        fetched_at    TEXT,
+        locked        INTEGER DEFAULT 0,  -- 1 = user chose the match / entered counts; never auto-overwritten
+        note          TEXT,
+        UNIQUE(library_type, show_name)
+      );
+      ALTER TABLE overrides ADD COLUMN keep INTEGER;   -- duplicate review: 1 keep, 0 discard candidate, NULL undecided
+      CREATE TABLE IF NOT EXISTS renames (
+        id        INTEGER PRIMARY KEY,
+        ts        TEXT NOT NULL,
+        root_id   TEXT,
+        from_rel  TEXT,
+        to_rel    TEXT,
+        ok        INTEGER,
+        error     TEXT
+      );
+    `,
+  },
 ];
 
 class Db {
@@ -157,11 +189,11 @@ class Db {
       this.log(`db migrate → v${m.version} (${m.name})`);
       this.db.exec('BEGIN');
       try {
-        for (const stmt of m.sql.split(';').map(s => s.trim()).filter(s => s && !s.startsWith('--') || /\S/.test(s.replace(/--.*$/gm, '')))) {
-          const clean = stmt.replace(/--.*$/gm, '').trim();
-          if (!clean) continue;
-          try { this.db.exec(clean); }
-          catch (e) { if (!/duplicate column name/i.test(e.message)) throw e; }
+        // Strip comments first (they may contain semicolons or unicode), then split into statements.
+        const stripped = m.sql.replace(/--[^\n]*/g, '');
+        for (const stmt of stripped.split(';').map(s => s.trim()).filter(Boolean)) {
+          try { this.db.exec(stmt); }
+          catch (e) { if (!/duplicate column name/i.test(e.message)) throw new Error(`${e.message} in: ${stmt.slice(0, 80)}`); }
         }
         this.db.exec(`PRAGMA user_version = ${m.version}`);
         this.db.exec('COMMIT');
@@ -248,6 +280,20 @@ class Db {
   }
   deleteOverride(id) { return this.run('DELETE FROM overrides WHERE id=?', id).changes; }
   listOverrides() { return this.all('SELECT o.*, f.id AS file_id, f.parse_ok FROM overrides o LEFT JOIN files f ON f.root_id=o.root_id AND f.rel_path=o.rel_path ORDER BY o.updated DESC'); }
+
+  // ---- series metadata ------------------------------------------------------
+  getSeriesMeta(type, show) { return this.get('SELECT * FROM series_meta WHERE library_type=? AND show_name=?', type, show); }
+  allSeriesMeta(type) { return new Map(this.all('SELECT * FROM series_meta WHERE library_type=?', type).map(m => [m.show_name, m])); }
+  saveSeriesMeta(m) {
+    const cols = ['library_type', 'show_name', 'source', 'source_id', 'matched_title', 'status', 'seasons', 'total_episodes', 'url', 'fetched_at', 'locked', 'note'];
+    const vals = cols.map(c => c === 'seasons' && m[c] && typeof m[c] !== 'string' ? JSON.stringify(m[c]) : (m[c] ?? null));
+    this.run(`INSERT INTO series_meta (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})
+      ON CONFLICT(library_type, show_name) DO UPDATE SET ${cols.filter(c => c !== 'library_type' && c !== 'show_name').map(c => `${c}=excluded.${c}`).join(',')}`, ...vals);
+    return this.getSeriesMeta(m.library_type, m.show_name);
+  }
+  deleteSeriesMeta(type, show) { return this.run('DELETE FROM series_meta WHERE library_type=? AND show_name=?', type, show).changes; }
+  addRename(rec) { this.run('INSERT INTO renames (ts, root_id, from_rel, to_rel, ok, error) VALUES (?,?,?,?,?,?)', new Date().toISOString(), rec.root_id, rec.from_rel, rec.to_rel, rec.ok ? 1 : 0, rec.error || null); }
+  listRenames(limit = 500) { return this.all('SELECT * FROM renames ORDER BY id DESC LIMIT ?', limit); }
 
   // ---- scans / changes / exports ------------------------------------------
   startScan(trigger, threads) {

@@ -105,8 +105,65 @@ function paintUpdatePill() {
   else p.hidden = true;
 }
 async function refreshBadges() {
-  try { const p = await L.data.problems(); const n = p.unparsed.length + p.probeErrors.length + p.missing.length; const b = $('#problemCount'); b.textContent = n; b.hidden = !n; } catch { /* ignore */ }
+  try {
+    const [p, d, s] = await Promise.all([L.data.problems(), L.data.dashboard(), L.settings.get()]);
+    const n = p.unparsed.length + p.probeErrors.length + p.missing.length; const b = $('#problemCount'); b.textContent = n; b.hidden = !n;
+    const m = $('#missingCount'); m.textContent = d.missingEpisodes.episodes.toLocaleString(); m.hidden = !d.missingEpisodes.episodes;
+    const du = $('#dupCount'); du.textContent = d.duplicates; du.hidden = !d.duplicates;
+    $('#navRename').style.opacity = s.renaming.enabled ? '' : '.45';
+    const w = $('#watchLine'); w.hidden = !d.watch.enabled; w.textContent = d.watch.enabled ? `Watching ${d.watch.roots.length} root(s)${d.watch.pending ? ` · ${d.watch.pending} change(s) pending` : ''}` : '';
+  } catch { /* ignore */ }
 }
+L.meta.onProgress(p => {
+  const box = $('#metaProgress'); box.hidden = !p.running && !p.message;
+  const bar = $('#metaBar'); if (p.total) { bar.className = ''; bar.style.width = Math.round(p.done / p.total * 100) + '%'; } else bar.className = 'indeterminate';
+  $('#metaMsg').textContent = p.running ? `${p.message} (${p.done}/${p.total})` : p.message;
+  if (!p.running) { setTimeout(() => { box.hidden = true; }, 8000); refreshBadges(); if (['missing', 'dashboard', 'tv', 'anime'].includes(currentView)) route(); }
+});
+
+// ---------- series match (expected episodes) modal ----------------------------------
+async function openMatchModal(type, show, after) {
+  const m = await L.meta.get(type, show);
+  const seasons = m && m.seasons ? JSON.parse(m.seasons) : {};
+  const card = openModal(`
+    <h2>Expected episodes for “${esc(show)}”</h2>
+    <div class="path">${m && m.source && m.source !== 'none' ? `Currently matched to <b>${esc(m.matched_title || '')}</b> via ${esc(m.source)}${m.status ? ` · ${esc(m.status)}` : ''}${m.locked ? ' · <span class="ok">locked by you</span>' : ' · automatic'}${m.url ? ` · <a href="#" id="mUrl">open</a>` : ''}` : (m && m.source === 'none' ? 'No match found automatically.' : 'Not looked up yet.')}</div>
+    <h2 style="margin-top:4px">Search</h2>
+    <div class="inline"><input id="mq" style="flex:1" value="${esc(show)}"><select id="mSrc"><option value="${type === 'anime' ? 'anilist' : 'tvmaze'}">${type === 'anime' ? 'AniList' : 'TVmaze'}</option><option value="${type === 'anime' ? 'tvmaze' : 'anilist'}">${type === 'anime' ? 'TVmaze' : 'AniList'}</option></select><button class="small" id="mSearch">Search</button></div>
+    <div class="hint" style="margin-top:4px">Tip: TVmaze numbers anime by broadcast season (S1–S4), AniList by cour. Pick whichever matches how the folders are laid out.</div>
+    <div id="mResults" style="margin-top:8px"></div>
+    <h2>Or enter counts by hand</h2>
+    <div class="seasons-edit" id="mSeasons">${[1, 2, 3, 4, 5, 6].map(s => `<label>S${s} <input type="number" min="0" data-s="${s}" value="${seasons[s] ?? ''}"></label>`).join('')}<label>+ <input type="number" min="0" id="mMoreS" placeholder="season"> <input type="number" min="0" id="mMoreN" placeholder="eps"></label></div>
+    <div class="actions">
+      <button class="small" id="mNone">No expected counts for this series</button>
+      ${m && m.locked ? '<button class="small" id="mUnlock">Back to automatic</button>' : ''}
+      <span class="grow"></span>
+      <button id="mCancel">Cancel</button><button class="primary" id="mSaveManual">Save counts</button>
+    </div>`);
+  if ($('#mUrl', card)) $('#mUrl', card).onclick = e => { e.preventDefault(); L.openExternal(m.url); };
+  $('#mCancel', card).onclick = closeModal;
+  const search = async () => {
+    $('#mResults', card).innerHTML = '<div class="muted small">Searching…</div>';
+    try {
+      const list = await L.meta.search($('#mSrc', card).value, $('#mq', card).value.trim());
+      $('#mResults', card).innerHTML = list.length ? list.map(c => `<div class="candidate" data-src="${esc(c.source)}" data-id="${esc(c.id)}"><b>${esc(c.title)}</b><span class="muted">${esc(c.year || '')} · ${esc(c.format || '')}${c.episodes ? ` · ${c.episodes} eps` : ''}</span><span class="grow"></span><span class="tiny muted">use this →</span></div>`).join('') : '<div class="muted small">No results.</div>';
+      card.querySelectorAll('.candidate').forEach(el => el.onclick = async () => { el.textContent = 'Loading seasons…'; try { await L.meta.setMatch(type, show, el.dataset.src, el.dataset.id); closeModal(); toast('Match saved'); after && after(); } catch (e) { toast(e.message, true); } });
+    } catch (e) { $('#mResults', card).innerHTML = `<div class="bad small">${esc(e.message)}</div>`; }
+  };
+  $('#mSearch', card).onclick = search;
+  $('#mq', card).onkeydown = e => { if (e.key === 'Enter') search(); };
+  $('#mSaveManual', card).onclick = async () => {
+    const out = {};
+    card.querySelectorAll('#mSeasons input[data-s]').forEach(i => { if (i.value.trim() !== '') out[i.dataset.s] = Number(i.value); });
+    const ms = $('#mMoreS', card).value, mn = $('#mMoreN', card).value; if (ms && mn) out[Number(ms)] = Number(mn);
+    if (!Object.keys(out).length) return toast('Enter at least one season count', true);
+    await L.meta.setManual(type, show, out, 'entered by hand'); closeModal(); toast('Counts saved'); after && after();
+  };
+  $('#mNone', card).onclick = async () => { await L.meta.setNone(type, show); closeModal(); after && after(); };
+  if ($('#mUnlock', card)) $('#mUnlock', card).onclick = async () => { await L.meta.unlock(type, show); closeModal(); toast('Will be looked up automatically on the next refresh'); after && after(); };
+}
+const matchBtn = (type, show) => `<button class="small matchbtn" data-type="${esc(type)}" data-show="${esc(show)}">Match…</button>`;
+document.addEventListener('click', e => { const b = e.target.closest('.matchbtn'); if (b) { e.stopPropagation(); openMatchModal(b.dataset.type, b.dataset.show, () => route()); } });
 
 // ---------- fix (override) modal -------------------------------------------------
 async function openFixModal(rootId, relPath, after) {
@@ -184,6 +241,14 @@ views.dashboard = async () => {
       ${tile('', 'Manual fixes', d.overrides, d.overrides ? 'applied on every scan' : 'none needed yet')}
       ${tile('', 'Last export', d.lastExport ? fmtAgo(d.lastExport.ts) : 'never', d.lastExport ? `${JSON.parse(d.lastExport.files || '[]').length} CSV files` : '')}
     </div>
+    <div class="tiles compact">
+      ${tile(d.missingEpisodes.episodes ? 'badt' : 'okt', 'Missing episodes', d.missingEpisodes.episodes.toLocaleString(), `${d.missingEpisodes.series} series · ${d.missingEpisodes.matched} matched · ${d.missingEpisodes.unmatched} unmatched${d.missingEpisodes.pending ? ` · ${d.missingEpisodes.pending} pending` : ''}`)}
+      ${tile(d.duplicates ? 'warnt' : 'okt', 'Duplicate episodes', d.duplicates, 'same season/episode, several files')}
+      ${tile(d.quality.mixedSeries ? 'warnt' : 'okt', 'Mixed-quality series', d.quality.mixedSeries, 'more than one resolution')}
+      ${tile(d.quality.lowBitrate ? 'warnt' : 'okt', 'Low-bitrate files', d.quality.lowBitrate.toLocaleString(), 'below the threshold for their resolution')}
+      ${tile('', 'Undefined audio language', d.quality.undAudio.toLocaleString(), 'no language tag on the audio track')}
+      ${tile(d.watch.enabled ? 'okt' : '', 'Folder watch', d.watch.enabled ? `${d.watch.roots.length} roots` : 'off', d.watch.enabled ? (d.watch.lastEvent ? `last change ${fmtAgo(d.watch.lastEvent.ts)}` : 'no changes seen yet') : 'enable in Settings')}
+    </div>
     <div class="grid4" style="margin-top:14px">
       ${bars(d.resolution, 'Resolution', { order: ['4K', '1440p', '1080p', '720p', '576p', '480p', 'SD', 'unknown'] })}
       ${bars(d.videoCodec, 'Video codec')}
@@ -202,13 +267,13 @@ views.dashboard = async () => {
       <div class="card"><h3>Largest movie files</h3><div id="biggestMovies"></div></div>
     </div>
     <div class="grid2" style="margin-top:14px">
-      <div class="card"><h3>Season gaps <a class="right" href="#problems">problems →</a></h3><div id="gaps"></div></div>
+      <div class="card"><h3>Most missing episodes <a class="right" href="#missing">all series →</a></h3><div id="gaps"></div></div>
       <div class="card"><h3>Scan history</h3><div id="scanHist"></div></div>
     </div>`;
   $('#recentAdded').append(d.recentlyAdded.length ? el(`<table>${d.recentlyAdded.map(r => `<tr><td><span class="badge ${r.library_type}">${typeName(r.library_type)}</span></td><td class="wrap">${esc(r.library_type === 'movie' ? `${r.movie_title} (${r.movie_year || '?'})` : `${r.show_name} ${sxe(r)}`)}<span class="sub">${esc(r.file_name)}</span></td><td class="num muted tiny">${fmtAgo(r.first_seen)}</td></tr>`).join('')}</table>`) : el('<div class="empty">Nothing yet</div>'));
   $('#biggest').append(el(`<table>${d.biggestShows.map(s => `<tr><td><span class="badge ${s.library_type}">${typeName(s.library_type)}</span></td><td class="wrap">${esc(s.show_name)}</td><td class="num">${s.episodes} eps</td><td class="num">${fmtBytes(s.bytes)}</td><td class="num muted">${fmtHours(s.seconds)}</td></tr>`).join('') || '<tr><td class="empty">—</td></tr>'}</table>`));
   $('#biggestMovies').append(el(`<table>${d.biggestMovies.map(m => `<tr><td class="wrap">${esc(m.movie_title)} <span class="muted">(${m.movie_year || '?'})</span></td><td>${esc(m.resolution || '')}</td><td class="muted">${esc(m.video_codec || '')}</td><td class="num">${fmtBytes(m.size)}</td></tr>`).join('') || '<tr><td class="empty">—</td></tr>'}</table>`));
-  $('#gaps').append(d.gaps.length ? el(`<table>${d.gaps.map(g => `<tr><td><span class="badge ${g.library_type}">${typeName(g.library_type)}</span></td><td class="wrap"><a href="#${g.library_type}/${encodeURIComponent(g.show_name)}">${esc(g.show_name)}</a></td><td>S${g.season}</td><td class="num">${g.have} of ${g.mx - g.mn + 1}</td><td class="num warn">${g.mx - g.mn + 1 - g.have} missing</td></tr>`).join('')}</table>`) : el('<div class="empty">No numbering gaps detected</div>'));
+  $('#gaps').append(d.missingEpisodes.top.length ? el(`<table>${d.missingEpisodes.top.map(g => `<tr><td><span class="badge ${g.library_type}">${typeName(g.library_type)}</span></td><td class="wrap"><a href="#${g.library_type}/${encodeURIComponent(g.show_name)}">${esc(g.show_name)}</a>${g.matched_title && g.matched_title !== g.show_name ? `<span class="sub">${esc(g.matched_title)}</span>` : ''}</td><td class="num">${g.have} of ${g.expected}</td><td class="num bad">${g.missing_count} missing</td><td class="muted tiny wrap">${esc(g.missing.map(x => `S${x.season}: ${x.missing.length > 6 ? x.missing.slice(0, 6).join(',') + '…' : x.missing.join(',')}`).join('; '))}</td></tr>`).join('')}</table>`) : el(`<div class="empty">${d.missingEpisodes.matched ? 'Every matched series is complete' : 'No expected counts yet — they are fetched in the background after a scan'}</div>`));
   $('#scanHist').append(el(`<table>${d.lastScans.map(s => `<tr><td class="muted tiny">${fmtDate(s.started)}</td><td><span class="badge ${s.status === 'done' ? 'ok' : s.status === 'running' ? '' : 'bad'}">${s.status}</span></td><td class="muted">${s.trigger}${s.threads > 1 ? ` · ${s.threads}t` : ''}</td><td class="num">${fmtMs(s.duration_ms)}</td><td class="num"><span class="kind-added">+${s.added}</span> <span class="kind-removed">−${s.removed}</span> <span class="kind-modified">~${s.modified}</span></td><td class="num muted">${s.probed} probed</td></tr>`).join('') || '<tr><td class="empty">—</td></tr>'}</table>`));
 };
 
@@ -225,6 +290,7 @@ async function seriesView(type) {
     { key: 'audio_langs', label: 'Audio', render: r => esc(uniqList(r.audio_langs)) },
     { key: 'sub_langs', label: 'Subs', render: r => esc(uniqList(r.sub_langs)) },
     { key: 'captioned', label: 'Captions', num: true, sortVal: r => r.probed ? r.captioned / r.episodes : -1, render: r => r.probed ? `<span class="badge ${r.captioned === r.episodes ? 'ok' : r.captioned ? 'warn' : 'bad'}">${pct(r.captioned, r.episodes)}%</span>` : '<span class="muted">—</span>' },
+    { key: 'missing_count', label: 'Missing', num: true, sortVal: r => r.expected ? r.missing_count : -1, render: r => r.expected ? (r.missing_count ? `<span class="badge bad">${r.missing_count}</span> <span class="muted tiny">of ${r.expected}</span>` : '<span class="badge ok">complete</span>') : (r.meta_source === 'none' ? '<span class="badge" title="no match found">no match</span>' : '<span class="muted">—</span>') },
     { key: 'unparsed', label: 'Issues', num: true, render: r => (r.unparsed ? `<span class="badge warn">${r.unparsed} unparsed</span>` : '') + (r.probed < r.episodes ? `<span class="badge">${r.episodes - r.probed} unprobed</span>` : '') },
   ];
   const table = makeTable(rows, cols, { search: r => r.show_name, defaultSort: { key: 'show_name' }, onRow: r => { location.hash = `#${type}/${encodeURIComponent(r.show_name)}`; } });
@@ -235,8 +301,19 @@ async function seriesView(type) {
 views.tv = () => seriesView('tv');
 views.anime = () => seriesView('anime');
 
+function missingGrid(m) {
+  if (!m || !m.seasons) return '';
+  const rows = Object.entries(m.seasons).filter(([s, n]) => s !== '0' && n).sort((a, b) => Number(a[0]) - Number(b[0])).map(([s, n]) => {
+    const miss = new Set((m.missing.find(x => x.season === Number(s)) || { missing: [] }).missing);
+    const cells = n <= 60 ? Array.from({ length: n }, (_, i) => `<i class="${miss.has(i + 1) ? 'miss' : ''}" title="S${s}E${i + 1}">${i + 1}</i>`).join('') : `<span class="muted tiny">${n} episodes · ${miss.size} missing${miss.size ? ': ' + [...miss].slice(0, 20).join(', ') + (miss.size > 20 ? '…' : '') : ''}</span>`;
+    return `<div class="seasonrow"><b>S${s}</b><div class="epgrid">${cells}</div><span class="num ${miss.size ? 'bad' : 'ok'}">${n - miss.size}/${n}</span></div>`;
+  }).join('');
+  return `<div class="card" style="margin-bottom:12px"><h3>Expected episodes <span class="right muted">${esc(m.matched_title || '')}${m.status ? ` · ${esc(m.status)}` : ''} · via ${esc(m.source || '?')}${m.absolute ? ' · <span class="warn">absolute numbering on disk, some seasons skipped</span>' : ''}</span></h3>${rows || '<div class="empty">no season data</div>'}</div>`;
+}
+
 async function episodesView(type, show) {
-  const rows = await L.data.episodes(type, show);
+  const data = await L.data.episodes(type, show);
+  const rows = data.files, miss = data.missing;
   const live = rows.filter(r => !r.missing);
   const bytes = live.reduce((a, r) => a + (r.size || 0), 0), secs = live.reduce((a, r) => a + (r.duration_s || 0), 0);
   const cols = [
@@ -255,8 +332,9 @@ async function episodesView(type, show) {
     { key: 'id', label: '', render: r => fixBtn(r) },
   ];
   const table = makeTable(rows, cols, { search: r => `${r.file_name} ${r.episode_title || ''} ${sxe(r)}`, defaultSort: { key: 'season' }, onRow: r => L.showItem(r.abs_path) });
-  view.innerHTML = `<div class="detail-head"><span class="back" id="back">← ${typeName(type)}</span><h1>${esc(show)}</h1><span class="muted">${live.length} episodes · ${fmtBytes(bytes)} · ${fmtHours(secs)}</span></div>`;
+  view.innerHTML = `<div class="detail-head"><span class="back" id="back">← ${typeName(type)}</span><h1>${esc(show)}</h1><span class="muted">${live.length} episodes · ${fmtBytes(bytes)} · ${fmtHours(secs)}</span>${miss && miss.expected ? (miss.missing_count ? `<span class="badge bad">${miss.missing_count} missing of ${miss.expected}</span>` : '<span class="badge ok">complete</span>') : ''}<span class="grow"></span>${matchBtn(type, show)}</div>`;
   $('#back').onclick = () => { location.hash = '#' + type; };
+  if (miss && miss.expected) view.insertAdjacentHTML('beforeend', missingGrid(miss));
   view.append(searchToolbar(table, rows.length, '<span class="muted tiny">Click a row to reveal the file in Explorer · Fix… corrects the parsed details</span>'), table.node);
 }
 
@@ -408,6 +486,140 @@ views.export = async () => {
   $('#openRoot').onclick = () => L.openPath(s.csvOutputDir || info.exportDir);
 };
 
+views.missing = async () => {
+  const [rows, s] = await Promise.all([L.data.missing(), L.settings.get()]);
+  const matched = rows.filter(r => r.expected > 0), withMissing = matched.filter(r => r.missing_count > 0), unmatched = rows.filter(r => r.source === 'none'), pending = rows.filter(r => !r.source);
+  view.innerHTML = `<h1>Missing episodes</h1>
+    <p class="lead">Expected episode counts come from ${s.metadata.enabled ? 'TVmaze (TV) and AniList (anime), fetched in the background after each scan' : 'lookups that are currently <b>disabled</b> in Settings'}. Compared with what is on disk per season. Use <b>Match…</b> when a series was matched to the wrong entry, was not found, or you want to enter counts by hand.</p>
+    <div class="tiles compact">
+      ${tile(withMissing.length ? 'badt' : 'okt', 'Series with gaps', withMissing.length, `${withMissing.reduce((a, r) => a + r.missing_count, 0).toLocaleString()} episodes missing`)}
+      ${tile('okt', 'Complete series', matched.length - withMissing.length)}
+      ${tile(unmatched.length ? 'warnt' : '', 'No match found', unmatched.length, 'use Match… to search')}
+      ${tile('', 'Not looked up yet', pending.length)}
+      ${tile('', 'Locked by you', rows.filter(r => r.locked).length, 'manual matches or counts')}
+    </div>
+    <div class="toolbar" style="margin-top:12px"><button class="small" id="refreshNew">Look up new series</button><button class="small" id="refreshAll">Re-check all unlocked series</button><span class="muted tiny">Rate-limited: roughly 1–2 series per second.</span></div>`;
+  const cols = [
+    { key: 'library_type', label: 'Library', render: r => `<span class="badge ${r.library_type}">${typeName(r.library_type)}</span>` },
+    { key: 'show_name', label: 'Series', cls: 'wrap', render: r => `<a href="#${r.library_type}/${encodeURIComponent(r.show_name)}">${esc(r.show_name)}</a>${r.matched_title && r.matched_title !== r.show_name ? `<span class="sub">matched: ${esc(r.matched_title)}</span>` : ''}` },
+    { key: 'source', label: 'Source', render: r => r.source ? `${esc(r.source)}${r.locked ? ' <span class="badge ok">locked</span>' : ''}${r.url ? ` <a href="#" class="ext" data-url="${esc(r.url)}">↗</a>` : ''}` : '<span class="muted">pending</span>' },
+    { key: 'status', label: 'Status' },
+    { key: 'expected', label: 'Expected', num: true, render: r => r.expected || '' },
+    { key: 'have', label: 'Have', num: true, render: r => r.expected ? r.have : '' },
+    { key: 'missing_count', label: 'Missing', num: true, render: r => r.expected ? (r.missing_count ? `<span class="bad">${r.missing_count}</span>` : '<span class="ok">0</span>') : (r.source === 'none' ? '<span class="muted">no match</span>' : '') },
+    { key: 'missing', label: 'Which', cls: 'wrap', render: r => esc(r.missing.map(x => `S${x.season}: ${x.missing.length > 10 ? x.missing.slice(0, 10).join(',') + '…' : x.missing.join(',')}`).join('; ')) + (r.absolute ? ' <span class="badge warn" title="episode numbers on disk exceed the season length; that season was skipped">absolute numbering</span>' : '') },
+    { key: 'id', label: '', render: r => matchBtn(r.library_type, r.show_name) },
+  ];
+  const t = makeTable(rows, cols, { search: r => `${r.show_name} ${r.matched_title || ''} ${r.source || ''}`, defaultSort: { key: 'missing_count', asc: false } });
+  view.append(searchToolbar(t, rows.length), t.node);
+  t.node.addEventListener('click', e => { const a = e.target.closest('a.ext'); if (a) { e.preventDefault(); e.stopPropagation(); L.openExternal(a.dataset.url); } });
+  $('#refreshNew').onclick = async () => { toast('Looking up series in the background…'); L.meta.refresh({ onlyNew: true }); };
+  $('#refreshAll').onclick = async () => { toast('Re-checking all unlocked series in the background…'); L.meta.refresh({ onlyNew: false }); };
+};
+
+views.duplicates = async () => {
+  const groups = await L.data.duplicates();
+  const decided = groups.filter(g => g.decided).length;
+  const wasted = groups.reduce((a, g) => a + g.files.slice(1).reduce((x, f) => x + (f.size || 0), 0), 0);
+  view.innerHTML = `<h1>Duplicate episodes</h1>
+    <p class="lead">Episodes that exist as more than one file. Compare them side by side and mark the one to <b>keep</b>; the others are flagged as discard candidates. MediaLedger never deletes anything — use <i>Reveal</i> to open the file in Explorer and decide there. Decisions are remembered across scans.</p>
+    <div class="tiles compact">
+      ${tile(groups.length ? 'warnt' : 'okt', 'Duplicate episodes', groups.length)}
+      ${tile('', 'Extra files', groups.reduce((a, g) => a + g.files.length - 1, 0))}
+      ${tile('', 'Space in extras', fmtBytes(wasted), 'size of all but the largest file per episode')}
+      ${tile('okt', 'Decided', decided, `${groups.length - decided} still to review`)}
+    </div>
+    <div class="toolbar" style="margin-top:12px"><input type="search" id="dupq" placeholder="Filter by series…"><label class="inline small"><input type="checkbox" id="hideDecided"> Hide decided</label><span class="muted small" id="dupCountLine"></span></div>
+    <div id="dupList"></div>`;
+  const order = ['4K', '1440p', '1080p', '720p', '576p', '480p', 'SD'];
+  const render = () => {
+    const q = $('#dupq').value.toLowerCase(), hide = $('#hideDecided').checked;
+    const list = groups.filter(g => (!q || g.show_name.toLowerCase().includes(q)) && (!hide || !g.decided)).slice(0, 300);
+    $('#dupCountLine').textContent = `${list.length} of ${groups.length}`;
+    $('#dupList').innerHTML = list.map(g => {
+      const best = [...g.files].sort((a, b) => (order.indexOf(a.resolution) === -1 ? 99 : order.indexOf(a.resolution)) - (order.indexOf(b.resolution) === -1 ? 99 : order.indexOf(b.resolution)) || (b.bitrate_kbps || 0) - (a.bitrate_kbps || 0))[0];
+      return `<div class="dupgroup ${g.decided ? 'decided' : ''}"><div class="head"><span class="badge ${g.library_type}">${typeName(g.library_type)}</span><b>${esc(g.show_name)}</b><span class="muted">${sxe(g)}</span><span class="muted tiny">${g.files.length} files</span><span class="grow"></span>${g.decided ? `<button class="small dupclear" data-root="${esc(g.files[0].root_id)}" data-rel="${esc(g.files[0].rel_path)}">Clear decision</button>` : ''}</div>
+        <div class="dupfiles">${g.files.map(f => `<div class="dupfile ${f.keep === 1 ? 'keep' : f.keep === 0 ? 'drop' : ''}">${f.id === best.id ? '<span class="best">best quality</span>' : ''}<div class="name" title="${esc(f.rel_path)}">${esc(f.file_name)}</div>
+          <div class="specs"><span>Size <b>${fmtBytes(f.size)}</b></span><span>Length <b>${fmtDur(f.duration_s)}</b></span><span>Res <b>${esc(f.resolution || '?')}</b> <span class="tiny">${f.width || ''}×${f.height || ''}</span></span><span>Bitrate <b>${f.bitrate_kbps ? f.bitrate_kbps.toLocaleString() + ' kbps' : '?'}</b></span><span>Video <b>${esc(f.video_codec || '?')}</b>${f.bit_depth && f.bit_depth !== 8 ? ` ${f.bit_depth}-bit` : ''}${f.hdr && f.hdr !== 'SDR' ? ` ${esc(f.hdr)}` : ''}</span><span>Audio <b>${esc(f.audio_langs || '?')}</b> <span class="tiny">${esc(f.audio_codecs || '')}</span></span><span>Subs <b>${f.sub_count || 0}</b> ${esc(f.sub_langs || '')}</span><span>Type <b>${esc(f.ext)}</b></span></div>
+          <div class="act"><button class="small primary dupkeep" data-root="${esc(f.root_id)}" data-rel="${esc(f.rel_path)}" data-id="${f.id}" ${f.keep === 1 ? 'disabled' : ''}>${f.keep === 1 ? 'Keeping' : 'Keep this'}</button><button class="small reveal" data-abs="${esc(f.abs_path)}">Reveal</button>${fixBtn(f)}</div></div>`).join('')}</div></div>`;
+    }).join('') || '<div class="empty">No duplicate episodes.</div>';
+  };
+  render();
+  $('#dupq').oninput = render; $('#hideDecided').onchange = render;
+  $('#dupList').addEventListener('click', async e => {
+    const k = e.target.closest('.dupkeep'); if (k) { await L.dup.keep(k.dataset.root, k.dataset.rel, Number(k.dataset.id)); return views.duplicates(); }
+    const c = e.target.closest('.dupclear'); if (c) { await L.dup.clear(c.dataset.root, c.dataset.rel); return views.duplicates(); }
+    const r = e.target.closest('.reveal'); if (r) L.showItem(r.dataset.abs);
+  });
+};
+
+views.quality = async () => {
+  const q = await L.data.quality();
+  const thrText = Object.entries(q.thresholds).map(([k, v]) => `${k} < ${v}`).join(' · ');
+  view.innerHTML = `<h1>Quality</h1>
+    <p class="lead">Files and series whose technical quality looks off: seasons that mix resolutions, files whose bitrate is unusually low for their resolution, and files with no audio, no language tag or a suspiciously short runtime. Thresholds (kbps): ${esc(thrText)} — change them in Settings.</p>
+    <div class="tiles compact">
+      ${tile(q.mixed.length ? 'warnt' : 'okt', 'Mixed-resolution series', q.mixed.length)}
+      ${tile(q.perSeasonMixed.length ? 'warnt' : 'okt', 'Mixed seasons', q.perSeasonMixed.length, 'one season, several resolutions')}
+      ${tile(q.lowTotal ? 'warnt' : 'okt', 'Low-bitrate files', q.lowTotal.toLocaleString())}
+      ${tile('', 'Undefined audio language', q.undAudio.reduce((a, r) => a + r.n, 0).toLocaleString(), q.undAudio.map(r => `${typeName(r.library_type)} ${r.n}`).join(' · '))}
+      ${tile(q.noAudio.length ? 'badt' : 'okt', 'No audio track', q.noAudio.length)}
+      ${tile(q.short.length ? 'warnt' : 'okt', 'Under 2 minutes', q.short.length, 'samples, trailers, broken files')}
+    </div>`;
+  const lib = { key: 'library_type', label: 'Library', render: r => `<span class="badge ${r.library_type}">${typeName(r.library_type)}</span>` };
+  const sec = (title, rows, cols, search) => { const t = makeTable(rows, cols, { search, short: true }); const box = el(`<div><div class="section-head"><h2>${title} <span class="muted">(${rows.length})</span></h2></div></div>`); box.append(t.node); return box; };
+  view.append(
+    sec('Mixed-resolution series', q.mixed, [lib, { key: 'show_name', label: 'Series', render: r => `<a href="#${r.library_type}/${encodeURIComponent(r.show_name)}">${esc(r.show_name)}</a>` }, { key: 'files', label: 'Files', num: true }, { key: 'resolutions', label: 'Resolutions', render: r => (r.resolutions || '').split(',').map(x => `<span class="badge">${esc(x)}</span>`).join('') }, { key: 'codecs', label: 'Codecs', render: r => esc((r.codecs || '').replace(/,/g, ' ')) }], r => r.show_name),
+    sec('Mixed seasons', q.perSeasonMixed, [lib, { key: 'show_name', label: 'Series', render: r => `<a href="#${r.library_type}/${encodeURIComponent(r.show_name)}">${esc(r.show_name)}</a>` }, { key: 'season', label: 'Season', render: r => 'S' + r.season }, { key: 'files', label: 'Files', num: true }, { key: 'resolutions', label: 'Resolutions', render: r => (r.resolutions || '').split(',').map(x => `<span class="badge">${esc(x)}</span>`).join('') }], r => r.show_name),
+    sec('Low-bitrate files', q.low, [lib, { key: 'rel_path', label: 'Path', cls: 'pathcell' }, { key: 'resolution', label: 'Res' }, { key: 'bitrate_kbps', label: 'kbps', num: true, render: r => `<span class="warn">${r.bitrate_kbps.toLocaleString()}</span> <span class="muted tiny">/ ${q.thresholds[r.resolution]}</span>` }, { key: 'video_codec', label: 'Codec' }, { key: 'duration_s', label: 'Length', num: true, render: r => fmtDur(r.duration_s) }, { key: 'size', label: 'Size', num: true, render: r => fmtBytes(r.size) }, { key: 'id', label: '', render: r => fixBtn(r) }], r => r.rel_path),
+    sec('No audio track', q.noAudio, [lib, { key: 'rel_path', label: 'Path', cls: 'pathcell' }, { key: 'id', label: '', render: r => fixBtn(r) }], r => r.rel_path),
+    sec('Under 2 minutes', q.short, [lib, { key: 'rel_path', label: 'Path', cls: 'pathcell' }, { key: 'duration_s', label: 'Length', num: true, render: r => fmtDur(r.duration_s) }, { key: 'size', label: 'Size', num: true, render: r => fmtBytes(r.size) }, { key: 'id', label: '', render: r => fixBtn(r) }], r => r.rel_path),
+  );
+};
+
+views.rename = async () => {
+  const s = await L.settings.get();
+  if (!s.renaming.enabled) {
+    view.innerHTML = `<h1>Rename files</h1><div class="warnbox">Renaming is <b>off</b>. This is the only feature that writes to your share. Turn it on under <a href="#settings">Settings → Renaming</a> if you want MediaLedger to propose and apply Plex-standard file names.</div>
+      <p class="lead">When enabled, this page lists every file whose name differs from the standard pattern (<span class="mono">Show - S01E02 - Title.ext</span>, <span class="mono">Title (Year) - Edition.ext</span>), built from the parsed details and your manual fixes. You tick the ones to rename; files are renamed in place, never moved, never overwritten, and every attempt is logged.</p>`;
+    return;
+  }
+  const [{ list }, hist] = await Promise.all([L.rename.proposals({}), L.rename.history()]);
+  const okHist = hist.filter(h => h.ok).length;
+  view.innerHTML = `<h1>Rename files</h1>
+    <div class="warnbox">This page <b>renames files on your share</b>. Proposals come from the parsed details plus your manual fixes, so fix anything wrong under Problems first. Files are renamed in place (same folder), never overwritten, and each attempt is logged below.</div>
+    <div class="tiles compact">${tile(list.length ? 'warnt' : 'okt', 'Proposed renames', list.length)}${tile('', 'From manual fixes', list.filter(p => p.has_override).length)}${tile('', 'Renamed so far', okHist, `${hist.length - okHist} failed`)}</div>
+    <div class="toolbar" style="margin-top:12px"><input type="search" id="rq" placeholder="Filter…"><select id="rtype"><option value="">all libraries</option><option value="tv">TV</option><option value="anime">Anime</option><option value="movie">Movies</option></select><label class="inline small"><input type="checkbox" id="rfixed"> Only files with manual fixes</label><span class="muted small" id="rcount"></span><span class="grow"></span><button class="small" id="selAll">Select shown</button><button class="small" id="selNone">Clear</button><button class="primary" id="apply" disabled>Rename 0 files</button></div>
+    <div class="table-wrap" id="rtable"></div>
+    <h2>History</h2><div id="rhist"></div>`;
+  const selected = new Set();
+  let shown = [];
+  const render = () => {
+    const q = $('#rq').value.toLowerCase(), t = $('#rtype').value, fx = $('#rfixed').checked;
+    shown = list.filter(p => (!t || p.library_type === t) && (!fx || p.has_override) && (!q || `${p.from} ${p.to} ${p.show_name || ''} ${p.movie_title || ''}`.toLowerCase().includes(q))).slice(0, 1000);
+    $('#rcount').textContent = `${shown.length} of ${list.length}`;
+    $('#rtable').innerHTML = `<table><thead><tr><th></th><th>Library</th><th>Folder</th><th>Current name</th><th></th><th>Proposed name</th><th></th></tr></thead><tbody>${shown.map(p => `<tr class="rename-row"><td><input type="checkbox" class="rsel" data-id="${p.id}" ${selected.has(p.id) ? 'checked' : ''}></td><td><span class="badge ${p.library_type}">${typeName(p.library_type)}</span></td><td class="muted tiny wrap">${esc(p.rel_path.includes('\\') ? p.rel_path.slice(0, p.rel_path.lastIndexOf('\\')) : '')}</td><td class="wrap">${esc(p.from)}${p.has_override ? ' <span class="badge ok">fixed</span>' : ''}</td><td class="arrow">→</td><td class="wrap"><b>${esc(p.to)}</b></td><td>${fixBtn(p)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">Every file already matches the standard pattern.</td></tr>'}</tbody></table>`;
+    $('#apply').textContent = `Rename ${selected.size} file${selected.size === 1 ? '' : 's'}`; $('#apply').disabled = !selected.size;
+  };
+  render();
+  ['#rq', '#rtype', '#rfixed'].forEach(id => { $(id).oninput = render; $(id).onchange = render; });
+  $('#rtable').addEventListener('change', e => { const c = e.target.closest('.rsel'); if (c) { c.checked ? selected.add(Number(c.dataset.id)) : selected.delete(Number(c.dataset.id)); $('#apply').textContent = `Rename ${selected.size} file${selected.size === 1 ? '' : 's'}`; $('#apply').disabled = !selected.size; } });
+  $('#selAll').onclick = () => { shown.forEach(p => selected.add(p.id)); render(); };
+  $('#selNone').onclick = () => { selected.clear(); render(); };
+  $('#apply').onclick = async () => {
+    const ids = [...selected];
+    const card = openModal(`<h2>Rename ${ids.length} file${ids.length === 1 ? '' : 's'} on the share?</h2><p class="muted">Each file is renamed in its current folder. Existing targets are skipped. This cannot be undone from MediaLedger (the history below records every old and new name).</p><div class="preview" style="max-height:240px;overflow:auto">${list.filter(p => selected.has(p.id)).slice(0, 50).map(p => `<div>${esc(p.from)} <span class="arrow">→</span> <b>${esc(p.to)}</b></div>`).join('')}${ids.length > 50 ? `<div class="muted">…and ${ids.length - 50} more</div>` : ''}</div><div class="actions"><span class="grow"></span><button id="rc">Cancel</button><button class="danger" id="rgo">Rename now</button></div>`);
+    $('#rc', card).onclick = closeModal;
+    $('#rgo', card).onclick = async () => {
+      $('#rgo', card).disabled = true; $('#rgo', card).textContent = 'Renaming…';
+      try { const res = await L.rename.apply(ids); const ok = res.filter(r => r.ok).length; closeModal(); toast(`${ok} renamed, ${res.length - ok} failed`, ok !== res.length); views.rename(); }
+      catch (e) { closeModal(); toast(e.message, true); }
+    };
+  };
+  const ht = makeTable(hist, [{ key: 'ts', label: 'When', render: r => fmtDate(r.ts) }, { key: 'from_rel', label: 'From', cls: 'pathcell' }, { key: 'to_rel', label: 'To', cls: 'pathcell' }, { key: 'ok', label: 'Result', render: r => r.ok ? '<span class="badge ok">renamed</span>' : `<span class="badge bad">failed</span> <span class="tiny">${esc(r.error || '')}</span>` }], { short: true });
+  $('#rhist').append(ht.node);
+};
+
 views.settings = async () => {
   const s = await L.settings.get();
   const info = await L.appInfo();
@@ -431,6 +643,18 @@ views.settings = async () => {
       <div class="field"><label>Path override</label><div class="inline"><input type="text" id="ffprobePath" style="flex:1" placeholder="auto-detect" value="${esc(s.ffprobePath)}"><button class="small" id="pickFf">Browse…</button></div><div class="hint">Leave empty to auto-detect from <span class="mono">C:\\ffmpeg</span>, winget, scoop, PATH, or MediaLedger's own download.</div></div>
       <div class="field"><label>Download</label><div class="inline"><button class="small" id="dlFf">${info.ffprobe ? 'Download latest ffmpeg build anyway' : 'Download ffmpeg now'}</button><span class="muted small" id="dlMsg"></span></div><div class="hint">Fetches the latest static Windows build from BtbN's FFmpeg-Builds on GitHub (about 100 MB) into MediaLedger's data folder and points the path at it. Runs automatically on first launch when nothing is found.</div></div>
       <div class="progress" id="dlProg" hidden><div class="bar"><div id="dlBar"></div></div></div>
+
+      <h2>Expected episodes</h2>
+      <div class="field"><label>Look up episode counts</label><input type="checkbox" id="metaOn" ${s.metadata.enabled ? 'checked' : ''}><div class="hint">TV series are matched on <b>TVmaze</b>, anime on <b>AniList</b>. Both are free and need no account or key. Runs in the background after each scan for series not yet looked up; airing series are re-checked every <input type="number" id="metaDays" min="1" value="${s.metadata.refreshDays}" style="width:60px"> days.</div></div>
+
+      <h2>Folder watch</h2>
+      <div class="field"><label>Watch roots for changes</label><div class="inline"><input type="checkbox" id="watchOn" ${s.watchFolders ? 'checked' : ''}> <span class="muted small">scan after changes settle for</span> <input type="number" id="watchSettle" min="15" value="${s.watchSettleSeconds}" style="width:70px"> <span class="muted small">seconds</span></div><div class="hint">Uses Windows change notifications on each root (works on UNC shares). A download that is still copying keeps pushing the timer back, so the scan starts once the folder is quiet. Status: ${info.watch.enabled ? `<span class="ok">watching ${info.watch.roots.length} root(s)</span>` : 'off'}.</div></div>
+
+      <h2>Renaming <span class="badge warn">writes to the share</span></h2>
+      <div class="field"><label>Enable rename tool</label><input type="checkbox" id="renOn" ${s.renaming.enabled ? 'checked' : ''}><div class="hint">Unlocks the <b>Rename files</b> page, which proposes Plex-standard names and renames only the files you tick, in place, never overwriting. Off by default because it is the one feature that modifies the NAS.</div></div>
+
+      <h2>Quality thresholds</h2>
+      <div class="field"><label>Minimum bitrate (kbps)</label><div class="inline" id="thr">${Object.entries(s.quality.minKbps).map(([k, v]) => `<label class="inline small">${esc(k)} <input type="number" min="0" data-res="${esc(k)}" value="${v}" style="width:74px"></label>`).join('')}</div><div class="hint">Files below these values for their resolution are listed under Quality → Low-bitrate files.</div></div>
 
       <h2>CSV export</h2>
       <div class="field"><label>Output folder</label><div class="inline"><input type="text" id="csvDir" style="flex:1" placeholder="${esc(info.exportDir)}" value="${esc(s.csvOutputDir)}"><button class="small" id="pickCsv">Browse…</button><button class="small" id="openCsv">Open</button></div></div>
@@ -485,6 +709,10 @@ views.settings = async () => {
       csvOutputDir: $('#csvDir').value.trim(), autoExportAfterScan: $('#autoExport').checked,
       schedule: { ...s.schedule, inAppEnabled: $('#inApp').checked, inAppIntervalHours: Number($('#inAppHours').value) || 24, taskTime: $('#taskTime').value || '03:00' },
       updates: { enabled: $('#updOn').checked }, githubToken: $('#ghToken').value.trim(),
+      metadata: { ...s.metadata, enabled: $('#metaOn').checked, refreshDays: Number($('#metaDays').value) || 14 },
+      watchFolders: $('#watchOn').checked, watchSettleSeconds: Number($('#watchSettle').value) || 90,
+      renaming: { ...s.renaming, enabled: $('#renOn').checked },
+      quality: { minKbps: Object.fromEntries([...document.querySelectorAll('#thr input[data-res]')].map(i => [i.dataset.res, Number(i.value) || 0])) },
       plex: { enabled: $('#plexOn').checked, baseUrl: $('#plexUrl').value.trim(), token: $('#plexToken').value.trim() },
       ui: s.ui,
     };

@@ -40,12 +40,16 @@ and nothing leaves the machine except an update check against this repository.
 | **Three libraries** | TV, Anime and Movies roots, each parsed with rules that match Plex-style folders and the messy real-world variants (`2Show S3.mp4`, `Title_-_01_720p_Group.mp4`, `Show - OVA.mp4`). |
 | **Per-file detail** | Runtime, resolution, fps, video codec and profile, bit depth, HDR / Dolby Vision, bitrate, container, audio codecs, languages and channel layouts, embedded subtitle tracks and languages, sidecar subtitle files, and a single *has captions* flag. |
 | **Movie multiples** | Files are grouped by title + year, so `Pacific Rim (2013).mp4` and `Pacific Rim (2013) [4k].mkv` show up as one title with two versions and land in a dedicated CSV. |
+| **Missing episodes** | Expected counts per season from TVmaze (TV) and AniList (anime), free and keyless, fetched in the background. Shows exactly which episodes you lack, per series and per season, with a *Match…* dialog to correct a wrong match or enter counts by hand. |
+| **Duplicate review** | Every episode that exists as several files, side by side, best-quality candidate flagged. Mark one to keep; the decision is remembered. Nothing is ever deleted. |
+| **Quality report** | Series that mix resolutions, files with unusually low bitrate for their resolution, no audio track, undefined audio language, or a suspiciously short runtime. |
 | **Manual fixes that stick** | A *Fix…* button on any file corrects series, season, episode, title, year or edition, or ignores the file. Fixes are stored in the database and re-applied on every scan, so a corrected file never comes back as a problem. |
 | **Change log** | Every scan records added, removed, modified and returned files, ffprobe failures and unreachable roots, with a 30-day activity chart. |
 | **Problems view** | Unparseable names, ffprobe errors, duplicate episodes, missing files, ignored files and saved fixes in one place. |
 | **CSV export** | Eight files per export into a timestamped folder plus a `latest\` copy, so a spreadsheet can always point at the same file names. |
 | **Fast scans** | Directory listing runs on worker threads; probing runs as a pool of ffprobe processes. A 24,000-file library rescans in seconds when nothing changed. |
-| **Scheduling** | An in-app timer while the app is open, and a Windows Task Scheduler job that runs even when it is closed. |
+| **Scheduling** | An in-app timer while the app is open, a Windows Task Scheduler job that runs even when it is closed, and an optional folder watch that scans as soon as the share goes quiet after a change. |
+| **Rename tool (opt-in)** | Proposes Plex-standard names from what the app already knows, renames only what you tick, in place, never overwriting, with a full log. Off by default; the only feature that writes to the share. |
 | **Self-contained** | Downloads ffmpeg on first launch if none is installed, updates itself silently from GitHub Releases, and keeps its database and settings in your user profile so reinstalling or updating never loses data. |
 
 ## Screenshots
@@ -58,6 +62,14 @@ and nothing leaves the machine except an update check against this repository.
   <tr>
     <td><img src="docs/screenshots/movies.png" alt="Movies"><br><sub><b>Movies</b> — one row per title with a ×N badge where several files exist, and a filter for only those.</sub></td>
     <td><img src="docs/screenshots/movie-versions.png" alt="Movie versions"><br><sub><b>Movie versions</b> — the files behind one title side by side: resolution, codec, HDR, audio, subtitles, size.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/missing.png" alt="Missing episodes"><br><sub><b>Missing episodes</b> — expected vs on-disk counts per series from TVmaze / AniList, with exactly which episodes are absent.</sub></td>
+    <td><img src="docs/screenshots/duplicates.png" alt="Duplicate review"><br><sub><b>Duplicates</b> — files for the same episode side by side; mark the one to keep.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/quality.png" alt="Quality report"><br><sub><b>Quality</b> — mixed-resolution series, low-bitrate files, missing audio, short files.</sub></td>
+    <td><img src="docs/screenshots/rename.png" alt="Rename tool"><br><sub><b>Rename files</b> (opt-in) — Plex-standard names proposed from parsed details and fixes; tick, confirm, done.</sub></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/changes.png" alt="Change log"><br><sub><b>Change log</b> — totals, a 30-day chart, and the full list filterable by scan and kind.</sub></td>
@@ -107,6 +119,9 @@ with read access (Settings → Updates).
    time. Unchanged files are not re-read unless you turn on *Re-probe unchanged
    files*.
 5. **Log and export.** The change log is written and, if enabled, the CSVs.
+6. **Expected counts.** Series not yet looked up are matched on TVmaze or
+   AniList in the background (about one per second, to respect their limits);
+   airing series are re-checked every two weeks.
 
 Timings on a gigabit SMB link to a consumer NAS, 24,628 files:
 
@@ -140,7 +155,7 @@ you get the improvement without a rescan.
 | File | Contents |
 |------|----------|
 | `tv_episodes.csv`, `anime_episodes.csv` | One row per episode file with every probed field |
-| `tv_series.csv`, `anime_series.csv` | One row per series: seasons, episodes, runtime, size, resolutions, codecs, languages, captions %, episode gaps |
+| `tv_series.csv`, `anime_series.csv` | One row per series: seasons, episodes, runtime, size, resolutions, codecs, languages, captions %, episode gaps, expected and missing episodes with the exact list, mixed-resolution and low-bitrate flags |
 | `movies.csv` | One row per movie file, with the number of versions of that title |
 | `movies_titles.csv` | One row per title: file count, versions, best resolution, size, languages |
 | `movies_multiples.csv` | Only titles with more than one file |
@@ -157,12 +172,15 @@ you get the improvement without a rescan.
 
 ## Privacy and safety
 
-- The share is only ever read. MediaLedger never renames, moves or deletes
-  files on the NAS.
+- By default the share is only ever read. The one exception is the rename
+  tool, which is off until you enable it, renames only files you tick, and
+  never moves, overwrites or deletes anything.
 - Rows are never deleted automatically; a vanished file is flagged *missing*
   until you press *Forget missing files*.
 - Network access is limited to the GitHub update check, the optional ffmpeg
-  download from GitHub, and the optional Plex connection test. Set
+  download from GitHub, the episode-count lookups on TVmaze and AniList (only
+  series titles are sent; can be disabled in Settings), and the optional Plex
+  connection test. Set
   `NO_AUTO_UPDATE=1` in the environment to disable the update check entirely.
 
 ## Run from source
@@ -186,9 +204,15 @@ the app has no native addons, so there is nothing to compile.
 **Does it need Plex?** No. It reads the files directly. A Plex URL and token can
 be entered in Settings, but today only the connection test uses them.
 
-**Will it change my files?** No. Everything it learns goes into its own
-database. Renaming files to fix problems is on the roadmap as an opt-in,
-previewed action.
+**Will it change my files?** Not unless you turn on the rename tool in
+Settings and tick files on the Rename page. Everything else it learns goes into
+its own database.
+
+**Where do the expected episode counts come from?** TVmaze for TV, AniList for
+anime. Both are free and need no account. AniList counts by cour, so a split
+season shows up as "Part 2"; MediaLedger merges those, and the *Match…* dialog
+lets you switch a series to TVmaze if its season numbering fits the folders
+better.
 
 **What happens to my data on update or reinstall?** Nothing. The database and
 settings live in your user profile, not the install folder. Schema upgrades
@@ -204,10 +228,8 @@ No. An unreachable root is logged as `root_offline` and skipped.
 
 - Plex integration: match files to Plex library items, pull watched state and
   Plex titles.
-- Opt-in, previewed file renaming to fix naming problems on the share.
-- Watch folders for near-real-time change detection.
-- Per-series episode-count expectations (from Plex or a metadata source) to
-  turn *gaps* into *missing episodes*.
+- Move-into-season-folder option for the rename tool.
+- Poster and synopsis from the metadata match on the series page.
 
 ## License
 
