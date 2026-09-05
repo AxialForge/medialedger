@@ -98,7 +98,7 @@ function exportEpisodes(db, type, dir, prefix, settings) {
       ...(() => { const m = metas.get(show); const r = m && m.seasons ? missingEpisodes(list.filter(x => x.parse_ok), m.seasons) : null; return {
         meta_source: m ? m.source : '', meta_title: m ? m.matched_title : '', meta_status: m ? m.status : '',
         expected_episodes: r ? r.expectedTotal : '', missing_episodes: r ? r.missingCount : '',
-        missing_list: r ? r.missing.map(x => `S${x.season}: ${x.missing.length > 15 ? x.missing.slice(0, 15).join(',') + ',…' : x.missing.join(',')}`).join('; ') : '',
+        missing_list: r ? r.missing.map(x => x.missing.length >= x.expected ? `S${x.season}: all ${x.expected}` : `S${x.season}: ${x.missing.length > 15 ? x.missing.slice(0, 15).join(',') + ',… (' + x.missing.length + ')' : x.missing.join(',')}`).join('; ') : '',
         absolute_numbering: r && r.absolute ? 'yes' : '' }; })(),
       mixed_resolution: new Set(list.map(r => r.resolution).filter(Boolean)).size > 1 ? 'yes' : 'no',
       low_bitrate_files: list.filter(r => r.resolution && thr[r.resolution] && r.bitrate_kbps != null && r.bitrate_kbps < thr[r.resolution]).length,

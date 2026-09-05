@@ -273,7 +273,7 @@ views.dashboard = async () => {
   $('#recentAdded').append(d.recentlyAdded.length ? el(`<table>${d.recentlyAdded.map(r => `<tr><td><span class="badge ${r.library_type}">${typeName(r.library_type)}</span></td><td class="wrap">${esc(r.library_type === 'movie' ? `${r.movie_title} (${r.movie_year || '?'})` : `${r.show_name} ${sxe(r)}`)}<span class="sub">${esc(r.file_name)}</span></td><td class="num muted tiny">${fmtAgo(r.first_seen)}</td></tr>`).join('')}</table>`) : el('<div class="empty">Nothing yet</div>'));
   $('#biggest').append(el(`<table>${d.biggestShows.map(s => `<tr><td><span class="badge ${s.library_type}">${typeName(s.library_type)}</span></td><td class="wrap">${esc(s.show_name)}</td><td class="num">${s.episodes} eps</td><td class="num">${fmtBytes(s.bytes)}</td><td class="num muted">${fmtHours(s.seconds)}</td></tr>`).join('') || '<tr><td class="empty">—</td></tr>'}</table>`));
   $('#biggestMovies').append(el(`<table>${d.biggestMovies.map(m => `<tr><td class="wrap">${esc(m.movie_title)} <span class="muted">(${m.movie_year || '?'})</span></td><td>${esc(m.resolution || '')}</td><td class="muted">${esc(m.video_codec || '')}</td><td class="num">${fmtBytes(m.size)}</td></tr>`).join('') || '<tr><td class="empty">—</td></tr>'}</table>`));
-  $('#gaps').append(d.missingEpisodes.top.length ? el(`<table>${d.missingEpisodes.top.map(g => `<tr><td><span class="badge ${g.library_type}">${typeName(g.library_type)}</span></td><td class="wrap"><a href="#${g.library_type}/${encodeURIComponent(g.show_name)}">${esc(g.show_name)}</a>${g.matched_title && g.matched_title !== g.show_name ? `<span class="sub">${esc(g.matched_title)}</span>` : ''}</td><td class="num">${g.have} of ${g.expected}</td><td class="num bad">${g.missing_count} missing</td><td class="muted tiny wrap">${esc(g.missing.map(x => `S${x.season}: ${x.missing.length > 6 ? x.missing.slice(0, 6).join(',') + '…' : x.missing.join(',')}`).join('; '))}</td></tr>`).join('')}</table>`) : el(`<div class="empty">${d.missingEpisodes.matched ? 'Every matched series is complete' : 'No expected counts yet — they are fetched in the background after a scan'}</div>`));
+  $('#gaps').append(d.missingEpisodes.top.length ? el(`<table>${d.missingEpisodes.top.map(g => `<tr><td><span class="badge ${g.library_type}">${typeName(g.library_type)}</span></td><td class="wrap"><a href="#${g.library_type}/${encodeURIComponent(g.show_name)}">${esc(g.show_name)}</a>${g.matched_title && g.matched_title !== g.show_name ? `<span class="sub">${esc(g.matched_title)}</span>` : ''}</td><td class="num">${g.have} of ${g.expected}</td><td class="num bad">${g.missing_count} missing</td><td class="muted tiny wrap">${esc(missingText(g.missing, 6))}</td></tr>`).join('')}</table>`) : el(`<div class="empty">${d.missingEpisodes.matched ? 'Every matched series is complete' : 'No expected counts yet — they are fetched in the background after a scan'}</div>`));
   $('#scanHist').append(el(`<table>${d.lastScans.map(s => `<tr><td class="muted tiny">${fmtDate(s.started)}</td><td><span class="badge ${s.status === 'done' ? 'ok' : s.status === 'running' ? '' : 'bad'}">${s.status}</span></td><td class="muted">${s.trigger}${s.threads > 1 ? ` · ${s.threads}t` : ''}</td><td class="num">${fmtMs(s.duration_ms)}</td><td class="num"><span class="kind-added">+${s.added}</span> <span class="kind-removed">−${s.removed}</span> <span class="kind-modified">~${s.modified}</span></td><td class="num muted">${s.probed} probed</td></tr>`).join('') || '<tr><td class="empty">—</td></tr>'}</table>`));
 };
 
@@ -300,6 +300,18 @@ async function seriesView(type) {
 }
 views.tv = () => seriesView('tv');
 views.anime = () => seriesView('anime');
+
+// "S3: 5,7; S6–S12 entirely" — whole missing seasons collapse into ranges, partial ones list episodes.
+function missingText(list, max = 8) {
+  if (!list || !list.length) return '';
+  const whole = list.filter(x => x.missing.length >= x.expected).map(x => x.season).sort((a, b) => a - b);
+  const partial = list.filter(x => x.missing.length < x.expected);
+  const ranges = [];
+  for (const s of whole) { const last = ranges[ranges.length - 1]; if (last && last[1] === s - 1) last[1] = s; else ranges.push([s, s]); }
+  const parts = partial.map(x => `S${x.season}: ${x.missing.length > max ? x.missing.slice(0, max).join(',') + `,… (${x.missing.length})` : x.missing.join(',')}`);
+  if (ranges.length) parts.push(ranges.map(([a, b]) => a === b ? `S${a}` : `S${a}–S${b}`).join(', ') + ' entirely');
+  return parts.join('; ');
+}
 
 function missingGrid(m) {
   if (!m || !m.seasons) return '';
@@ -507,7 +519,7 @@ views.missing = async () => {
     { key: 'expected', label: 'Expected', num: true, render: r => r.expected || '' },
     { key: 'have', label: 'Have', num: true, render: r => r.expected ? r.have : '' },
     { key: 'missing_count', label: 'Missing', num: true, render: r => r.expected ? (r.missing_count ? `<span class="bad">${r.missing_count}</span>` : '<span class="ok">0</span>') : (r.source === 'none' ? '<span class="muted">no match</span>' : '') },
-    { key: 'missing', label: 'Which', cls: 'wrap', render: r => esc(r.missing.map(x => `S${x.season}: ${x.missing.length > 10 ? x.missing.slice(0, 10).join(',') + '…' : x.missing.join(',')}`).join('; ')) + (r.absolute ? ' <span class="badge warn" title="episode numbers on disk exceed the season length; that season was skipped">absolute numbering</span>' : '') },
+    { key: 'missing', label: 'Which', cls: 'wrap', render: r => esc(missingText(r.missing)) + (r.absolute ? ' <span class="badge warn" title="episode numbers on disk exceed the season length; that season was skipped">absolute numbering</span>' : '') },
     { key: 'id', label: '', render: r => matchBtn(r.library_type, r.show_name) },
   ];
   const t = makeTable(rows, cols, { search: r => `${r.show_name} ${r.matched_title || ''} ${r.source || ''}`, defaultSort: { key: 'missing_count', asc: false } });
