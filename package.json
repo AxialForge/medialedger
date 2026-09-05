@@ -1,0 +1,28 @@
+{
+  "name": "medialedger",
+  "productName": "MediaLedger",
+  "version": "0.2.0",
+  "description": "Local desktop tracker for a Plex media share: TV, anime and movie inventory with ffprobe details, CSV export, scheduled scans and a change log.",
+  "main": "src/main/main.js",
+  "author": "AxialForge",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "scan": "electron . --scan",
+    "test": "node test/parse.test.js && node test/updater.test.js",
+    "build:win": "electron-builder --win --x64",
+    "dist": "electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AxialForge/medialedger.git"
+  }
+}

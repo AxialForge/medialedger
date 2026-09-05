@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+  <title>MediaLedger</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app">
+    <nav class="sidebar">
+      <div class="brand"><span class="logo">▣</span> MediaLedger</div>
+      <div class="navgroup">Library</div>
+      <a href="#dashboard" data-view="dashboard"><i>◧</i>Dashboard</a>
+      <a href="#tv" data-view="tv"><i>▤</i>TV Shows</a>
+      <a href="#anime" data-view="anime"><i>▥</i>Anime</a>
+      <a href="#movies" data-view="movies"><i>▦</i>Movies</a>
+      <div class="navgroup">Maintenance</div>
+      <a href="#changes" data-view="changes"><i>↹</i>Change log</a>
+      <a href="#problems" data-view="problems"><i>⚠</i>Problems <span class="pill" id="problemCount" hidden></span></a>
+      <a href="#export" data-view="export"><i>⇩</i>CSV export</a>
+      <div class="navgroup">App</div>
+      <a href="#settings" data-view="settings"><i>⚙</i>Settings</a>
+      <a href="#about" data-view="about"><i>ⓘ</i>About <span class="pill accent" id="updatePill" hidden></span></a>
+      <div class="spacer"></div>
+      <div class="scanbox">
+        <button id="btnScan" class="primary wide">Scan now</button>
+        <button id="btnCancel" class="wide danger" hidden>Cancel scan</button>
+        <div id="scanProgress" class="progress" hidden>
+          <div class="bar"><div id="scanBar"></div></div>
+          <div id="scanMsg" class="muted small"></div>
+          <div id="scanFile" class="muted tiny"></div>
+        </div>
+      </div>
+      <div class="version muted tiny" id="versionLine"></div>
+    </nav>
+    <main id="view" class="view"></main>
+  </div>
+  <div id="toast" class="toast" hidden></div>
+  <div id="modal" class="modal" hidden><div class="modal-card" id="modalCard"></div></div>
+  <script src="app.js"></script>
+</body>
+</html>
