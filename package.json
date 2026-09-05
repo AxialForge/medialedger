@@ -10,7 +10,7 @@
   "scripts": {
     "start": "electron .",
     "scan": "electron . --scan",
-    "test": "node test/parse.test.js && node test/updater.test.js && node test/features.test.js",
+    "test": "node test/parse.test.js && node test/updater.test.js && node test/features.test.js && node test/rename.harness.js",
     "build:win": "electron-builder --win --x64",
     "dist": "electron-builder --win --x64"
   },

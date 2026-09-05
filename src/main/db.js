@@ -272,7 +272,7 @@ class Db {
   getOverride(rootId, relPath) { return this.get('SELECT * FROM overrides WHERE root_id=? AND rel_path=?', rootId, relPath); }
   saveOverride(o) {
     const now = new Date().toISOString();
-    const cols = ['root_id', 'rel_path', 'library_type', 'show_name', 'season', 'episode', 'episode_end', 'episode_title', 'movie_title', 'movie_year', 'edition_tag', 'ignore', 'note'];
+    const cols = ['root_id', 'rel_path', 'library_type', 'show_name', 'season', 'episode', 'episode_end', 'episode_title', 'movie_title', 'movie_year', 'edition_tag', 'ignore', 'note', 'keep'];
     const vals = cols.map(c => o[c] ?? null);
     this.run(`INSERT INTO overrides (${cols.join(',')}, created, updated) VALUES (${cols.map(() => '?').join(',')}, ?, ?)
       ON CONFLICT(root_id, rel_path) DO UPDATE SET ${cols.filter(c => c !== 'root_id' && c !== 'rel_path').map(c => `${c}=excluded.${c}`).join(',')}, updated=excluded.updated`, ...vals, now, now);
