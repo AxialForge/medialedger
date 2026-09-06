@@ -21,11 +21,19 @@ local app.
   `missing=1`; only the explicit "Forget missing files" button purges them. A
   root that is unreachable is skipped and logged as `root_offline`, never
   treated as empty.
-- **Read-only against the share, with one gated exception.** The scanner only
-  lists, stats and probes. The rename tool (`renamer.js`) is the single write
-  path: off by default (`settings.renaming.enabled`), renames in place only,
-  never overwrites, logs every attempt to `renames`. Never add another write
-  path without the same gate.
+- **Read-only against the share, with two gated exceptions.** The scanner only
+  lists, stats and probes. `renamer.js` (TV/anime, gated by
+  `settings.renaming.enabled`) and `movieRename.js` (movies, gated by
+  `settings.movieRename.enabled` + typed confirmation) are the only write
+  paths. Both never overwrite and journal every attempt. `movieRename` also
+  pre-flights the whole batch, verifies size after each operation, holds
+  `renameLock` so scans/watcher back off, and supports undo. Never add another
+  write path without at least the same gate and journal.
+- **Movie names come from proven data only.** `movieNamer.js` takes
+  resolution/HDR/codec/audio from ffprobe columns and title/year from the
+  parser + overrides. Unknowns become placeholder words, never guesses from the
+  old file name. Keep `test/movieNamer.test.js` and
+  `test/movieRename.harness.js` green.
 - **No paid services.** No code-signing certificates, no paid API tiers. Free,
   keyless sources only (TVmaze, AniList, BtbN ffmpeg builds, GitHub Releases).
 - **Schema changes go through `MIGRATIONS` in `db.js`.** Never edit an old
@@ -46,6 +54,7 @@ npm run scan           # headless: scan → export → exit (what Task Scheduler
 npm test               # parser + updater unit tests (plain Node)
 node test/scan.harness.js    # end-to-end threaded scan of real roots into a temp DB
 node test/metadata.live.js   # live TVmaze/AniList lookups for real series (network)
+node test/movieNamer.report.js <db> <out.csv>   # dry report of proposed movie names (read-only)
 npx electron . --profile=.devprofile   # run against a separate data folder (see Gotchas)
 npm run build:win      # electron-builder → dist/ (NSIS one-click installer + latest.yml)
 node tools/make-icon.js      # regenerate build/icon.ico + icon.png (no deps)
@@ -75,7 +84,9 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 | `src/main/scheduler.js` | In-app interval timer + `schtasks.exe` create/query/delete |
 | `src/main/watcher.js` | Optional `fs.watch` (recursive, UNC ok) per root; debounced scan trigger |
 | `src/main/metadata.js` | TVmaze / AniList lookups → `{season: count}`; `missingEpisodes()` diff with absolute-numbering guard |
-| `src/main/renamer.js` | Plex-standard name proposals + gated in-place rename with logging |
+| `src/main/renamer.js` | TV/anime Plex-standard name proposals + gated in-place rename with logging |
+| `src/main/movieNamer.js` | Pure movie naming engine: row → `{ ok, blocked, name, tokens, flags }`, collision detection |
+| `src/main/movieRename.js` | Movie batch executor: pre-flight, dry/live, in-place or copy-verify-delete folders, journal, undo |
 | `src/main/updater.js` | Template silent auto-updater (electron-updater), plus pure version helpers |
 | `src/main/plex.js` | Placeholder: connection test only (later: match to Plex items) |
 | `src/preload.js` | `window.ledger.*` API surface |

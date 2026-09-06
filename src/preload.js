@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('ledger', {
   meta: { refresh: invoke('meta:refresh'), status: invoke('meta:status'), get: invoke('meta:get'), search: invoke('meta:search'), setMatch: invoke('meta:setMatch'), setManual: invoke('meta:setManual'), setNone: invoke('meta:setNone'), unlock: invoke('meta:unlock'), onProgress: listen('meta:progress') },
   dup: { keep: invoke('dup:keep'), clear: invoke('dup:clear') },
   rename: { proposals: invoke('rename:proposals'), apply: invoke('rename:apply'), history: invoke('rename:history') },
+  movie: { plan: invoke('movie:plan'), run: invoke('movie:run'), undo: invoke('movie:undo'), batches: invoke('movie:batches'), batchItems: invoke('movie:batchItems'), onProgress: listen('movie:progress') },
   data: {
     dashboard: invoke('data:dashboard'), series: invoke('data:series'), episodes: invoke('data:episodes'),
     movies: invoke('data:movies'), movieFiles: invoke('data:movieFiles'), changes: invoke('data:changes'), changeStats: invoke('data:changeStats'),

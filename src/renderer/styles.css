@@ -171,3 +171,5 @@ td .sub { display: block; color: var(--muted); font-size: 11px; line-height: 1.2
 .seasons-edit label { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
 .seasons-edit input { width: 64px; }
 .kv td:first-child { color: var(--muted); width: 180px; }
+.blockedrow td { opacity: .75; }
+.blockedrow td:first-child { width: 22px; }

@@ -24,7 +24,12 @@ const DEFAULTS = {
   },
   watchFolders: false,        // fs.watch on each root; triggers a scan after changes settle
   watchSettleSeconds: 90,
-  renaming: { enabled: false, template: 'plex' }, // opt-in rename tool (writes to the share!)
+  renaming: { enabled: false, template: 'plex' }, // opt-in rename tool for TV/anime (writes to the share!)
+  movieRename: {              // movie naming engine tab
+    enabled: false,           // "Allow live renames" switch; dry runs always work
+    layout: 'inplace',        // inplace | folders
+    batchLimit: 200,
+  },
   quality: {                  // low-bitrate thresholds in kbps by resolution label
     minKbps: { '4K': 6000, '1440p': 3000, '1080p': 1500, '720p': 700, '576p': 400, '480p': 350, SD: 250 },
   },

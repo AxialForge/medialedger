@@ -49,7 +49,8 @@ and nothing leaves the machine except an update check against this repository.
 | **CSV export** | Eight files per export into a timestamped folder plus a `latest\` copy, so a spreadsheet can always point at the same file names. |
 | **Fast scans** | Directory listing runs on worker threads; probing runs as a pool of ffprobe processes. A 24,000-file library rescans in seconds when nothing changed. |
 | **Scheduling** | An in-app timer while the app is open, a Windows Task Scheduler job that runs even when it is closed, and an optional folder watch that scans as soon as the share goes quiet after a change. |
-| **Rename tool (opt-in)** | Proposes Plex-standard names from what the app already knows, renames only what you tick, in place, never overwriting, with a full log. Off by default; the only feature that writes to the share. |
+| **Movie naming engine** | Builds `Title (Year) - Source Resolution HDR Codec` names from parsed title/year plus *probed* facts only. Placeholders for anything unproven, blocking for anything unsafe, dry run by default, whole-batch pre-flight, per-file verification, journal and undo. |
+| **Rename tool for TV/anime (opt-in)** | Proposes Plex-standard episode names from what the app already knows, renames only what you tick, in place, never overwriting, with a full log. Off by default. |
 | **Self-contained** | Downloads ffmpeg on first launch if none is installed, updates itself silently from GitHub Releases, and keeps its database and settings in your user profile so reinstalling or updating never loses data. |
 
 ## Screenshots
@@ -66,6 +67,9 @@ and nothing leaves the machine except an update check against this repository.
   <tr>
     <td><img src="docs/screenshots/missing.png" alt="Missing episodes"><br><sub><b>Missing episodes</b> — expected vs on-disk counts per series from TVmaze / AniList, with exactly which episodes are absent.</sub></td>
     <td><img src="docs/screenshots/duplicates.png" alt="Duplicate review"><br><sub><b>Duplicates</b> — files for the same episode side by side; mark the one to keep.</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src="docs/screenshots/movienames.png" alt="Movie naming engine"><br><sub><b>Movie names</b> — proposed names from probed data with placeholders and flags; dry run, live switch, batch limit, layout, journal and undo.</sub></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/quality.png" alt="Quality report"><br><sub><b>Quality</b> — mixed-resolution series, low-bitrate files, missing audio, short files.</sub></td>
@@ -149,6 +153,38 @@ Anything the parser cannot place is still indexed and probed; it appears under
 **Problems → Unparsed file names** with a *Fix…* button. When the parser rules
 improve in a new version, the whole database is re-parsed on the next launch, so
 you get the improvement without a rescan.
+
+## Movie naming engine
+
+The *Movie names* tab renames movie files to
+
+```
+Title (Year) - Source Resolution HDR Codec [Audio] [{edition-Name}].ext
+A Breed Apart (2025) - Web 1080p SDR H264.mp4
+Avatar (2009) - Rip 4K HDR HEVC {edition-Extended Collector's Edition}.mkv
+```
+
+| Token | Comes from | If unknown |
+|-------|-----------|------------|
+| Title, Year | parser + your manual fixes | `Year` placeholder, file flagged |
+| Source | `(LiLTV)` / WEB markers → `Web`; BRrip, BluRay, Remux, DVD → `Rip`; or the Fix dialog | `Source` placeholder, file flagged |
+| Resolution | ffprobe pixel size | blocked |
+| HDR / SDR | ffprobe colour transfer (HDR10, Dolby Vision, HLG → `HDR`) | `SDR` |
+| Codec | ffprobe video codec | blocked |
+| Audio | ffprobe languages, only when not plain English (`ENG+JPN`) | omitted, flagged |
+| Edition | edition words in the old name (`{edition-Director's Cut}`) | omitted |
+
+Blocked (never renamed): no successful probe, no title, or two files that would
+receive the same name. Flagged (renamed, but listed): placeholders, a resolution
+in the old name that disagrees with the probe, HDR claimed but not found,
+undefined audio language.
+
+Every batch is a **dry run** unless "Allow live renames" is on and you type
+RENAME. Pre-flight checks every file before anything moves; one failure aborts
+the whole batch. Each rename is verified by size before the database is
+updated. Every item is journaled and a batch can be undone, file by file, with
+the same checks in reverse. Scans and the folder watcher pause while a live
+batch runs.
 
 ## CSV files
 

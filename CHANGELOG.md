@@ -12,6 +12,40 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [0.4.0] - 2026-09-06
+
+### Added
+
+- **Movie naming engine** (new *Movie names* tab). Builds
+  `Title (Year) - Source Resolution HDR Codec [Audio] [{edition-…}].ext` from
+  the parsed title/year and manual fixes plus **probed** resolution, colour
+  range, codec and audio language. Source is Web for LiLTV / WEB markers, Rip
+  for BRrip / BluRay / Remux / DVD markers, or a manual fix. Anything the probe
+  cannot prove becomes a placeholder word (`Year`, `Source`) for the owner to
+  fill in; files without a probe, without a title, or whose proposed name would
+  collide are blocked and never renamed.
+- Batch executor with the full safety model: dry run by default, a per-tab
+  "Allow live renames" switch plus a typed RENAME confirmation, whole-batch
+  pre-flight (source exists, size unchanged since scan, target free, root
+  writable, path length) that aborts everything on one failure, post-rename
+  size verification before the database is updated, a journal of every item,
+  and per-batch Undo that re-checks each file before restoring it.
+- Two layouts per batch: rename in place (atomic) or move into `Title (Year)`
+  folders using copy → verify size and head/tail hash → delete.
+- Exclusive lock while a live batch runs: scans and the folder watcher back off.
+- Batch size limit as a tab setting; Fix dialog gains a Source field for movies.
+- `test/movieNamer.report.js` dry report over a whole database (CSV).
+
+### Changed
+
+- The generic rename tool now covers TV and anime only; movies use the engine.
+- Missing-episode lists collapse whole missing seasons into ranges
+  ("S6–S38 entirely") instead of listing every number.
+
+### Fixed
+
+- Duplicate "keep" marks and manual Source choices are preserved when a file
+  is re-fixed through the Fix dialog.
 ## [0.3.0] - 2026-09-05
 
 ### Added

@@ -30,9 +30,10 @@ function proposeName(f) {
 
 // Build the proposal list: every non-missing file whose current name differs from the proposal.
 function proposals(db, { type, show, onlyProblems } = {}) {
-  const where = ['missing=0', 'ignored=0'];
+  // Movies have their own engine (movieNamer / movieRename); this tool covers TV and anime only.
+  const where = ['missing=0', 'ignored=0', "library_type IN ('tv','anime')"];
   const args = [];
-  if (type) { where.push('library_type=?'); args.push(type); }
+  if (type && type !== 'movie') { where.push('library_type=?'); args.push(type); }
   if (show) { where.push('show_name=?'); args.push(show); }
   const rows = db.all(`SELECT id, root_id, library_type, rel_path, abs_path, file_name, show_name, season, episode, episode_end, episode_title, movie_title, movie_year, edition_tag, parse_ok, parse_note, ignored, has_override FROM files WHERE ${where.join(' AND ')} ORDER BY library_type, show_name, season, episode, file_name`, ...args);
   const out = [];

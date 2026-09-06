@@ -15,6 +15,8 @@ const ffmpegdl = require('./ffmpegdl');
 const updater = require('./updater');
 const metadata = require('./metadata');
 const renamer = require('./renamer');
+const { planMovieNames } = require('./movieNamer');
+const movieRename = require('./movieRename');
 const plex = require('./plex');
 
 const HEADLESS = process.argv.includes('--scan');
@@ -45,8 +47,12 @@ if (!gotLock) {
     return out;
   }
 
+  // Exclusive lock held while a live movie-rename batch runs; scans and the watcher back off.
+  let renameLock = null; // { rootId, since }
+
   async function runScan(trigger) {
     if (scanner.running) return { skipped: true, reason: 'already running' };
+    if (renameLock) { log(`scan (${trigger}) skipped: rename batch in progress on ${renameLock.rootId}`); return { skipped: true, reason: 'a rename batch is running; try again when it finishes' }; }
     log(`scan start (${trigger})`);
     const result = await scanner.scan(trigger);
     scheduler.noteRun();
@@ -191,7 +197,7 @@ if (!gotLock) {
     const shots = [
       ['dashboard', '#dashboard'], ['tv', '#tv'], ['anime', '#anime'], ['movies', '#movies'],
       ['episodes', '#anime/' + encodeURIComponent('One Piece')], ['movie-versions', '#movies/' + encodeURIComponent('pacificrim|2013')],
-      ['missing', '#missing'], ['duplicates', '#duplicates'], ['quality', '#quality'], ['rename', '#rename'],
+      ['missing', '#missing'], ['duplicates', '#duplicates'], ['movienames', '#movienames'], ['quality', '#quality'], ['rename', '#rename'],
       ['changes', '#changes'], ['problems', '#problems'], ['export', '#export'], ['settings', '#settings'], ['about', '#about'],
     ];
     await new Promise(r => win.webContents.once('did-finish-load', r));
@@ -338,6 +344,37 @@ if (!gotLock) {
 
   // ---- quality ------------------------------------------------------------------------
   h('data:quality', () => qualityReport());
+
+  // ---- movie naming engine ---------------------------------------------------------------
+  function moviePlan() {
+    const rows = db.all(`SELECT f.*, o.source AS source_override FROM files f LEFT JOIN overrides o ON o.root_id=f.root_id AND o.rel_path=f.rel_path WHERE f.library_type='movie' AND f.missing=0 ORDER BY f.movie_title COLLATE NOCASE, f.file_name`);
+    return planMovieNames(rows);
+  }
+  h('movie:plan', () => ({ plan: moviePlan(), lock: renameLock, settings: settings.get().movieRename }));
+  h('movie:run', async (ids, opts) => {
+    const cfg = settings.get();
+    if (opts.live && !cfg.movieRename.enabled) throw new Error('Live renaming is switched off in this tab. Turn on "Allow live renames" first.');
+    if (renameLock) throw new Error('Another rename batch is still running');
+    if (scanner.running) throw new Error('A scan is running; wait for it to finish before renaming');
+    const wanted = new Set(ids);
+    const items = moviePlan().filter(p => wanted.has(p.id) && p.ok && !p.unchanged);
+    if (!items.length) throw new Error('Nothing selected is ready to rename');
+    const rootIds = [...new Set(items.map(i => i.root_id))];
+    if (rootIds.length !== 1) throw new Error('A batch must stay within one root');
+    const root = cfg.roots.find(r => r.id === rootIds[0]);
+    if (!root) throw new Error('Root not found in settings');
+    if (opts.live) renameLock = { rootId: root.id, since: new Date().toISOString() };
+    try {
+      return movieRename.runBatch(db, items, { live: !!opts.live, layout: opts.layout || cfg.movieRename.layout || 'inplace', rootPath: root.path, limit: Number(cfg.movieRename.batchLimit) || 200, log, onProgress: p => send('movie:progress', p) });
+    } finally { renameLock = null; db.checkpoint(); }
+  });
+  h('movie:undo', (batchId) => {
+    if (renameLock) throw new Error('Another rename batch is still running');
+    renameLock = { rootId: 'undo', since: new Date().toISOString() };
+    try { return movieRename.undoBatch(db, batchId, log); } finally { renameLock = null; db.checkpoint(); }
+  });
+  h('movie:batches', () => db.listBatches(50));
+  h('movie:batchItems', (id) => db.batchItems(id));
 
   // ---- rename tool (opt-in) -------------------------------------------------------------
   h('rename:proposals', (opts) => { if (!settings.get().renaming.enabled) return { disabled: true, list: [] }; return { list: renamer.proposals(db, opts || {}) }; });

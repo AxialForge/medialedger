@@ -111,6 +111,7 @@ async function refreshBadges() {
     const m = $('#missingCount'); m.textContent = d.missingEpisodes.episodes.toLocaleString(); m.hidden = !d.missingEpisodes.episodes;
     const du = $('#dupCount'); du.textContent = d.duplicates; du.hidden = !d.duplicates;
     $('#navRename').style.opacity = s.renaming.enabled ? '' : '.45';
+    try { const { plan } = await L.movie.plan(); const n = plan.filter(p => p.ok && !p.unchanged).length; const mp = $('#movieNameCount'); mp.textContent = n.toLocaleString(); mp.hidden = !n; } catch { /* ignore */ }
     const w = $('#watchLine'); w.hidden = !d.watch.enabled; w.textContent = d.watch.enabled ? `Watching ${d.watch.roots.length} root(s)${d.watch.pending ? ` · ${d.watch.pending} change(s) pending` : ''}` : '';
   } catch { /* ignore */ }
 }
@@ -180,6 +181,7 @@ async function openFixModal(rootId, relPath, after) {
       <div class="field"><label>Title</label><input id="ovTitle" value="${v('movie_title')}"></div>
       <div class="field"><label>Year</label><input id="ovYear" type="number" value="${v('movie_year')}"></div>
       <div class="field"><label>Edition / tag</label><input id="ovEdition" value="${v('edition_tag')}" placeholder="4k, extended, …"></div>
+      <div class="field"><label>Source</label><select id="ovSource"><option value="">detect from file name</option><option value="web" ${(ov.source || '').toLowerCase() === 'web' ? 'selected' : ''}>Web (download)</option><option value="rip" ${(ov.source || '').toLowerCase() === 'rip' ? 'selected' : ''}>Rip (disc)</option></select><div class="hint">Used by the movie naming engine. Set it when the file name has no LiLTV / WEB-DL / BRrip marker.</div></div>
     ` : `
       <div class="field"><label>Series</label><input id="ovShow" list="showList" value="${v('show_name')}"><datalist id="showList">${s.shows.map(x => `<option value="${esc(x)}">`).join('')}</datalist></div>
       <div class="field"><label>Season</label><input id="ovSeason" type="number" min="0" value="${v('season')}"></div>
@@ -200,8 +202,8 @@ async function openFixModal(rootId, relPath, after) {
   if ($('#ovDelete', card)) $('#ovDelete', card).onclick = async () => { await L.override.delete(ov.id); closeModal(); toast('Fix removed; parser result restored'); after && after(); };
   $('#ovSave', card).onclick = async () => {
     const o = { root_id: f.root_id, rel_path: f.rel_path, library_type: f.library_type, ignore: $('#ovIgnore', card).checked ? 1 : 0, note: str('#ovNote') };
-    if (isMovie) Object.assign(o, { movie_title: str('#ovTitle'), movie_year: num('#ovYear'), edition_tag: str('#ovEdition') });
-    else Object.assign(o, { show_name: str('#ovShow'), season: num('#ovSeason'), episode: num('#ovEp'), episode_end: num('#ovEpEnd'), episode_title: str('#ovEpTitle') });
+    if (isMovie) Object.assign(o, { movie_title: str('#ovTitle'), movie_year: num('#ovYear'), edition_tag: str('#ovEdition'), source: str('#ovSource'), keep: ov.keep ?? null });
+    else Object.assign(o, { show_name: str('#ovShow'), season: num('#ovSeason'), episode: num('#ovEp'), episode_end: num('#ovEpEnd'), episode_title: str('#ovEpTitle'), keep: ov.keep ?? null });
     const r = await L.override.save(o);
     closeModal();
     toast(r.file && r.file.parse_ok ? 'Fix saved and applied' : (o.ignore ? 'File ignored' : 'Saved, but still missing a season or episode'), !(r.file && (r.file.parse_ok || o.ignore)));
@@ -630,6 +632,117 @@ views.rename = async () => {
   };
   const ht = makeTable(hist, [{ key: 'ts', label: 'When', render: r => fmtDate(r.ts) }, { key: 'from_rel', label: 'From', cls: 'pathcell' }, { key: 'to_rel', label: 'To', cls: 'pathcell' }, { key: 'ok', label: 'Result', render: r => r.ok ? '<span class="badge ok">renamed</span>' : `<span class="badge bad">failed</span> <span class="tiny">${esc(r.error || '')}</span>` }], { short: true });
   $('#rhist').append(ht.node);
+};
+
+views.movienames = async () => {
+  const [{ plan, lock, settings: mr }, batches] = await Promise.all([L.movie.plan(), L.movie.batches()]);
+  const ready = plan.filter(p => p.ok && !p.unchanged), unchanged = plan.filter(p => p.unchanged), blocked = plan.filter(p => !p.ok);
+  const flagged = ready.filter(p => p.flags.length);
+  const placeholders = ready.filter(p => p.flags.some(f => f === 'no_year' || f === 'no_source'));
+  const flagCounts = {}; for (const p of ready) for (const f of p.flags) { const k = f.split(':')[0]; flagCounts[k] = (flagCounts[k] || 0) + 1; }
+  const FLAG_TEXT = { no_source: 'no source marker → "Source" placeholder', no_year: 'no year → "(Year)" placeholder', res_mismatch: 'name claimed a different resolution; probe wins', hdr_uncertain: 'BT.2020 colour without HDR transfer; treated as HDR', hdr_claimed_but_sdr: 'name says HDR but probe says SDR', audio_und: 'audio language undefined in the file', audio_partly_und: 'some audio tracks have no language tag', audio_unknown: 'no audio language data' };
+  view.innerHTML = `<h1>Movie names</h1>
+    <p class="lead">Builds <span class="mono">Title (Year) - Source Resolution HDR Codec [Audio] [{edition-…}].ext</span> from the parsed title and year plus <b>probed</b> resolution, colour, codec and audio. Anything the probe cannot prove becomes a placeholder word for you to fill in; anything unsafe is blocked. Every batch is a dry run unless you flip the live switch, is pre-flighted as a whole, verified file by file, journaled, and can be undone.</p>
+    ${lock ? `<div class="warnbox">A rename batch is running (${esc(lock.rootId)} since ${fmtDate(lock.since)}). Scans are paused until it finishes.</div>` : ''}
+    <div class="tiles compact">
+      ${tile(ready.length ? 'okt' : '', 'Ready', ready.length.toLocaleString(), 'would be renamed')}
+      ${tile('', 'Already correct', unchanged.length.toLocaleString())}
+      ${tile(blocked.length ? 'badt' : 'okt', 'Blocked', blocked.length, 'never renamed until fixed')}
+      ${tile(placeholders.length ? 'warnt' : '', 'With placeholders', placeholders.length.toLocaleString(), 'Year / Source words in the name')}
+      ${tile(flagged.length ? 'warnt' : '', 'Flagged', flagged.length.toLocaleString(), 'renamed, but worth a look')}
+      ${tile(mr.enabled ? 'badt' : 'okt', 'Live renames', mr.enabled ? 'ALLOWED' : 'off', mr.enabled ? 'the switch below is armed' : 'dry runs only')}
+    </div>
+    <div class="card" style="margin-top:12px">
+      <h3>Batch settings</h3>
+      <div class="inline">
+        <label class="inline small">Layout <select id="mrLayout"><option value="inplace" ${mr.layout === 'inplace' ? 'selected' : ''}>rename in place</option><option value="folders" ${mr.layout === 'folders' ? 'selected' : ''}>move into "Title (Year)" folders</option></select></label>
+        <label class="inline small">Batch limit <input type="number" id="mrLimit" min="1" max="5000" value="${mr.batchLimit}" style="width:80px"></label>
+        <label class="inline small"><input type="checkbox" id="mrEnabled" ${mr.enabled ? 'checked' : ''}> <b class="bad">Allow live renames</b></label>
+        <button class="small" id="mrSave">Save</button>
+        <span class="muted tiny">Folder layout copies, verifies size and a head/tail hash, then deletes the original. In-place uses an atomic rename.</span>
+      </div>
+    </div>
+    <div class="toolbar" style="margin-top:12px">
+      <input type="search" id="mq" placeholder="Filter…">
+      <select id="mstatus"><option value="ready">ready</option><option value="flagged">flagged only</option><option value="placeholders">placeholders only</option><option value="blocked">blocked</option><option value="unchanged">already correct</option><option value="all">all</option></select>
+      <select id="mflag"><option value="">any flag</option>${Object.keys(flagCounts).map(k => `<option value="${k}">${k} (${flagCounts[k]})</option>`).join('')}</select>
+      <span class="muted small" id="mcount"></span><span class="grow"></span>
+      <button class="small" id="mSelAll">Select shown</button><button class="small" id="mSelNone">Clear</button>
+      <button id="mDry" disabled>Dry run 0</button>
+      <button class="danger" id="mLive" disabled>Rename 0 live</button>
+    </div>
+    <div class="table-wrap" id="mtable"></div>
+    <details style="margin-top:14px"><summary class="muted">What the flags mean</summary><table class="kv" style="margin-top:6px">${Object.entries(FLAG_TEXT).map(([k, v]) => `<tr><td class="mono">${k}</td><td>${esc(v)}</td></tr>`).join('')}</table></details>
+    <h2>Batches</h2><div id="mbatches"></div>`;
+
+  const selected = new Set(); let shown = [];
+  const render = () => {
+    const q = $('#mq').value.toLowerCase(), st = $('#mstatus').value, fl = $('#mflag').value;
+    shown = plan.filter(p => {
+      if (st === 'ready' && !(p.ok && !p.unchanged)) return false;
+      if (st === 'flagged' && !(p.ok && !p.unchanged && p.flags.length)) return false;
+      if (st === 'placeholders' && !(p.ok && p.flags.some(f => f === 'no_year' || f === 'no_source'))) return false;
+      if (st === 'blocked' && p.ok) return false;
+      if (st === 'unchanged' && !p.unchanged) return false;
+      if (fl && !p.flags.some(f => f.split(':')[0] === fl)) return false;
+      return !q || `${p.from} ${p.name || ''} ${p.blocked || ''}`.toLowerCase().includes(q);
+    }).slice(0, 1500);
+    $('#mcount').textContent = `${shown.length.toLocaleString()} of ${plan.length.toLocaleString()}`;
+    $('#mtable').innerHTML = `<table><thead><tr><th></th><th>Current name</th><th></th><th>Proposed name</th><th>Flags</th><th></th></tr></thead><tbody>${shown.map(p => `<tr class="rename-row ${p.ok ? '' : 'blockedrow'}"><td>${p.ok && !p.unchanged ? `<input type="checkbox" class="msel" data-id="${p.id}" ${selected.has(p.id) ? 'checked' : ''}>` : ''}</td><td class="wrap">${esc(p.from)}${p.dir ? `<span class="sub">${esc(p.dir)}</span>` : ''}</td><td class="arrow">→</td><td class="wrap">${p.ok ? (p.unchanged ? '<span class="muted">unchanged</span>' : `<b>${esc(p.name)}</b>`) : `<span class="bad">blocked: ${esc(p.blocked)}</span>`}</td><td class="wrap">${p.flags.map(f => `<span class="badge ${/^no_|mismatch|claimed/.test(f) ? 'warn' : ''}" title="${esc(FLAG_TEXT[f.split(':')[0]] || '')}">${esc(f)}</span>`).join('')}</td><td>${fixBtn(p)}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">Nothing matches.</td></tr>'}</tbody></table>`;
+    $('#mDry').textContent = `Dry run ${selected.size}`; $('#mDry').disabled = !selected.size;
+    $('#mLive').textContent = `Rename ${selected.size} live`; $('#mLive').disabled = !selected.size || !mr.enabled || !!lock;
+  };
+  render();
+  ['#mq', '#mstatus', '#mflag'].forEach(id => { $(id).oninput = render; $(id).onchange = render; });
+  $('#mtable').addEventListener('change', e => { const c = e.target.closest('.msel'); if (c) { c.checked ? selected.add(Number(c.dataset.id)) : selected.delete(Number(c.dataset.id)); $('#mDry').textContent = `Dry run ${selected.size}`; $('#mDry').disabled = !selected.size; $('#mLive').textContent = `Rename ${selected.size} live`; $('#mLive').disabled = !selected.size || !mr.enabled || !!lock; } });
+  $('#mSelAll').onclick = () => { shown.filter(p => p.ok && !p.unchanged).forEach(p => selected.add(p.id)); render(); };
+  $('#mSelNone').onclick = () => { selected.clear(); render(); };
+  $('#mrSave').onclick = async () => { await L.settings.set({ movieRename: { layout: $('#mrLayout').value, batchLimit: Number($('#mrLimit').value) || 200, enabled: $('#mrEnabled').checked } }); toast('Batch settings saved'); views.movienames(); };
+
+  const showResult = (r, live) => {
+    const okN = r.results.filter(x => x.ok).length;
+    const head = r.status === 'aborted' ? `<h2 class="bad">Aborted in pre-flight — nothing was touched</h2><p class="muted">${r.problems.length} problem(s). Fix them (or deselect those files) and run again.</p><div class="preview" style="max-height:260px;overflow:auto">${r.problems.map(p => `<div><b>${esc(p.from)}</b> — ${esc(p.reason)}</div>`).join('')}</div>`
+      : `<h2>${live ? 'Renamed' : 'Dry run'}: ${okN} of ${r.results.length}${r.failed ? ` <span class="bad">· stopped after a failure</span>` : ''}</h2><div class="preview" style="max-height:300px;overflow:auto">${r.results.map(x => `<div>${x.ok ? '<span class="ok">✓</span>' : '<span class="bad">✗</span>'} ${esc(x.from)} <span class="arrow">→</span> <b>${esc(x.to)}</b>${x.error ? ` <span class="bad tiny">${esc(x.error)}</span>` : ''}</div>`).join('')}</div>${live ? '' : '<p class="muted tiny">Nothing was renamed. Batch #' + r.batchId + ' is recorded as a dry run.</p>'}`;
+    const card = openModal(`${head}<div class="actions"><span class="grow"></span><button id="mrClose" class="primary">Close</button></div>`);
+    $('#mrClose', card).onclick = () => { closeModal(); views.movienames(); };
+  };
+  $('#mDry').onclick = async () => { try { const r = await L.movie.run([...selected], { live: false, layout: $('#mrLayout').value }); showResult(r, false); } catch (e) { toast(e.message, true); } };
+  $('#mLive').onclick = async () => {
+    const ids = [...selected]; const items = plan.filter(p => selected.has(p.id));
+    const card = openModal(`<h2 class="bad">Rename ${ids.length} movie file${ids.length === 1 ? '' : 's'} on the share — live</h2>
+      <p class="muted">Layout: <b>${$('#mrLayout').value === 'folders' ? 'move into Title (Year) folders' : 'rename in place'}</b>. Pre-flight checks every file first; if any check fails nothing is renamed. Each rename is verified before the database is updated, and the whole batch can be undone from the list below.</p>
+      <div class="preview" style="max-height:240px;overflow:auto">${items.slice(0, 60).map(p => `<div>${esc(p.from)} <span class="arrow">→</span> <b>${esc(p.name)}</b></div>`).join('')}${ids.length > 60 ? `<div class="muted">…and ${ids.length - 60} more</div>` : ''}</div>
+      <div class="field" style="margin-top:10px"><label>Type RENAME to confirm</label><input id="mrConfirm" autocomplete="off"></div>
+      <div class="actions"><span class="grow"></span><button id="mrCancel">Cancel</button><button class="danger" id="mrGo" disabled>Rename now</button></div>`);
+    $('#mrConfirm', card).oninput = e => { $('#mrGo', card).disabled = e.target.value.trim() !== 'RENAME'; };
+    $('#mrCancel', card).onclick = closeModal;
+    $('#mrGo', card).onclick = async () => {
+      $('#mrGo', card).disabled = true; $('#mrGo', card).textContent = 'Renaming…';
+      try { const r = await L.movie.run(ids, { live: true, layout: $('#mrLayout').value }); selected.clear(); showResult(r, true); } catch (e) { closeModal(); toast(e.message, true); }
+    };
+  };
+
+  const bt = makeTable(batches, [
+    { key: 'id', label: '#', num: true }, { key: 'ts', label: 'When', render: r => fmtDate(r.ts) },
+    { key: 'mode', label: 'Mode', render: r => r.mode === 'live' ? '<span class="badge bad">live</span>' : '<span class="badge">dry</span>' }, { key: 'layout', label: 'Layout' },
+    { key: 'status', label: 'Status', render: r => `<span class="badge ${r.status === 'done' ? 'ok' : /abort|stopped/.test(r.status) ? 'bad' : ''}">${esc(r.status)}</span>` },
+    { key: 'planned', label: 'Planned', num: true }, { key: 'done', label: 'Done', num: true }, { key: 'failed', label: 'Failed', num: true }, { key: 'undone', label: 'Undone', num: true },
+    { key: 'note', label: '', render: r => `<button class="small mbItems" data-id="${r.id}">Items</button> ${r.mode === 'live' && r.done > (r.undone || 0) && !/undone$/.test(r.status) ? `<button class="small danger mbUndo" data-id="${r.id}">Undo</button>` : ''}` },
+  ], { short: true });
+  $('#mbatches').append(bt.node);
+  bt.node.addEventListener('click', async e => {
+    const u = e.target.closest('.mbUndo'); if (u) {
+      const card = openModal(`<h2>Undo batch #${u.dataset.id}?</h2><p class="muted">Each renamed file is checked (still present, same size, original name free) and renamed back. Files that fail the check are left as they are and reported.</p><div class="actions"><span class="grow"></span><button id="uC">Cancel</button><button class="danger" id="uGo">Undo now</button></div>`);
+      $('#uC', card).onclick = closeModal;
+      $('#uGo', card).onclick = async () => { try { const r = await L.movie.undo(Number(u.dataset.id)); closeModal(); toast(`Undo: ${r.undone} restored, ${r.failed} could not be restored`, r.failed > 0); views.movienames(); } catch (err) { closeModal(); toast(err.message, true); } };
+      return;
+    }
+    const b = e.target.closest('.mbItems'); if (b) {
+      const items = await L.movie.batchItems(Number(b.dataset.id));
+      const card = openModal(`<h2>Batch #${b.dataset.id} — ${items.length} item(s)</h2><div class="preview" style="max-height:60vh;overflow:auto">${items.map(i => `<div><span class="badge ${i.status === 'done' ? 'ok' : i.status === 'undone' ? '' : /fail|abort/.test(i.status) ? 'bad' : ''}">${esc(i.status)}</span> ${esc(i.from_rel)} <span class="arrow">→</span> ${esc(i.to_rel)}${i.error ? ` <span class="bad tiny">${esc(i.error)}</span>` : ''}</div>`).join('')}</div><div class="actions"><span class="grow"></span><button id="iC" class="primary">Close</button></div>`);
+      $('#iC', card).onclick = closeModal;
+    }
+  });
 };
 
 views.settings = async () => {

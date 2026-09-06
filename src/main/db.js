@@ -164,6 +164,41 @@ const MIGRATIONS = [
       );
     `,
   },
+  {
+    version: 3, name: 'movie rename batches with undo journal, manual source override',
+    sql: `
+      ALTER TABLE overrides ADD COLUMN source TEXT;
+      CREATE TABLE IF NOT EXISTS rename_batches (
+        id         INTEGER PRIMARY KEY,
+        ts         TEXT NOT NULL,
+        mode       TEXT NOT NULL,
+        layout     TEXT NOT NULL,
+        status     TEXT NOT NULL,
+        planned    INTEGER DEFAULT 0,
+        done       INTEGER DEFAULT 0,
+        failed     INTEGER DEFAULT 0,
+        undone     INTEGER DEFAULT 0,
+        finished   TEXT,
+        note       TEXT
+      );
+      CREATE TABLE IF NOT EXISTS rename_items (
+        id          INTEGER PRIMARY KEY,
+        batch_id    INTEGER NOT NULL,
+        file_id     INTEGER,
+        root_id     TEXT,
+        from_rel    TEXT NOT NULL,
+        to_rel      TEXT NOT NULL,
+        from_abs    TEXT NOT NULL,
+        to_abs      TEXT NOT NULL,
+        size        INTEGER,
+        status      TEXT NOT NULL,
+        error       TEXT,
+        ts          TEXT,
+        undone_ts   TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_rename_items_batch ON rename_items(batch_id);
+    `,
+  },
 ];
 
 class Db {
@@ -272,7 +307,7 @@ class Db {
   getOverride(rootId, relPath) { return this.get('SELECT * FROM overrides WHERE root_id=? AND rel_path=?', rootId, relPath); }
   saveOverride(o) {
     const now = new Date().toISOString();
-    const cols = ['root_id', 'rel_path', 'library_type', 'show_name', 'season', 'episode', 'episode_end', 'episode_title', 'movie_title', 'movie_year', 'edition_tag', 'ignore', 'note', 'keep'];
+    const cols = ['root_id', 'rel_path', 'library_type', 'show_name', 'season', 'episode', 'episode_end', 'episode_title', 'movie_title', 'movie_year', 'edition_tag', 'ignore', 'note', 'keep', 'source'];
     const vals = cols.map(c => o[c] ?? null);
     this.run(`INSERT INTO overrides (${cols.join(',')}, created, updated) VALUES (${cols.map(() => '?').join(',')}, ?, ?)
       ON CONFLICT(root_id, rel_path) DO UPDATE SET ${cols.filter(c => c !== 'root_id' && c !== 'rel_path').map(c => `${c}=excluded.${c}`).join(',')}, updated=excluded.updated`, ...vals, now, now);
@@ -292,6 +327,15 @@ class Db {
     return this.getSeriesMeta(m.library_type, m.show_name);
   }
   deleteSeriesMeta(type, show) { return this.run('DELETE FROM series_meta WHERE library_type=? AND show_name=?', type, show).changes; }
+  // ---- movie rename batches ------------------------------------------------
+  createBatch(mode, layout, note) { return Number(this.run('INSERT INTO rename_batches (ts, mode, layout, status, note) VALUES (?,?,?,?,?)', new Date().toISOString(), mode, layout, 'running', note || null).lastInsertRowid); }
+  finishBatch(id, patch) { const cols = Object.keys(patch); this.run(`UPDATE rename_batches SET finished=?, ${cols.map(c => `${c}=?`).join(',')} WHERE id=?`, new Date().toISOString(), ...cols.map(c => patch[c]), id); }
+  addBatchItem(it) { return Number(this.run('INSERT INTO rename_items (batch_id, file_id, root_id, from_rel, to_rel, from_abs, to_abs, size, status, error, ts) VALUES (?,?,?,?,?,?,?,?,?,?,?)', it.batch_id, it.file_id, it.root_id, it.from_rel, it.to_rel, it.from_abs, it.to_abs, it.size, it.status, it.error || null, new Date().toISOString()).lastInsertRowid); }
+  updateBatchItem(id, patch) { const cols = Object.keys(patch); this.run(`UPDATE rename_items SET ${cols.map(c => `${c}=?`).join(',')} WHERE id=?`, ...cols.map(c => patch[c]), id); }
+  listBatches(limit = 50) { return this.all('SELECT * FROM rename_batches ORDER BY id DESC LIMIT ?', limit); }
+  batchItems(batchId) { return this.all('SELECT * FROM rename_items WHERE batch_id=? ORDER BY id', batchId); }
+  getBatch(id) { return this.get('SELECT * FROM rename_batches WHERE id=?', id); }
+
   addRename(rec) { this.run('INSERT INTO renames (ts, root_id, from_rel, to_rel, ok, error) VALUES (?,?,?,?,?,?)', new Date().toISOString(), rec.root_id, rec.from_rel, rec.to_rel, rec.ok ? 1 : 0, rec.error || null); }
   listRenames(limit = 500) { return this.all('SELECT * FROM renames ORDER BY id DESC LIMIT ?', limit); }
 
