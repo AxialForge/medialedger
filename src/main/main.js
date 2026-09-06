@@ -184,7 +184,11 @@ if (!gotLock) {
     watcher.apply();
     const s = settings.get();
     if (s.githubToken) { try { const { autoUpdater } = require('electron-updater'); autoUpdater.setFeedURL({ provider: 'github', owner: 'AxialForge', repo: 'medialedger', private: true, token: s.githubToken }); } catch (e) { log('feed url: ' + e.message); } }
-    updater.start({ enabled: s.updates.enabled, onStatus: st => { updateStatus = st; log('update: ' + JSON.stringify(st)); send('update:status', st); } });
+    updater.start({ enabled: s.updates.enabled, onStatus: st => {
+      // A private repository answers 404 to the update feed; say so instead of the generic message.
+      if (st.state === 'error' && /No update information/i.test(st.message || '') && !settings.get().githubToken) st = { ...st, message: 'The update feed is not reachable: the GitHub repository is private and no token is set. Add a read-only token under Settings → Updates, or make the repository public.' };
+      updateStatus = st; log('update: ' + JSON.stringify(st)); send('update:status', st);
+    } });
     // First-time metadata fill runs in the background once the window is up.
     if (s.metadata.enabled) setTimeout(() => refreshMetadata({ onlyNew: true }).catch(e => log('metadata: ' + e.message)), 4000);
     app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
