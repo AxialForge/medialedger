@@ -6,7 +6,7 @@ const { parentPort, workerData } = require('worker_threads');
 const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
-const { parseEpisode, parseMovie } = require('./parse');
+const { parseFor } = require('./parse');
 
 const { videoExt, subExt, ignore, statConcurrency } = workerData;
 const videoSet = new Set(videoExt);
@@ -21,7 +21,7 @@ async function walkJob(job) {
   const statOne = async (abs, rel, name, ext) => {
     try {
       const st = await fsp.stat(abs);
-      const parsed = job.rootType === 'movie' ? parseMovie(rel) : parseEpisode(rel);
+      const parsed = parseFor(job.rootType, rel, workerData.adultDefault);
       videos.push({ rel, abs, ext, name, size: st.size, mtime: Math.floor(st.mtimeMs), parsed });
     } catch (e) { errors.push({ rel, message: 'stat failed: ' + e.message }); }
   };

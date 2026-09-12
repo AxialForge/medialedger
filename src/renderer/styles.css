@@ -173,3 +173,12 @@ td .sub { display: block; color: var(--muted); font-size: 11px; line-height: 1.2
 .kv td:first-child { color: var(--muted); width: 180px; }
 .blockedrow td { opacity: .75; }
 .blockedrow td:first-child { width: 22px; }
+
+.adultswitch { padding: 6px 10px; }
+.stars { display: inline-flex; gap: 1px; cursor: pointer; user-select: none; }
+.stars i { font-style: normal; font-size: 15px; color: #3a4150; }
+.stars i.on { color: var(--warn); }
+.stars i:hover, .stars i:hover ~ i { color: #3a4150; }
+.stars:hover i { color: var(--warn); }
+.stars:hover i:hover ~ i { color: #3a4150; }
+.ratingnote { width: 100%; min-width: 160px; font-size: 12px; }

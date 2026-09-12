@@ -12,6 +12,38 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [0.5.0] - 2026-09-11
+
+### Added
+
+- **Adult library.** New root type *Adult*: each file under it is classified as
+  anime, TV or movie from its folder and name and carries an `adult` flag.
+  Hidden from every view, count and query until the "Show adult content"
+  switch in the sidebar is on (it resets on every launch); an *Adult* tab with
+  its own dashboard, series and movie lists appears while it is on. Left out of
+  CSV exports unless allowed in Settings. All the usual tools (Fix…, Match…,
+  ratings, quality, duplicates) work on adult files.
+- **Web videos.** New root type *Web videos* for yt-dlp style downloads:
+  channel from the folder, title from the file name with `[videoId]` and dates
+  stripped. *Web videos* tab grouped by channel with a per-channel video list,
+  YouTube links where an id exists, and a `web_videos.csv` export.
+- **Ratings.** Online averages from TVmaze and AniList are stored during the
+  episode-count lookup (no extra requests). A local 0–5 star rating and note per
+  title for TV, anime, movies and web channels. New *Ratings* tab, rating
+  columns on the series lists, and `online_rating` / `my_rating` / `my_note`
+  columns in the series and movie CSVs. Plex user ratings are queued for the
+  Plex integration.
+- **Movie names:** bulk "Set source for selected" (Web / Rip / clear) so the
+  800-odd `Source` placeholders can be cleared in a few passes; a *Name
+  collisions* section that shows the files behind each collision with "Keep
+  this, ignore others"; a pinned *Placeholders on disk* section listing files
+  already renamed with `(Year)` or `Source` that still need a value.
+
+### Changed
+
+- Parser version 3: the whole database is re-parsed on first launch so existing
+  rows gain the adult flag and web fields.
+- Sidebar regrouped: Web videos and Adult under Library, Ratings under Review.
 ## [0.4.0] - 2026-09-06
 
 ### Added

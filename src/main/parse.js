@@ -147,7 +147,43 @@ function movieGroupKey(title, year) {
 
 function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
-// Bump whenever parse rules change; main.js re-parses the whole DB on mismatch.
-const PARSER_VERSION = 2;
+// ---- Web videos (yt-dlp style downloads) -------------------------------------------
+//   Channel\Title [videoId].mp4, Channel\20240115 Title.mp4, or loose Title.mp4 at the root.
+function parseWeb(relPath) {
+  const parts = relPath.split(/[\\/]/);
+  const fileName = parts[parts.length - 1];
+  let base = fileName.replace(/\.[^.]+$/, '');
+  const channel = parts.length > 1 ? clean(parts[0]) : null;
+  let videoId = null, uploadDate = null, m;
+  if ((m = base.match(/\s*\[([A-Za-z0-9_-]{11})\]\s*$/))) { videoId = m[1]; base = base.slice(0, m.index); }
+  if ((m = base.match(/(?:^|[\s._-])((?:19|20)\d{2})[-.]?(\d{2})[-.]?(\d{2})(?=[\s._-]|$)/))) { uploadDate = `${m[1]}-${m[2]}-${m[3]}`; base = (base.slice(0, m.index) + ' ' + base.slice(m.index + m[0].length)); }
+  const title = clean(base.replace(/\s{2,}/g, ' ')) || fileName;
+  return { parse_ok: 1, parse_note: null, channel, movie_title: title, video_id: videoId, upload_date: uploadDate, group_key: (channel || '').toLowerCase() + '|' + title.toLowerCase().replace(/[^a-z0-9]+/g, '') };
+}
 
-module.exports = { parseEpisode, parseMovie, seasonFromDir, movieGroupKey, PARSER_VERSION };
+// ---- Adult root: classify each file as anime / tv / movie from its path alone ----------
+function classifyAdult(relPath) {
+  const parts = relPath.split(/[\\/]/);
+  const base = parts[parts.length - 1].replace(/\.[^.]+$/, '');
+  if (/(?:^|[\s._-])S\d{1,3}\s*[._ -]?E\d{1,4}/i.test(base) || /(?:^|[\s._-])\d{1,3}x\d{1,4}/i.test(base)) return 'tv';
+  if (parts.length === 1 && /\((19|20)\d{2}\)/.test(base)) return 'movie';
+  if (/^\d{1,4}(?=[\s._-]|[A-Za-z])/.test(base) || (parts.length > 2 && seasonFromDir(parts[parts.length - 2]) != null)) return 'anime';
+  if (parts.length === 2 && /\((19|20)\d{2}\)/.test(parts[0] + base)) return 'movie';
+  return 'anime';
+}
+
+// Single dispatch used by the scanner and worker. Returns parse fields + library_type + adult.
+function parseFor(rootType, relPath, adultDefault = 'anime') {
+  if (rootType === 'movie') return { library_type: 'movie', adult: 0, ...parseMovie(relPath) };
+  if (rootType === 'web') return { library_type: 'web', adult: 0, ...parseWeb(relPath) };
+  if (rootType === 'adult') {
+    const sub = classifyAdult(relPath) || adultDefault;
+    return { library_type: sub, adult: 1, ...(sub === 'movie' ? parseMovie(relPath) : parseEpisode(relPath)) };
+  }
+  return { library_type: rootType, adult: 0, ...parseEpisode(relPath) };
+}
+
+// Bump whenever parse rules change; main.js re-parses the whole DB on mismatch.
+const PARSER_VERSION = 3;
+
+module.exports = { parseEpisode, parseMovie, parseWeb, classifyAdult, parseFor, seasonFromDir, movieGroupKey, PARSER_VERSION };

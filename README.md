@@ -37,7 +37,8 @@ and nothing leaves the machine except an update check against this repository.
 
 | | |
 |---|---|
-| **Three libraries** | TV, Anime and Movies roots, each parsed with rules that match Plex-style folders and the messy real-world variants (`2Show S3.mp4`, `Title_-_01_720p_Group.mp4`, `Show - OVA.mp4`). |
+| **Five library types** | TV, Anime and Movies roots parsed with rules that match Plex-style folders and the messy real-world variants (`2Show S3.mp4`, `Title_-_01_720p_Group.mp4`, `Show - OVA.mp4`); *Web videos* roots for yt-dlp downloads grouped by channel; *Adult* roots whose files are auto-classified as anime, TV or movie and hidden until a sidebar switch is on. |
+| **Ratings** | Online averages from TVmaze / AniList plus your own 0–5 stars and a note per title, on a Ratings tab and in the CSVs. |
 | **Per-file detail** | Runtime, resolution, fps, video codec and profile, bit depth, HDR / Dolby Vision, bitrate, container, audio codecs, languages and channel layouts, embedded subtitle tracks and languages, sidecar subtitle files, and a single *has captions* flag. |
 | **Movie multiples** | Files are grouped by title + year, so `Pacific Rim (2013).mp4` and `Pacific Rim (2013) [4k].mkv` show up as one title with two versions and land in a dedicated CSV. |
 | **Missing episodes** | Expected counts per season from TVmaze (TV) and AniList (anime), free and keyless, fetched in the background. Shows exactly which episodes you lack, per series and per season, with a *Match…* dialog to correct a wrong match or enter counts by hand. |
@@ -70,6 +71,10 @@ and nothing leaves the machine except an update check against this repository.
   </tr>
   <tr>
     <td colspan="2"><img src="docs/screenshots/movienames.png" alt="Movie naming engine"><br><sub><b>Movie names</b> — proposed names from probed data with placeholders and flags; dry run, live switch, batch limit, layout, journal and undo.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/web.png" alt="Web videos"><br><sub><b>Web videos</b> — yt-dlp downloads grouped by channel folder, with per-channel video lists and YouTube links.</sub></td>
+    <td><img src="docs/screenshots/ratings.png" alt="Ratings"><br><sub><b>Ratings</b> — online averages from TVmaze / AniList beside your own stars and notes.</sub></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/quality.png" alt="Quality report"><br><sub><b>Quality</b> — mixed-resolution series, low-bitrate files, missing audio, short files.</sub></td>
@@ -195,6 +200,7 @@ batch runs.
 | `movies.csv` | One row per movie file, with the number of versions of that title |
 | `movies_titles.csv` | One row per title: file count, versions, best resolution, size, languages |
 | `movies_multiples.csv` | Only titles with more than one file |
+| `web_videos.csv` | One row per web video: channel, title, upload date, video id and every probed field |
 | `changes.csv` | The change log for the scan that triggered the export |
 
 ## Where things live
@@ -213,6 +219,8 @@ batch runs.
   never moves, overwrites or deletes anything.
 - Rows are never deleted automatically; a vanished file is flagged *missing*
   until you press *Forget missing files*.
+- Adult roots are hidden from every view and count until the sidebar switch is
+  on, which resets on every launch, and are excluded from CSVs by default.
 - Network access is limited to the GitHub update check, the optional ffmpeg
   download from GitHub, the episode-count lookups on TVmaze and AniList (only
   series titles are sent; can be disabled in Settings), and the optional Plex

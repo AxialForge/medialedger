@@ -47,6 +47,10 @@ if (!gotLock) {
     return out;
   }
 
+  // Adult content is hidden from every query unless the sidebar switch is on. Resets each launch.
+  let showAdult = false;
+  const AF = (alias = '') => showAdult ? '' : ` AND ${alias}adult=0`;
+
   // Exclusive lock held while a live movie-rename batch runs; scans and the watcher back off.
   let renameLock = null; // { rootId, since }
 
@@ -93,7 +97,7 @@ if (!gotLock) {
       for (const { type: t, show } of todo) {
         try {
           const r = await metadata.lookupSeries(t, show);
-          if (r.found) { found++; db.saveSeriesMeta({ library_type: t, show_name: show, source: r.source, source_id: r.source_id, matched_title: r.matched_title, status: r.status, seasons: r.seasons, total_episodes: r.total_episodes, url: r.url, fetched_at: new Date().toISOString(), locked: 0 }); }
+          if (r.found) { found++; db.saveSeriesMeta({ library_type: t, show_name: show, source: r.source, source_id: r.source_id, matched_title: r.matched_title, status: r.status, seasons: r.seasons, total_episodes: r.total_episodes, url: r.url, rating: r.rating ?? null, rating_votes: r.rating_votes ?? null, fetched_at: new Date().toISOString(), locked: 0 }); }
           else { missed++; db.saveSeriesMeta({ library_type: t, show_name: show, source: 'none', fetched_at: new Date().toISOString(), locked: 0, note: r.candidates ? 'no confident match' : 'not found' }); }
         } catch (e) { failed++; log(`metadata ${t} "${show}": ${e.message}`); if (/HTTP 429/.test(e.message)) await new Promise(r => setTimeout(r, 10000)); }
         metaJob.done++; metaJob.message = `Looking up ${t === 'anime' ? 'AniList' : 'TVmaze'}: ${show}`;
@@ -111,7 +115,7 @@ if (!gotLock) {
   // Missing-episode summary for every series of a type (used by dashboard, series list, CSV, Missing view).
   function missingSummary(type) {
     const metas = db.allSeriesMeta(type);
-    const rows = db.all(`SELECT show_name, season, episode, episode_end FROM files WHERE library_type=? AND missing=0 AND ignored=0 AND parse_ok=1`, type);
+    const rows = db.all(`SELECT show_name, season, episode, episode_end FROM files WHERE library_type=? AND missing=0 AND ignored=0${AF()} AND parse_ok=1`, type);
     const byShow = new Map();
     for (const r of rows) { if (!byShow.has(r.show_name)) byShow.set(r.show_name, []); byShow.get(r.show_name).push(r); }
     const out = [];
@@ -127,13 +131,13 @@ if (!gotLock) {
   function qualityReport() {
     const thr = settings.get().quality.minKbps || {};
     const mixed = db.all(`SELECT library_type, show_name, COUNT(*) files, COUNT(DISTINCT resolution) res_n, GROUP_CONCAT(DISTINCT resolution) resolutions, COUNT(DISTINCT video_codec) codec_n, GROUP_CONCAT(DISTINCT video_codec) codecs
-      FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 AND library_type IN ('tv','anime') GROUP BY library_type, show_name HAVING res_n > 1 ORDER BY res_n DESC, files DESC`);
-    const perSeasonMixed = db.all(`SELECT library_type, show_name, season, COUNT(*) files, GROUP_CONCAT(DISTINCT resolution) resolutions FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 AND library_type IN ('tv','anime') GROUP BY library_type, show_name, season HAVING COUNT(DISTINCT resolution) > 1 ORDER BY show_name, season`);
-    const all = db.all(`SELECT id, root_id, library_type, rel_path, file_name, show_name, movie_title, movie_year, resolution, bitrate_kbps, video_codec, duration_s, size FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 AND bitrate_kbps IS NOT NULL AND resolution IS NOT NULL`);
+      FROM files WHERE missing=0 AND ignored=0${AF()} AND probe_ok=1 AND library_type IN ('tv','anime') GROUP BY library_type, show_name HAVING res_n > 1 ORDER BY res_n DESC, files DESC`);
+    const perSeasonMixed = db.all(`SELECT library_type, show_name, season, COUNT(*) files, GROUP_CONCAT(DISTINCT resolution) resolutions FROM files WHERE missing=0 AND ignored=0${AF()} AND probe_ok=1 AND library_type IN ('tv','anime') GROUP BY library_type, show_name, season HAVING COUNT(DISTINCT resolution) > 1 ORDER BY show_name, season`);
+    const all = db.all(`SELECT id, root_id, library_type, rel_path, file_name, show_name, movie_title, movie_year, resolution, bitrate_kbps, video_codec, duration_s, size FROM files WHERE missing=0 AND ignored=0${AF()} AND probe_ok=1 AND bitrate_kbps IS NOT NULL AND resolution IS NOT NULL`);
     const low = all.filter(f => thr[f.resolution] && f.bitrate_kbps < thr[f.resolution]).sort((a, b) => (a.bitrate_kbps / thr[a.resolution]) - (b.bitrate_kbps / thr[b.resolution]));
-    const undAudio = db.all(`SELECT library_type, COUNT(*) n FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 AND (audio_langs IS NULL OR audio_langs='und') GROUP BY library_type`);
-    const short = db.all(`SELECT id, root_id, library_type, rel_path, file_name, duration_s, size FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 AND duration_s < 120 ORDER BY duration_s LIMIT 500`);
-    const noAudio = db.all(`SELECT id, root_id, library_type, rel_path, file_name FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 AND (audio_count IS NULL OR audio_count=0) LIMIT 500`);
+    const undAudio = db.all(`SELECT library_type, COUNT(*) n FROM files WHERE missing=0 AND ignored=0${AF()} AND probe_ok=1 AND (audio_langs IS NULL OR audio_langs='und') GROUP BY library_type`);
+    const short = db.all(`SELECT id, root_id, library_type, rel_path, file_name, duration_s, size FROM files WHERE missing=0 AND ignored=0${AF()} AND probe_ok=1 AND duration_s < 120 ORDER BY duration_s LIMIT 500`);
+    const noAudio = db.all(`SELECT id, root_id, library_type, rel_path, file_name FROM files WHERE missing=0 AND ignored=0${AF()} AND probe_ok=1 AND (audio_count IS NULL OR audio_count=0) LIMIT 500`);
     return { thresholds: thr, mixed, perSeasonMixed, low: low.slice(0, 2000), lowTotal: low.length, undAudio, short, noAudio };
   }
 
@@ -201,7 +205,7 @@ if (!gotLock) {
     const shots = [
       ['dashboard', '#dashboard'], ['tv', '#tv'], ['anime', '#anime'], ['movies', '#movies'],
       ['episodes', '#anime/' + encodeURIComponent('One Piece')], ['movie-versions', '#movies/' + encodeURIComponent('pacificrim|2013')],
-      ['missing', '#missing'], ['duplicates', '#duplicates'], ['movienames', '#movienames'], ['quality', '#quality'], ['rename', '#rename'],
+      ['missing', '#missing'], ['duplicates', '#duplicates'], ['movienames', '#movienames'], ['web', '#web'], ['ratings', '#ratings'], ['quality', '#quality'], ['rename', '#rename'],
       ['changes', '#changes'], ['problems', '#problems'], ['export', '#export'], ['settings', '#settings'], ['about', '#about'],
     ];
     await new Promise(r => win.webContents.once('did-finish-load', r));
@@ -314,7 +318,7 @@ if (!gotLock) {
   h('meta:setMatch', async (type, show, source, id) => {
     const r = await metadata.fetchById(source, id);
     if (!r.found) throw new Error('That entry could not be loaded');
-    return db.saveSeriesMeta({ library_type: type, show_name: show, source: r.source, source_id: r.source_id, matched_title: r.matched_title, status: r.status, seasons: r.seasons, total_episodes: r.total_episodes, url: r.url, fetched_at: new Date().toISOString(), locked: 1 });
+    return db.saveSeriesMeta({ library_type: type, show_name: show, source: r.source, source_id: r.source_id, matched_title: r.matched_title, status: r.status, seasons: r.seasons, total_episodes: r.total_episodes, url: r.url, rating: r.rating ?? null, rating_votes: r.rating_votes ?? null, fetched_at: new Date().toISOString(), locked: 1 });
   });
   h('meta:setManual', (type, show, seasons, note) => db.saveSeriesMeta({ library_type: type, show_name: show, source: 'manual', seasons, total_episodes: Object.entries(seasons).filter(([s]) => s !== '0').reduce((a, [, n]) => a + Number(n || 0), 0), fetched_at: new Date().toISOString(), locked: 1, note }));
   h('meta:setNone', (type, show) => db.saveSeriesMeta({ library_type: type, show_name: show, source: 'none', fetched_at: new Date().toISOString(), locked: 1, note: 'no expected counts' }));
@@ -323,7 +327,7 @@ if (!gotLock) {
 
   // ---- duplicates review -------------------------------------------------------------
   h('data:duplicates', () => {
-    const groups = db.all(`SELECT library_type, show_name, season, episode, COUNT(*) n FROM files WHERE missing=0 AND ignored=0 AND library_type IN ('tv','anime') AND parse_ok=1 GROUP BY library_type, show_name, season, episode HAVING n>1 ORDER BY show_name, season, episode`);
+    const groups = db.all(`SELECT library_type, show_name, season, episode, COUNT(*) n FROM files WHERE missing=0 AND ignored=0${AF()} AND library_type IN ('tv','anime') AND parse_ok=1 GROUP BY library_type, show_name, season, episode HAVING n>1 ORDER BY show_name, season, episode`);
     const out = [];
     for (const g of groups) {
       const files = db.all(`SELECT f.id, f.root_id, f.rel_path, f.abs_path, f.file_name, f.size, f.resolution, f.width, f.height, f.video_codec, f.bit_depth, f.hdr, f.bitrate_kbps, f.duration_s, f.audio_langs, f.audio_codecs, f.sub_count, f.sub_langs, f.ext, o.keep
@@ -335,13 +339,13 @@ if (!gotLock) {
   h('dup:keep', (rootId, relPath, keepId) => {
     // Mark one file as keep=1 and the rest of its group keep=0 (nothing is deleted).
     const f = db.getFileByPath(rootId, relPath); if (!f) return false;
-    const group = db.all(`SELECT id, root_id, rel_path, library_type FROM files WHERE library_type=? AND show_name=? AND season=? AND episode=? AND missing=0 AND ignored=0`, f.library_type, f.show_name, f.season, f.episode);
+    const group = db.all(`SELECT id, root_id, rel_path, library_type FROM files WHERE library_type=? AND show_name=? AND season=? AND episode=? AND missing=0 AND ignored=0${AF()}`, f.library_type, f.show_name, f.season, f.episode);
     db.transaction(() => { for (const g of group) { const ov = db.getOverride(g.root_id, g.rel_path) || { root_id: g.root_id, rel_path: g.rel_path, library_type: g.library_type }; db.saveOverride({ ...ov, keep: g.id === keepId ? 1 : 0 }); } });
     return true;
   });
   h('dup:clear', (rootId, relPath) => {
     const f = db.getFileByPath(rootId, relPath); if (!f) return false;
-    const group = db.all(`SELECT id, root_id, rel_path FROM files WHERE library_type=? AND show_name=? AND season=? AND episode=? AND missing=0 AND ignored=0`, f.library_type, f.show_name, f.season, f.episode);
+    const group = db.all(`SELECT id, root_id, rel_path FROM files WHERE library_type=? AND show_name=? AND season=? AND episode=? AND missing=0 AND ignored=0${AF()}`, f.library_type, f.show_name, f.season, f.episode);
     db.transaction(() => { for (const g of group) { const ov = db.getOverride(g.root_id, g.rel_path); if (ov) db.saveOverride({ ...ov, keep: null }); } });
     return true;
   });
@@ -351,7 +355,7 @@ if (!gotLock) {
 
   // ---- movie naming engine ---------------------------------------------------------------
   function moviePlan() {
-    const rows = db.all(`SELECT f.*, o.source AS source_override FROM files f LEFT JOIN overrides o ON o.root_id=f.root_id AND o.rel_path=f.rel_path WHERE f.library_type='movie' AND f.missing=0 ORDER BY f.movie_title COLLATE NOCASE, f.file_name`);
+    const rows = db.all(`SELECT f.*, o.source AS source_override FROM files f LEFT JOIN overrides o ON o.root_id=f.root_id AND o.rel_path=f.rel_path WHERE f.library_type='movie' AND f.missing=0${AF('f.')} ORDER BY f.movie_title COLLATE NOCASE, f.file_name`);
     return planMovieNames(rows);
   }
   h('movie:plan', () => ({ plan: moviePlan(), lock: renameLock, settings: settings.get().movieRename }));
@@ -380,6 +384,54 @@ if (!gotLock) {
   h('movie:batches', () => db.listBatches(50));
   h('movie:batchItems', (id) => db.batchItems(id));
 
+  // ---- adult visibility -------------------------------------------------------------------
+  const adultCount = () => db.get('SELECT COUNT(*) n FROM files WHERE adult=1 AND missing=0 AND ignored=0').n;
+  h('adult:status', () => ({ showAdult, count: adultCount(), rootConfigured: (settings.get().roots || []).some(r => r.type === 'adult' && r.enabled) }));
+  h('adult:toggle', (on) => { showAdult = !!on; return { showAdult, count: adultCount() }; });
+  h('adult:dashboard', () => ({
+    byType: db.all(`SELECT library_type, COUNT(*) files, SUM(size) bytes, SUM(duration_s) seconds, SUM(CASE WHEN probe_ok=1 THEN 1 ELSE 0 END) probed, SUM(CASE WHEN has_captions=1 THEN 1 ELSE 0 END) captioned, SUM(CASE WHEN parse_ok=0 THEN 1 ELSE 0 END) unparsed FROM files WHERE adult=1 AND missing=0 AND ignored=0 GROUP BY library_type`),
+    series: db.all(`SELECT library_type, show_name, COUNT(*) episodes, COUNT(DISTINCT season) seasons, SUM(size) bytes, SUM(duration_s) seconds, GROUP_CONCAT(DISTINCT resolution) resolutions, SUM(CASE WHEN has_captions=1 THEN 1 ELSE 0 END) captioned, SUM(CASE WHEN parse_ok=0 THEN 1 ELSE 0 END) unparsed FROM files WHERE adult=1 AND missing=0 AND ignored=0 AND library_type IN ('tv','anime') GROUP BY library_type, show_name ORDER BY show_name COLLATE NOCASE`),
+    movies: db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, SUM(size) bytes, GROUP_CONCAT(DISTINCT resolution) resolutions FROM files WHERE adult=1 AND missing=0 AND ignored=0 AND library_type='movie' GROUP BY group_key ORDER BY title COLLATE NOCASE`),
+    resolution: db.all(`SELECT library_type, resolution k, COUNT(*) n FROM files WHERE adult=1 AND missing=0 AND ignored=0 AND probe_ok=1 GROUP BY library_type, resolution ORDER BY n DESC`),
+    recent: db.all(`SELECT library_type, show_name, movie_title, season, episode, file_name, first_seen FROM files WHERE adult=1 AND missing=0 AND ignored=0 ORDER BY first_seen DESC, id DESC LIMIT 12`),
+    unparsed: db.all(`SELECT id, root_id, library_type, rel_path, parse_note FROM files WHERE adult=1 AND missing=0 AND ignored=0 AND parse_ok=0 ORDER BY rel_path LIMIT 500`),
+  }));
+
+  // ---- web videos ---------------------------------------------------------------------------
+  h('web:channels', () => db.all(`SELECT COALESCE(channel,'(no channel)') channel, COUNT(*) videos, SUM(size) bytes, SUM(duration_s) seconds, MIN(upload_date) first_upload, MAX(upload_date) last_upload, GROUP_CONCAT(DISTINCT resolution) resolutions, SUM(CASE WHEN probe_ok=1 THEN 1 ELSE 0 END) probed, MAX(first_seen) last_added FROM files WHERE library_type='web' AND missing=0 AND ignored=0${AF()} GROUP BY COALESCE(channel,'(no channel)') ORDER BY channel COLLATE NOCASE`));
+  h('web:videos', (channel) => db.all(`SELECT * FROM files WHERE library_type='web' AND ignored=0 AND COALESCE(channel,'(no channel)')=?${AF()} ORDER BY missing, upload_date DESC, movie_title`, channel));
+
+  // ---- ratings ------------------------------------------------------------------------------
+  h('ratings:list', () => {
+    const ur = new Map(db.userRatings().map(u => [u.library_type + '|' + u.title_key, u]));
+    const out = [];
+    for (const t of ['tv', 'anime']) {
+      const metas = db.allSeriesMeta(t);
+      for (const r of db.all(`SELECT show_name, COUNT(*) files, SUM(size) bytes FROM files WHERE library_type=? AND missing=0 AND ignored=0${AF()} GROUP BY show_name`, t)) {
+        const m = metas.get(r.show_name), u = ur.get(t + '|' + r.show_name);
+        out.push({ library_type: t, key: r.show_name, title: r.show_name, files: r.files, bytes: r.bytes, online: m ? m.rating : null, online_source: m && m.rating != null ? m.source : null, online_votes: m ? m.rating_votes : null, url: m ? m.url : null, stars: u ? u.stars : null, note: u ? u.note : null, updated: u ? u.updated : null });
+      }
+    }
+    for (const r of db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, SUM(size) bytes FROM files WHERE library_type='movie' AND missing=0 AND ignored=0${AF()} GROUP BY group_key`)) {
+      const u = ur.get('movie|' + r.group_key);
+      out.push({ library_type: 'movie', key: r.group_key, title: r.year ? `${r.title} (${r.year})` : r.title, files: r.files, bytes: r.bytes, online: null, online_source: null, online_votes: null, url: null, stars: u ? u.stars : null, note: u ? u.note : null, updated: u ? u.updated : null });
+    }
+    for (const r of db.all(`SELECT COALESCE(channel,'(no channel)') channel, COUNT(*) files, SUM(size) bytes FROM files WHERE library_type='web' AND missing=0 AND ignored=0${AF()} GROUP BY COALESCE(channel,'(no channel)')`)) {
+      const u = ur.get('web|' + r.channel);
+      out.push({ library_type: 'web', key: r.channel, title: r.channel, files: r.files, bytes: r.bytes, online: null, online_source: null, online_votes: null, url: null, stars: u ? u.stars : null, note: u ? u.note : null, updated: u ? u.updated : null });
+    }
+    return out;
+  });
+  h('ratings:setUser', (type, key, title, stars, note) => db.setUserRating(type, key, title, stars == null || stars === '' ? null : Number(stars), note || null));
+
+  // ---- bulk source for the movie naming engine ----------------------------------------------
+  h('override:bulkSource', (ids, source) => {
+    if (!/^(web|rip|)$/i.test(source || '')) throw new Error('Source must be web, rip or empty');
+    const rows = db.all(`SELECT id, root_id, rel_path, library_type FROM files WHERE id IN (${ids.map(() => '?').join(',')}) AND library_type='movie'`, ...ids);
+    db.transaction(() => { for (const f of rows) { const ov = db.getOverride(f.root_id, f.rel_path) || { root_id: f.root_id, rel_path: f.rel_path, library_type: 'movie' }; db.saveOverride({ ...ov, source: source ? source.toLowerCase() : null }); } });
+    return rows.length;
+  });
+
   // ---- rename tool (opt-in) -------------------------------------------------------------
   h('rename:proposals', (opts) => { if (!settings.get().renaming.enabled) return { disabled: true, list: [] }; return { list: renamer.proposals(db, opts || {}) }; });
   h('rename:apply', (ids) => { if (!settings.get().renaming.enabled) throw new Error('Renaming is disabled in Settings'); return renamer.applyRenames(db, ids, log); });
@@ -391,31 +443,31 @@ if (!gotLock) {
         SUM(CASE WHEN probe_ok=1 THEN 1 ELSE 0 END) probed, SUM(CASE WHEN has_captions=1 THEN 1 ELSE 0 END) captioned,
         SUM(CASE WHEN parse_ok=0 THEN 1 ELSE 0 END) unparsed, SUM(CASE WHEN probed_at IS NOT NULL AND probe_ok=0 THEN 1 ELSE 0 END) probe_errors,
         AVG(bitrate_kbps) avg_kbps, AVG(duration_s) avg_seconds
-      FROM files WHERE missing=0 AND ignored=0 GROUP BY library_type`);
+      FROM files WHERE missing=0 AND ignored=0${AF()} GROUP BY library_type`);
     const titles = {
-      tv: db.get(`SELECT COUNT(DISTINCT show_name) n FROM files WHERE library_type='tv' AND missing=0 AND ignored=0`).n,
-      anime: db.get(`SELECT COUNT(DISTINCT show_name) n FROM files WHERE library_type='anime' AND missing=0 AND ignored=0`).n,
-      movie: db.get(`SELECT COUNT(DISTINCT group_key) n FROM files WHERE library_type='movie' AND missing=0 AND ignored=0`).n,
+      tv: db.get(`SELECT COUNT(DISTINCT show_name) n FROM files WHERE library_type='tv' AND missing=0 AND ignored=0${AF()}`).n,
+      anime: db.get(`SELECT COUNT(DISTINCT show_name) n FROM files WHERE library_type='anime' AND missing=0 AND ignored=0${AF()}`).n,
+      movie: db.get(`SELECT COUNT(DISTINCT group_key) n FROM files WHERE library_type='movie' AND missing=0 AND ignored=0${AF()}`).n,
     };
-    const multiples = db.get(`SELECT COUNT(*) n, COALESCE(SUM(c-1),0) extra, COALESCE(SUM(b),0) bytes FROM (SELECT group_key, COUNT(*) c, SUM(size) b FROM files WHERE library_type='movie' AND missing=0 AND ignored=0 GROUP BY group_key HAVING c>1)`);
-    const breakdown = (col) => db.all(`SELECT library_type, ${col} k, COUNT(*) n FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 GROUP BY library_type, ${col} ORDER BY n DESC`);
+    const multiples = db.get(`SELECT COUNT(*) n, COALESCE(SUM(c-1),0) extra, COALESCE(SUM(b),0) bytes FROM (SELECT group_key, COUNT(*) c, SUM(size) b FROM files WHERE library_type='movie' AND missing=0 AND ignored=0${AF()} GROUP BY group_key HAVING c>1)`);
+    const breakdown = (col) => db.all(`SELECT library_type, ${col} k, COUNT(*) n FROM files WHERE missing=0 AND ignored=0${AF()} AND probe_ok=1 GROUP BY library_type, ${col} ORDER BY n DESC`);
     const missing = [...missingSummary('tv'), ...missingSummary('anime')];
     const q = qualityReport();
-    const dups = db.get(`SELECT COUNT(*) n FROM (SELECT 1 FROM files WHERE missing=0 AND ignored=0 AND library_type IN ('tv','anime') AND parse_ok=1 GROUP BY library_type, show_name, season, episode HAVING COUNT(*)>1)`).n;
+    const dups = db.get(`SELECT COUNT(*) n FROM (SELECT 1 FROM files WHERE missing=0 AND ignored=0${AF()} AND library_type IN ('tv','anime') AND parse_ok=1 GROUP BY library_type, show_name, season, episode HAVING COUNT(*)>1)`).n;
     return {
       byType, titles, multiples,
       resolution: breakdown('resolution'), videoCodec: breakdown('video_codec'), container: breakdown('ext'),
       audioCodec: breakdown('audio_codecs'), hdr: breakdown('hdr'), fps: breakdown('ROUND(fps)'),
-      audioLang: db.all(`SELECT library_type, COALESCE(NULLIF(audio_langs,'und'),'undefined') k, COUNT(*) n FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 GROUP BY library_type, k ORDER BY n DESC LIMIT 40`),
-      subLang: db.all(`SELECT library_type, COALESCE(sub_langs,'none') k, COUNT(*) n FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 GROUP BY library_type, sub_langs ORDER BY n DESC LIMIT 40`),
+      audioLang: db.all(`SELECT library_type, COALESCE(NULLIF(audio_langs,'und'),'undefined') k, COUNT(*) n FROM files WHERE missing=0 AND ignored=0${AF()} AND probe_ok=1 GROUP BY library_type, k ORDER BY n DESC LIMIT 40`),
+      subLang: db.all(`SELECT library_type, COALESCE(sub_langs,'none') k, COUNT(*) n FROM files WHERE missing=0 AND ignored=0${AF()} AND probe_ok=1 GROUP BY library_type, sub_langs ORDER BY n DESC LIMIT 40`),
       lastScans: db.recentScans(8),
       recentChanges: db.recentChanges(25),
       missingFiles: db.get('SELECT COUNT(*) n FROM files WHERE missing=1').n,
       overrides: db.get('SELECT COUNT(*) n FROM overrides').n,
-      biggestShows: db.all(`SELECT library_type, show_name, COUNT(*) episodes, SUM(size) bytes, SUM(duration_s) seconds FROM files WHERE missing=0 AND ignored=0 AND library_type IN ('tv','anime') GROUP BY library_type, show_name ORDER BY bytes DESC LIMIT 10`),
-      biggestMovies: db.all(`SELECT movie_title, movie_year, size, resolution, video_codec FROM files WHERE missing=0 AND ignored=0 AND library_type='movie' ORDER BY size DESC LIMIT 10`),
-      recentlyAdded: db.all(`SELECT library_type, show_name, movie_title, movie_year, season, episode, file_name, first_seen, size FROM files WHERE missing=0 AND ignored=0 ORDER BY first_seen DESC, id DESC LIMIT 12`),
-      lowRes: db.all(`SELECT library_type, COUNT(*) n FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1 AND resolution IN ('SD','480p','576p') GROUP BY library_type`),
+      biggestShows: db.all(`SELECT library_type, show_name, COUNT(*) episodes, SUM(size) bytes, SUM(duration_s) seconds FROM files WHERE missing=0 AND ignored=0${AF()} AND library_type IN ('tv','anime') GROUP BY library_type, show_name ORDER BY bytes DESC LIMIT 10`),
+      biggestMovies: db.all(`SELECT movie_title, movie_year, size, resolution, video_codec FROM files WHERE missing=0 AND ignored=0${AF()} AND library_type='movie' ORDER BY size DESC LIMIT 10`),
+      recentlyAdded: db.all(`SELECT library_type, show_name, movie_title, movie_year, season, episode, file_name, first_seen, size FROM files WHERE missing=0 AND ignored=0${AF()} ORDER BY first_seen DESC, id DESC LIMIT 12`),
+      lowRes: db.all(`SELECT library_type, COUNT(*) n FROM files WHERE missing=0 AND ignored=0${AF()} AND probe_ok=1 AND resolution IN ('SD','480p','576p') GROUP BY library_type`),
       missingEpisodes: { series: missing.filter(m => m.missing_count > 0).length, episodes: missing.reduce((a, m) => a + m.missing_count, 0), matched: missing.filter(m => m.expected > 0).length, unmatched: missing.filter(m => m.source === 'none').length, pending: missing.filter(m => !m.source).length, top: missing.filter(m => m.missing_count > 0).slice(0, 12) },
       quality: { mixedSeries: q.mixed.length, lowBitrate: q.lowTotal, undAudio: q.undAudio.reduce((a, r) => a + r.n, 0), short: q.short.length, noAudio: q.noAudio.length },
       duplicates: dups,
@@ -430,16 +482,18 @@ if (!gotLock) {
       SUM(CASE WHEN has_captions=1 THEN 1 ELSE 0 END) captioned, SUM(CASE WHEN parse_ok=0 THEN 1 ELSE 0 END) unparsed,
       GROUP_CONCAT(DISTINCT resolution) resolutions, GROUP_CONCAT(DISTINCT video_codec) codecs, GROUP_CONCAT(DISTINCT audio_langs) audio_langs, GROUP_CONCAT(DISTINCT sub_langs) sub_langs,
       MAX(last_seen) last_seen
-    FROM files WHERE library_type=? AND missing=0 AND ignored=0 GROUP BY show_name ORDER BY show_name COLLATE NOCASE`, type);
+    FROM files WHERE library_type=? AND missing=0 AND ignored=0${AF()} GROUP BY show_name ORDER BY show_name COLLATE NOCASE`, type);
     const miss = new Map(missingSummary(type).map(m => [m.show_name, m]));
-    return rows.map(r => { const m = miss.get(r.show_name); return { ...r, expected: m ? m.expected : 0, missing_count: m ? m.missing_count : 0, meta_source: m ? m.source : null, meta_status: m ? m.status : null }; });
+    const metas = db.allSeriesMeta(type);
+    const ur = new Map(db.userRatings(type).map(u => [u.title_key, u]));
+    return rows.map(r => { const m = miss.get(r.show_name); const sm = metas.get(r.show_name); const u = ur.get(r.show_name); return { ...r, expected: m ? m.expected : 0, missing_count: m ? m.missing_count : 0, meta_source: m ? m.source : null, meta_status: m ? m.status : null, online_rating: sm ? sm.rating : null, my_rating: u ? u.stars : null }; });
   });
-  h('data:episodes', (type, show) => ({ files: db.all(`SELECT * FROM files WHERE library_type=? AND show_name=? AND ignored=0 ORDER BY missing, season, episode, file_name`, type, show), missing: missingSummary(type).find(m => m.show_name === show) || null }));
+  h('data:episodes', (type, show) => ({ files: db.all(`SELECT * FROM files WHERE library_type=? AND show_name=? AND ignored=0${AF()} ORDER BY missing, season, episode, file_name`, type, show), missing: missingSummary(type).find(m => m.show_name === show) || null }));
   h('data:movies', () => db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, SUM(size) bytes, MAX(duration_s) seconds,
       GROUP_CONCAT(DISTINCT resolution) resolutions, GROUP_CONCAT(DISTINCT video_codec) codecs, GROUP_CONCAT(DISTINCT audio_langs) audio_langs, GROUP_CONCAT(DISTINCT sub_langs) sub_langs,
       MAX(has_captions) has_captions, SUM(CASE WHEN probe_ok=1 THEN 1 ELSE 0 END) probed, GROUP_CONCAT(edition_tag, ' | ') editions
-    FROM files WHERE library_type='movie' AND missing=0 AND ignored=0 GROUP BY group_key ORDER BY title COLLATE NOCASE, year`));
-  h('data:movieFiles', (groupKey) => db.all(`SELECT * FROM files WHERE library_type='movie' AND group_key=? ORDER BY missing, file_name`, groupKey));
+    FROM files WHERE library_type='movie' AND missing=0 AND ignored=0${AF()} GROUP BY group_key ORDER BY title COLLATE NOCASE, year`));
+  h('data:movieFiles', (groupKey) => db.all(`SELECT * FROM files WHERE library_type='movie' AND group_key=?${AF()} ORDER BY missing, file_name`, groupKey));
 
   h('data:changes', (scanId, limit) => scanId ? db.changesForScan(scanId, limit || 5000) : db.recentChanges(limit || 500));
   h('data:changeStats', () => ({
@@ -449,12 +503,12 @@ if (!gotLock) {
     scans: db.get(`SELECT COUNT(*) n, AVG(duration_ms) avg_ms, MAX(finished) last FROM scans WHERE status='done' AND duration_ms IS NOT NULL`),
   }));
   h('data:search', (q) => db.all(`SELECT id, library_type, show_name, season, episode, movie_title, movie_year, file_name, rel_path, resolution, duration_s, size, missing FROM files
-      WHERE file_name LIKE ? OR show_name LIKE ? OR movie_title LIKE ? ORDER BY missing, library_type, file_name LIMIT 300`, `%${q}%`, `%${q}%`, `%${q}%`));
+      WHERE (file_name LIKE ? OR show_name LIKE ? OR movie_title LIKE ?)${AF()} ORDER BY missing, library_type, file_name LIMIT 300`, `%${q}%`, `%${q}%`, `%${q}%`));
   h('data:problems', () => ({
-    unparsed: db.all(`SELECT id, root_id, library_type, rel_path, file_name, parse_note, show_name, season, episode, movie_title, movie_year FROM files WHERE missing=0 AND ignored=0 AND parse_ok=0 ORDER BY library_type, rel_path LIMIT 2000`),
-    probeErrors: db.all(`SELECT id, root_id, library_type, rel_path, probe_error FROM files WHERE missing=0 AND ignored=0 AND probed_at IS NOT NULL AND probe_ok=0 ORDER BY library_type, rel_path LIMIT 2000`),
+    unparsed: db.all(`SELECT id, root_id, library_type, rel_path, file_name, parse_note, show_name, season, episode, movie_title, movie_year FROM files WHERE missing=0 AND ignored=0${AF()} AND parse_ok=0 ORDER BY library_type, rel_path LIMIT 2000`),
+    probeErrors: db.all(`SELECT id, root_id, library_type, rel_path, probe_error FROM files WHERE missing=0 AND ignored=0${AF()} AND probed_at IS NOT NULL AND probe_ok=0 ORDER BY library_type, rel_path LIMIT 2000`),
     missing: db.all(`SELECT id, root_id, library_type, rel_path, last_seen FROM files WHERE missing=1 ORDER BY last_seen DESC LIMIT 2000`),
-    duplicates: db.get(`SELECT COUNT(*) n FROM (SELECT 1 FROM files WHERE missing=0 AND ignored=0 AND library_type IN ('tv','anime') AND parse_ok=1 GROUP BY library_type, show_name, season, episode HAVING COUNT(*)>1)`).n,
+    duplicates: db.get(`SELECT COUNT(*) n FROM (SELECT 1 FROM files WHERE missing=0 AND ignored=0${AF()} AND library_type IN ('tv','anime') AND parse_ok=1 GROUP BY library_type, show_name, season, episode HAVING COUNT(*)>1)`).n,
     ignored: db.all(`SELECT id, root_id, library_type, rel_path FROM files WHERE ignored=1 ORDER BY rel_path LIMIT 2000`),
     overrides: db.listOverrides(),
   }));

@@ -10,6 +10,7 @@ const DEFAULTS = {
     { id: 'anime', label: 'Anime', path: '\\\\192.168.1.204\\Apocrypha_Media_Pool\\Anime', type: 'anime', enabled: true },
     { id: 'tv', label: 'TV Shows', path: '\\\\192.168.1.204\\Apocrypha_Media_Pool\\TV_Shows', type: 'tv', enabled: true },
   ],
+  adult: { exportCsv: false, defaultSubtype: 'anime' }, // adult roots: hidden by default (runtime toggle), kept out of CSVs unless allowed
   ffprobePath: '',            // empty = auto-detect
   probeConcurrency: 8,        // parallel ffprobe processes (SMB is the bottleneck)
   reprobeUnchanged: false,    // true = re-run ffprobe even if size+mtime unchanged

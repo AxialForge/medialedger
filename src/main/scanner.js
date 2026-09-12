@@ -14,7 +14,7 @@ const fsp = fs.promises;
 const path = require('path');
 const os = require('os');
 const { Worker } = require('worker_threads');
-const { parseEpisode, parseMovie, movieGroupKey } = require('./parse');
+const { parseEpisode, parseMovie, parseFor, movieGroupKey } = require('./parse');
 const { findFfprobe, probe } = require('./ffprobe');
 
 function globToRe(g) {
@@ -23,11 +23,13 @@ function globToRe(g) {
 
 // Merge a manual override into a parse result. Only non-null override fields win.
 function applyOverride(parsed, ov, type) {
+  type = parsed.library_type || type;
   if (!ov) return { ...parsed, has_override: 0 };
   const out = { ...parsed, has_override: 1 };
   const fields = type === 'movie' ? ['movie_title', 'movie_year', 'edition_tag'] : ['show_name', 'season', 'episode', 'episode_end', 'episode_title', 'edition_tag'];
   for (const f of fields) if (ov[f] !== null && ov[f] !== undefined && ov[f] !== '') out[f] = ov[f];
   if (type === 'movie') { out.group_key = movieGroupKey(out.movie_title, out.movie_year); out.parse_ok = out.movie_title ? 1 : 0; }
+  else if (type === 'web') out.parse_ok = 1;
   else out.parse_ok = (out.episode != null && out.season != null) ? 1 : 0;
   if (out.parse_ok) out.parse_note = 'manual override';
   return out;
@@ -69,7 +71,7 @@ class Scanner {
         const ext = path.extname(d.name).slice(1).toLowerCase();
         if (videoExt.has(ext)) {
           let st; try { st = await fsp.stat(abs); } catch { continue; }
-          videos.push({ rel: r, abs, ext, name: d.name, size: st.size, mtime: Math.floor(st.mtimeMs), parsed: root.type === 'movie' ? parseMovie(r) : parseEpisode(r) });
+          videos.push({ rel: r, abs, ext, name: d.name, size: st.size, mtime: Math.floor(st.mtimeMs), parsed: parseFor(root.type, r, cfg.adult && cfg.adult.defaultSubtype) });
           if (videos.length % 250 === 0) onCount(videos.length);
         } else if (subExt.has(ext)) {
           const base = d.name.replace(/\.[^.]+$/, '');
@@ -83,7 +85,7 @@ class Scanner {
   }
 
   _startWorkers(n, cfg) {
-    const data = { videoExt: cfg.videoExtensions.map(e => e.toLowerCase()), subExt: cfg.subtitleExtensions.map(e => e.toLowerCase()), ignore: cfg.ignorePatterns || [], statConcurrency: 8 };
+    const data = { videoExt: cfg.videoExtensions.map(e => e.toLowerCase()), subExt: cfg.subtitleExtensions.map(e => e.toLowerCase()), ignore: cfg.ignorePatterns || [], statConcurrency: 8, adultDefault: cfg.adult && cfg.adult.defaultSubtype };
     this.workers = Array.from({ length: n }, () => ({ w: new Worker(path.join(__dirname, 'scanWorker.js'), { workerData: data }), busy: false }));
   }
   _stopWorkers() { for (const { w } of this.workers) { try { w.postMessage({ type: 'exit' }); w.terminate(); } catch { /* ignore */ } } this.workers = []; }
@@ -265,6 +267,7 @@ class Scanner {
 
   // Re-run the parser (plus overrides) over every indexed row. Used when the
   // parser improves so users get the fix without waiting for a rescan.
+  _rootType(rootId, fallback) { const r = (this.settings.get().roots || []).find(x => x.id === rootId); return r ? r.type : fallback; }
   reparseAll() {
     const rows = this.db.all('SELECT id, root_id, rel_path, library_type FROM files');
     const ovCache = new Map();
@@ -273,7 +276,7 @@ class Scanner {
       for (const f of rows) {
         if (!ovCache.has(f.root_id)) ovCache.set(f.root_id, this.db.allOverridesForRoot(f.root_id));
         const ov = ovCache.get(f.root_id).get(f.rel_path);
-        const base = f.library_type === 'movie' ? parseMovie(f.rel_path) : parseEpisode(f.rel_path);
+        const base = parseFor(this._rootType(f.root_id, f.library_type), f.rel_path, this.settings.get().adult && this.settings.get().adult.defaultSubtype);
         const merged = applyOverride(base, ov, f.library_type);
         this.db.updateFile(f.id, { ...merged, ignored: ov && ov.ignore ? 1 : 0 });
         changed++;
@@ -287,7 +290,7 @@ class Scanner {
     const f = this.db.getFileByPath(rootId, relPath);
     if (!f) return null;
     const ov = this.db.getOverride(rootId, relPath);
-    const base = f.library_type === 'movie' ? parseMovie(relPath) : parseEpisode(relPath);
+    const base = parseFor(this._rootType(rootId, f.library_type), relPath, this.settings.get().adult && this.settings.get().adult.defaultSubtype);
     const merged = applyOverride(base, ov, f.library_type);
     this.db.updateFile(f.id, { ...merged, ignored: ov && ov.ignore ? 1 : 0 });
     return this.db.getFileByPath(rootId, relPath);

@@ -13,7 +13,7 @@ const fmtDate = iso => iso ? new Date(iso).toLocaleString([], { dateStyle: 'medi
 const fmtAgo = iso => { if (!iso) return 'never'; const d = (Date.now() - new Date(iso)) / 1000; if (d < 90) return 'just now'; if (d < 5400) return Math.round(d / 60) + ' min ago'; if (d < 172800) return Math.round(d / 3600) + ' h ago'; return Math.round(d / 86400) + ' days ago'; };
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
-const typeName = t => ({ tv: 'TV', anime: 'Anime', movie: 'Movies' }[t] || t);
+const typeName = t => ({ tv: 'TV', anime: 'Anime', movie: 'Movies', web: 'Web', adult: 'Adult' }[t] || t);
 const yn = v => v == null ? '<span class="muted">?</span>' : v ? '<span class="badge ok">yes</span>' : '<span class="badge bad">no</span>';
 const sxe = r => r.season == null || r.episode == null ? '' : `S${String(r.season).padStart(2, '0')}E${String(r.episode).padStart(2, '0')}${r.episode_end ? '-E' + String(r.episode_end).padStart(2, '0') : ''}`;
 const uniqList = s => [...new Set(String(s || '').split(/[;,]/).filter(Boolean))].join(' ');
@@ -96,6 +96,7 @@ L.scan.onProgress(p => {
 $('#btnScan').onclick = async () => { try { $('#btnScan').hidden = true; $('#btnCancel').hidden = false; $('#scanProgress').hidden = false; showProgress({ message: 'Starting…' }); await L.scan.start('manual'); } catch (e) { toast(e.message, true); refreshScanUi(); } };
 $('#btnCancel').onclick = () => L.scan.cancel();
 
+$('#showAdult').onchange = async e => { await L.adult.toggle(e.target.checked); refreshBadges(); if (!e.target.checked && currentView === 'adult') location.hash = '#dashboard'; else route(); };
 let updateState = { state: 'idle' };
 L.update.onStatus(s => { updateState = s; paintUpdatePill(); if (currentView === 'about') route(); });
 function paintUpdatePill() {
@@ -111,6 +112,7 @@ async function refreshBadges() {
     const m = $('#missingCount'); m.textContent = d.missingEpisodes.episodes.toLocaleString(); m.hidden = !d.missingEpisodes.episodes;
     const du = $('#dupCount'); du.textContent = d.duplicates; du.hidden = !d.duplicates;
     $('#navRename').style.opacity = s.renaming.enabled ? '' : '.45';
+    try { const a = await L.adult.status(); $('#adultSwitch').hidden = !a.rootConfigured; $('#navAdult').hidden = !(a.rootConfigured && a.showAdult); $('#showAdult').checked = a.showAdult; const ac = $('#adultCount'); ac.textContent = a.count.toLocaleString(); ac.hidden = !a.count; } catch { /* ignore */ }
     try { const { plan } = await L.movie.plan(); const n = plan.filter(p => p.ok && !p.unchanged).length; const mp = $('#movieNameCount'); mp.textContent = n.toLocaleString(); mp.hidden = !n; } catch { /* ignore */ }
     const w = $('#watchLine'); w.hidden = !d.watch.enabled; w.textContent = d.watch.enabled ? `Watching ${d.watch.roots.length} root(s)${d.watch.pending ? ` · ${d.watch.pending} change(s) pending` : ''}` : '';
   } catch { /* ignore */ }
@@ -213,6 +215,20 @@ async function openFixModal(rootId, relPath, after) {
 const fixBtn = (r, after) => `<button class="small fixbtn" data-root="${esc(r.root_id)}" data-rel="${esc(r.rel_path)}">Fix…</button>`;
 document.addEventListener('click', e => { const b = e.target.closest('.fixbtn'); if (b) { e.stopPropagation(); openFixModal(b.dataset.root, b.dataset.rel, () => route()); } });
 
+function starsHtml(v, type, key, title) {
+  const n = Math.round((v || 0) * 2) / 2;
+  return `<span class="stars" data-type="${esc(type)}" data-key="${esc(key)}" data-title="${esc(title || '')}" title="${v ? v + ' / 5' : 'not rated'}">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= n ? 'on' : ''}" data-v="${i}">★</i>`).join('')}</span>`;
+}
+document.addEventListener('click', async e => {
+  const st = e.target.closest('.stars i'); if (!st) return;
+  const box = st.parentElement; const v = Number(st.dataset.v);
+  const cur = box.querySelectorAll('i.on').length;
+  const next = cur === v ? null : v; // clicking the current value clears it
+  await L.ratings.setUser(box.dataset.type, box.dataset.key, box.dataset.title, next, box.dataset.note || null);
+  box.querySelectorAll('i').forEach(i => i.classList.toggle('on', next != null && Number(i.dataset.v) <= next));
+  box.title = next ? next + ' / 5' : 'not rated';
+});
+
 // ---------- views -----------------------------------------------------------
 const views = {};
 
@@ -292,6 +308,8 @@ async function seriesView(type) {
     { key: 'audio_langs', label: 'Audio', render: r => esc(uniqList(r.audio_langs)) },
     { key: 'sub_langs', label: 'Subs', render: r => esc(uniqList(r.sub_langs)) },
     { key: 'captioned', label: 'Captions', num: true, sortVal: r => r.probed ? r.captioned / r.episodes : -1, render: r => r.probed ? `<span class="badge ${r.captioned === r.episodes ? 'ok' : r.captioned ? 'warn' : 'bad'}">${pct(r.captioned, r.episodes)}%</span>` : '<span class="muted">—</span>' },
+    { key: 'online_rating', label: 'Rating', num: true, render: r => r.online_rating != null ? `<span title="online average">${r.online_rating.toFixed(1)}</span>` : '<span class="muted">—</span>' },
+    { key: 'my_rating', label: 'Mine', sortVal: r => r.my_rating || 0, render: r => starsHtml(r.my_rating, type, r.show_name, r.show_name) },
     { key: 'missing_count', label: 'Missing', num: true, sortVal: r => r.expected ? r.missing_count : -1, render: r => r.expected ? (r.missing_count ? `<span class="badge bad">${r.missing_count}</span> <span class="muted tiny">of ${r.expected}</span>` : '<span class="badge ok">complete</span>') : (r.meta_source === 'none' ? '<span class="badge" title="no match found">no match</span>' : '<span class="muted">—</span>') },
     { key: 'unparsed', label: 'Issues', num: true, render: r => (r.unparsed ? `<span class="badge warn">${r.unparsed} unparsed</span>` : '') + (r.probed < r.episodes ? `<span class="badge">${r.episodes - r.probed} unprobed</span>` : '') },
   ];
@@ -485,6 +503,7 @@ views.export = async () => {
       <tr><td>movies.csv</td><td>One row per movie file, with the number of versions of that title</td></tr>
       <tr><td>movies_titles.csv</td><td>One row per title: file count, versions, best resolution, size</td></tr>
       <tr><td>movies_multiples.csv</td><td>Only titles that have more than one file</td></tr>
+      <tr><td>web_videos.csv</td><td>One row per web video with channel, title, upload date and every probed field</td></tr>
       <tr><td>changes.csv</td><td>The change log for the scan that triggered the export (or the latest changes)</td></tr>
     </table></div>
     <h2>History</h2><div id="exportHist"></div>`;
@@ -668,10 +687,13 @@ views.movienames = async () => {
       <select id="mflag"><option value="">any flag</option>${Object.keys(flagCounts).map(k => `<option value="${k}">${k} (${flagCounts[k]})</option>`).join('')}</select>
       <span class="muted small" id="mcount"></span><span class="grow"></span>
       <button class="small" id="mSelAll">Select shown</button><button class="small" id="mSelNone">Clear</button>
+      <select id="mBulkSrc" title="Set the source for every selected file"><option value="">Set source for selected…</option><option value="web">Web (download)</option><option value="rip">Rip (disc)</option><option value="clear">clear manual source</option></select>
       <button id="mDry" disabled>Dry run 0</button>
       <button class="danger" id="mLive" disabled>Rename 0 live</button>
     </div>
     <div class="table-wrap" id="mtable"></div>
+    <div id="mCollisions"></div>
+    <div id="mPlaceholders"></div>
     <details style="margin-top:14px"><summary class="muted">What the flags mean</summary><table class="kv" style="margin-top:6px">${Object.entries(FLAG_TEXT).map(([k, v]) => `<tr><td class="mono">${k}</td><td>${esc(v)}</td></tr>`).join('')}</table></details>
     <h2>Batches</h2><div id="mbatches"></div>`;
 
@@ -696,6 +718,14 @@ views.movienames = async () => {
   ['#mq', '#mstatus', '#mflag'].forEach(id => { $(id).oninput = render; $(id).onchange = render; });
   $('#mtable').addEventListener('change', e => { const c = e.target.closest('.msel'); if (c) { c.checked ? selected.add(Number(c.dataset.id)) : selected.delete(Number(c.dataset.id)); $('#mDry').textContent = `Dry run ${selected.size}`; $('#mDry').disabled = !selected.size; $('#mLive').textContent = `Rename ${selected.size} live`; $('#mLive').disabled = !selected.size || !mr.enabled || !!lock; } });
   $('#mSelAll').onclick = () => { shown.filter(p => p.ok && !p.unchanged).forEach(p => selected.add(p.id)); render(); };
+  $('#mBulkSrc').onchange = async e => {
+    const v = e.target.value; e.target.value = ''; if (!v) return;
+    const ids = selected.size ? [...selected] : shown.filter(p => p.ok && !p.unchanged).map(p => p.id);
+    if (!ids.length) return toast('Select files first (or filter to the ones you mean)', true);
+    const card = openModal(`<h2>Set source to <b>${v === 'clear' ? 'auto-detect' : v === 'web' ? 'Web' : 'Rip'}</b> for ${ids.length} file${ids.length === 1 ? '' : 's'}?</h2><p class="muted">This only records a manual fix in MediaLedger's database. Nothing on the share changes until you run a live rename.</p><div class="actions"><span class="grow"></span><button id="bsC">Cancel</button><button class="primary" id="bsGo">Apply</button></div>`);
+    $('#bsC', card).onclick = closeModal;
+    $('#bsGo', card).onclick = async () => { const n = await L.override.bulkSource(ids, v === 'clear' ? '' : v); closeModal(); toast(`Source set on ${n} file(s)`); views.movienames(); };
+  };
   $('#mSelNone').onclick = () => { selected.clear(); render(); };
   $('#mrSave').onclick = async () => { await L.settings.set({ movieRename: { layout: $('#mrLayout').value, batchLimit: Number($('#mrLimit').value) || 200, enabled: $('#mrEnabled').checked } }); toast('Batch settings saved'); views.movienames(); };
 
@@ -722,6 +752,27 @@ views.movienames = async () => {
     };
   };
 
+  // ---- collisions: files that would share a name ----
+  const colGroups = new Map();
+  for (const p of plan) if (!p.ok && /^collision/.test(p.blocked || '')) { const k = (p.dir + '|' + (p.tokens.title || '') + '|' + (p.tokens.year || '') + '|' + (p.tokens.source || '') + '|' + (p.tokens.resolution || '') + '|' + (p.tokens.hdr || '') + '|' + (p.tokens.codec || '') + '|' + (p.tokens.audio || '') + '|' + (p.tokens.edition || '')).toLowerCase(); if (!colGroups.has(k)) colGroups.set(k, []); colGroups.get(k).push(p); }
+  if (colGroups.size) {
+    $('#mCollisions').innerHTML = `<div class="section-head"><h2>Name collisions <span class="muted">(${colGroups.size} group${colGroups.size === 1 ? '' : 's'})</span></h2><span class="muted tiny">Files that would end up with the identical name. Keep one and ignore the rest, or give one a distinguishing edition via Fix….</span></div>` +
+      [...colGroups.values()].map(g => `<div class="dupgroup"><div class="head"><b>${esc(g[0].tokens.title)} (${esc(g[0].tokens.year)})</b><span class="muted tiny">→ ${esc(g[0].tokens.source)} ${esc(g[0].tokens.resolution)} ${esc(g[0].tokens.hdr)} ${esc(g[0].tokens.codec)}</span></div><div class="dupfiles">${g.map(p => `<div class="dupfile"><div class="name">${esc(p.from)}</div><div class="specs"><span>Size <b>${fmtBytes(p.size)}</b></span></div><div class="act"><button class="small primary colkeep" data-id="${p.id}" data-group="${esc([...colGroups.keys()].find(k => colGroups.get(k) === g))}">Keep this, ignore others</button>${fixBtn(p)}</div></div>`).join('')}</div></div>`).join('');
+    $('#mCollisions').addEventListener('click', async e => {
+      const b = e.target.closest('.colkeep'); if (!b) return;
+      const g = colGroups.get(b.dataset.group); const keepId = Number(b.dataset.id);
+      const others = g.filter(p => p.id !== keepId);
+      const card = openModal(`<h2>Ignore ${others.length} file${others.length === 1 ? '' : 's'}?</h2><p class="muted">The other file${others.length === 1 ? '' : 's'} stay on disk untouched but are marked <i>ignored</i> in MediaLedger: hidden from lists, CSVs and the naming plan. You can undo that from Problems → Manual fixes.</p><div class="preview">${others.map(p => `<div>${esc(p.from)}</div>`).join('')}</div><div class="actions"><span class="grow"></span><button id="ckC">Cancel</button><button class="danger" id="ckGo">Ignore them</button></div>`);
+      $('#ckC', card).onclick = closeModal;
+      $('#ckGo', card).onclick = async () => { for (const p of others) { const sgt = await L.override.suggest(p.root_id, p.rel_path); const ov = (sgt && sgt.override) || { root_id: p.root_id, rel_path: p.rel_path, library_type: 'movie' }; await L.override.save({ ...ov, ignore: 1, note: (ov.note ? ov.note + '; ' : '') + 'ignored to resolve a name collision' }); } closeModal(); toast(`${others.length} file(s) ignored`); views.movienames(); };
+    });
+  }
+  // ---- placeholders still on disk (renamed live but never filled in) ----
+  const onDisk = plan.filter(p => /\(Year\)| - Source /.test(p.from));
+  if (onDisk.length) {
+    $('#mPlaceholders').innerHTML = `<div class="section-head"><h2>Placeholders on disk <span class="muted">(${onDisk.length})</span></h2><span class="muted tiny">These files were renamed with a placeholder word. Plex will not match a "(Year)" file; fill the value with Fix… and rename again.</span></div><div class="table-wrap short"><table><thead><tr><th>Current name</th><th>Missing</th><th>Proposed now</th><th></th></tr></thead><tbody>${onDisk.map(p => `<tr><td class="wrap">${esc(p.from)}</td><td>${/\(Year\)/.test(p.from) ? '<span class="badge warn">year</span>' : ''}${/ - Source /.test(p.from) ? '<span class="badge warn">source</span>' : ''}</td><td class="wrap">${p.ok && !p.unchanged ? `<b>${esc(p.name)}</b>` : '<span class="muted">still the same until fixed</span>'}</td><td>${fixBtn(p)}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+
   const bt = makeTable(batches, [
     { key: 'id', label: '#', num: true }, { key: 'ts', label: 'When', render: r => fmtDate(r.ts) },
     { key: 'mode', label: 'Mode', render: r => r.mode === 'live' ? '<span class="badge bad">live</span>' : '<span class="badge">dry</span>' }, { key: 'layout', label: 'Layout' },
@@ -743,6 +794,78 @@ views.movienames = async () => {
       $('#iC', card).onclick = closeModal;
     }
   });
+};
+
+views.web = async () => {
+  const rows = await L.web.channels();
+  const vids = rows.reduce((a, r) => a + r.videos, 0), bytes = rows.reduce((a, r) => a + (r.bytes || 0), 0), secs = rows.reduce((a, r) => a + (r.seconds || 0), 0);
+  view.innerHTML = `<h1>Web videos</h1><p class="lead">Downloaded web videos grouped by channel folder. Titles come from the file name with yt-dlp ids and dates stripped when present.</p>
+    <div class="tiles compact">${tile('', 'Channels', rows.length)}${tile('', 'Videos', vids.toLocaleString())}${tile('', 'Size', fmtBytes(bytes))}${tile('', 'Runtime', fmtHours(secs))}</div>`;
+  const cols = [
+    { key: 'channel', label: 'Channel', cls: 'wrap' }, { key: 'videos', label: 'Videos', num: true },
+    { key: 'seconds', label: 'Runtime', num: true, render: r => fmtHours(r.seconds) }, { key: 'bytes', label: 'Size', num: true, render: r => fmtBytes(r.bytes) },
+    { key: 'resolutions', label: 'Resolution', render: r => (r.resolutions || '').split(',').filter(Boolean).map(x => `<span class="badge">${esc(x)}</span>`).join('') },
+    { key: 'last_upload', label: 'Uploads', render: r => r.first_upload ? `${esc(r.first_upload)} → ${esc(r.last_upload)}` : '<span class="muted">—</span>' },
+    { key: 'last_added', label: 'Last added', render: r => fmtAgo(r.last_added) },
+  ];
+  const t = makeTable(rows, cols, { search: r => r.channel, defaultSort: { key: 'channel' }, onRow: r => { location.hash = '#web/' + encodeURIComponent(r.channel); } });
+  view.append(searchToolbar(t, rows.length), t.node);
+};
+async function webVideosView(channel) {
+  const rows = await L.web.videos(channel);
+  const cols = [
+    { key: 'movie_title', label: 'Title', cls: 'wrap', render: r => `${esc(r.movie_title)}${r.missing ? ' <span class="badge bad">missing</span>' : ''}` },
+    { key: 'upload_date', label: 'Uploaded' }, { key: 'video_id', label: 'Video id', render: r => r.video_id ? `<a href="#" class="yt" data-id="${esc(r.video_id)}">${esc(r.video_id)}</a>` : '' },
+    { key: 'duration_s', label: 'Length', num: true, render: r => fmtDur(r.duration_s) },
+    { key: 'resolution', label: 'Res', render: r => r.resolution ? `${esc(r.resolution)} <span class="muted tiny">${r.width}×${r.height}</span>` : '' },
+    { key: 'fps', label: 'FPS', num: true }, { key: 'video_codec', label: 'Video' }, { key: 'audio_langs', label: 'Audio', render: r => r.audio_codecs ? `${esc(r.audio_langs || '')} <span class="muted tiny">${esc(r.audio_codecs)}</span>` : '' },
+    { key: 'has_captions', label: 'Captions', render: r => yn(r.has_captions) }, { key: 'size', label: 'Size', num: true, render: r => fmtBytes(r.size) }, { key: 'file_name', label: 'File', cls: 'wrap' },
+  ];
+  const t = makeTable(rows, cols, { search: r => `${r.movie_title} ${r.file_name}`, defaultSort: { key: 'upload_date', asc: false }, onRow: r => L.showItem(r.abs_path) });
+  view.innerHTML = `<div class="detail-head"><span class="back" id="back">← Web videos</span><h1>${esc(channel)}</h1><span class="muted">${rows.length} videos · ${fmtBytes(rows.reduce((a, r) => a + (r.size || 0), 0))}</span><span class="grow"></span>${starsHtml(null, 'web', channel, channel)}</div>`;
+  $('#back').onclick = () => { location.hash = '#web'; };
+  view.append(searchToolbar(t, rows.length), t.node);
+  t.node.addEventListener('click', e => { const a = e.target.closest('a.yt'); if (a) { e.preventDefault(); e.stopPropagation(); L.openExternal('https://www.youtube.com/watch?v=' + a.dataset.id); } });
+  L.ratings.list().then(list => { const r = list.find(x => x.library_type === 'web' && x.key === channel); if (r && r.stars) { const box = $('.stars', view); box.querySelectorAll('i').forEach(i => i.classList.toggle('on', Number(i.dataset.v) <= r.stars)); } });
+}
+
+views.adult = async () => {
+  const st = await L.adult.status();
+  if (!st.showAdult) { view.innerHTML = '<h1>Adult</h1><p class="lead">Hidden. Turn on "Show adult content" at the bottom of the sidebar to view this library. The switch resets every time the app starts.</p>'; return; }
+  const d = await L.adult.dashboard();
+  const t = Object.fromEntries(d.byType.map(r => [r.library_type, r]));
+  const files = d.byType.reduce((a, r) => a + r.files, 0), bytes = d.byType.reduce((a, r) => a + (r.bytes || 0), 0), secs = d.byType.reduce((a, r) => a + (r.seconds || 0), 0);
+  view.innerHTML = `<h1>Adult</h1><p class="lead">Everything under adult roots, classified per file as anime, TV or movie. Series open in the normal episode view; all the usual tools (Fix…, Match…, ratings) work here. Excluded from CSVs unless allowed in Settings.</p>
+    <div class="tiles compact">${tile('', 'Files', files.toLocaleString(), `${fmtBytes(bytes)} · ${fmtHours(secs)}`)}${tile('anime', 'Anime', `${d.series.filter(s => s.library_type === 'anime').length} series`, `${(t.anime?.files || 0).toLocaleString()} episodes`)}${tile('tv', 'TV', `${d.series.filter(s => s.library_type === 'tv').length} series`, `${(t.tv?.files || 0).toLocaleString()} episodes`)}${tile('movie', 'Movies', `${d.movies.length} titles`, `${(t.movie?.files || 0).toLocaleString()} files`)}${tile(d.unparsed.length ? 'warnt' : 'okt', 'Unparsed', d.unparsed.length)}</div>
+    <div class="grid2" style="margin-top:12px">${bars(d.resolution, 'Resolution', { order: ['4K', '1440p', '1080p', '720p', '576p', '480p', 'SD', 'unknown'] })}<div class="card"><h3>Recently added</h3><div id="aRecent"></div></div></div>
+    <h2>Series</h2><div id="aSeries"></div><h2>Movies</h2><div id="aMovies"></div>${d.unparsed.length ? '<h2>Unparsed</h2><div id="aUnparsed"></div>' : ''}`;
+  $('#aRecent').append(el(`<table>${d.recent.map(r => `<tr><td><span class="badge ${r.library_type}">${typeName(r.library_type)}</span></td><td class="wrap">${esc(r.library_type === 'movie' ? r.movie_title : `${r.show_name} ${sxe(r)}`)}<span class="sub">${esc(r.file_name)}</span></td><td class="num muted tiny">${fmtAgo(r.first_seen)}</td></tr>`).join('') || '<tr><td class="empty">—</td></tr>'}</table>`));
+  const st1 = makeTable(d.series, [{ key: 'library_type', label: 'Type', render: r => `<span class="badge ${r.library_type}">${typeName(r.library_type)}</span>` }, { key: 'show_name', label: 'Series', cls: 'wrap' }, { key: 'seasons', label: 'Seasons', num: true }, { key: 'episodes', label: 'Episodes', num: true }, { key: 'seconds', label: 'Runtime', num: true, render: r => fmtHours(r.seconds) }, { key: 'bytes', label: 'Size', num: true, render: r => fmtBytes(r.bytes) }, { key: 'resolutions', label: 'Resolution', render: r => (r.resolutions || '').split(',').filter(Boolean).map(x => `<span class="badge">${esc(x)}</span>`).join('') }, { key: 'captioned', label: 'Captions', num: true, render: r => `${pct(r.captioned, r.episodes)}%` }, { key: 'unparsed', label: 'Issues', num: true, render: r => r.unparsed ? `<span class="badge warn">${r.unparsed} unparsed</span>` : '' }], { search: r => r.show_name, defaultSort: { key: 'show_name' }, short: true, onRow: r => { location.hash = `#${r.library_type}/${encodeURIComponent(r.show_name)}`; } });
+  $('#aSeries').append(st1.node);
+  const mt = makeTable(d.movies, [{ key: 'title', label: 'Title', cls: 'wrap' }, { key: 'year', label: 'Year', num: true }, { key: 'files', label: 'Files', num: true }, { key: 'resolutions', label: 'Versions', render: r => (r.resolutions || '').split(',').filter(Boolean).map(x => `<span class="badge">${esc(x)}</span>`).join('') }, { key: 'bytes', label: 'Size', num: true, render: r => fmtBytes(r.bytes) }], { search: r => r.title, defaultSort: { key: 'title' }, short: true, onRow: r => { location.hash = '#movies/' + encodeURIComponent(r.group_key); } });
+  $('#aMovies').append(mt.node);
+  if (d.unparsed.length) { const ut = makeTable(d.unparsed, [{ key: 'library_type', label: 'Type', render: r => typeName(r.library_type) }, { key: 'rel_path', label: 'Path', cls: 'pathcell' }, { key: 'parse_note', label: 'Why' }, { key: 'id', label: '', render: r => fixBtn(r) }], { short: true }); $('#aUnparsed').append(ut.node); }
+};
+
+views.ratings = async () => {
+  const rows = await L.ratings.list();
+  const rated = rows.filter(r => r.stars), online = rows.filter(r => r.online != null);
+  view.innerHTML = `<h1>Ratings</h1><p class="lead">Online averages come from TVmaze (TV) and AniList (anime) with the episode-count lookup; nothing extra is fetched. Your own rating is a 0–5 star score per title, stored locally and exported in the CSVs. Click a star to rate; click the same star again to clear. Plex user ratings will join this page with the Plex integration.</p>
+    <div class="tiles compact">${tile('', 'Titles', rows.length.toLocaleString())}${tile('', 'With online rating', online.length.toLocaleString(), online.length ? `avg ${(online.reduce((a, r) => a + r.online, 0) / online.length).toFixed(1)} / 10` : '')}${tile('okt', 'Rated by you', rated.length, rated.length ? `avg ${(rated.reduce((a, r) => a + r.stars, 0) / rated.length).toFixed(1)} / 5` : '')}${tile('', 'Top online', online.length ? online.sort((a, b) => b.online - a.online)[0].title : '—', online.length ? `${online[0].online} / 10` : '')}</div>
+    <div class="toolbar" style="margin-top:12px"><select id="rType"><option value="">all libraries</option><option value="tv">TV</option><option value="anime">Anime</option><option value="movie">Movies</option><option value="web">Web channels</option></select><label class="inline small"><input type="checkbox" id="rMine"> Only rated by me</label><label class="inline small"><input type="checkbox" id="rUnrated"> Only unrated by me</label></div><div id="rTable"></div>`;
+  const cols = [
+    { key: 'library_type', label: 'Library', render: r => `<span class="badge ${r.library_type}">${typeName(r.library_type)}</span>` },
+    { key: 'title', label: 'Title', cls: 'wrap', render: r => r.library_type === 'movie' ? `<a href="#movies/${encodeURIComponent(r.key)}">${esc(r.title)}</a>` : r.library_type === 'web' ? `<a href="#web/${encodeURIComponent(r.key)}">${esc(r.title)}</a>` : `<a href="#${r.library_type}/${encodeURIComponent(r.key)}">${esc(r.title)}</a>` },
+    { key: 'online', label: 'Online', num: true, render: r => r.online != null ? `<b>${r.online.toFixed(1)}</b><span class="muted tiny"> /10 ${esc(r.online_source || '')}${r.online_votes ? ' · ' + r.online_votes.toLocaleString() : ''}</span>` : '<span class="muted">—</span>' },
+    { key: 'stars', label: 'Mine', sortVal: r => r.stars || 0, render: r => starsHtml(r.stars, r.library_type, r.key, r.title) },
+    { key: 'note', label: 'Note', cls: 'wrap', render: r => `<input class="ratingnote" data-type="${esc(r.library_type)}" data-key="${esc(r.key)}" data-title="${esc(r.title)}" data-stars="${r.stars ?? ''}" value="${esc(r.note || '')}" placeholder="note…">` },
+    { key: 'files', label: 'Files', num: true }, { key: 'bytes', label: 'Size', num: true, render: r => fmtBytes(r.bytes) },
+  ];
+  const build = () => { const t = $('#rType').value, mine = $('#rMine').checked, un = $('#rUnrated').checked; const list = rows.filter(r => (!t || r.library_type === t) && (!mine || r.stars) && (!un || !r.stars)); const tb = makeTable(list, cols, { search: r => r.title, defaultSort: { key: 'online', asc: false } }); const box = $('#rTable'); box.innerHTML = ''; box.append(searchToolbar(tb, list.length), tb.node); };
+  build();
+  ['#rType', '#rMine', '#rUnrated'].forEach(id => { $(id).onchange = build; });
+  $('#rTable').addEventListener('change', async e => { const i = e.target.closest('.ratingnote'); if (!i) return; await L.ratings.setUser(i.dataset.type, i.dataset.key, i.dataset.title, i.dataset.stars === '' ? null : Number(i.dataset.stars), i.value.trim() || null); toast('Note saved'); });
+  $('#rTable').addEventListener('click', e => { if (e.target.closest('.ratingnote')) e.stopPropagation(); }, true);
 };
 
 views.settings = async () => {
@@ -778,6 +901,10 @@ views.settings = async () => {
       <h2>Renaming <span class="badge warn">writes to the share</span></h2>
       <div class="field"><label>Enable rename tool</label><input type="checkbox" id="renOn" ${s.renaming.enabled ? 'checked' : ''}><div class="hint">Unlocks the <b>Rename files</b> page, which proposes Plex-standard names and renames only the files you tick, in place, never overwriting. Off by default because it is the one feature that modifies the NAS.</div></div>
 
+      <h2>Adult content</h2>
+      <div class="field"><label>Include in CSV exports</label><input type="checkbox" id="adultCsv" ${s.adult.exportCsv ? 'checked' : ''}><div class="hint">Off by default: adult roots are left out of every CSV. In the app they are hidden until the "Show adult content" switch in the sidebar is on; the switch resets each launch.</div></div>
+      <div class="field"><label>When unsure, treat as</label><select id="adultDefault"><option value="anime" ${s.adult.defaultSubtype === 'anime' ? 'selected' : ''}>Anime</option><option value="tv" ${s.adult.defaultSubtype === 'tv' ? 'selected' : ''}>TV</option></select><div class="hint">Adult roots classify each file as anime, TV or movie from its folder and name. Files that match none of the patterns fall back to this.</div></div>
+
       <h2>Quality thresholds</h2>
       <div class="field"><label>Minimum bitrate (kbps)</label><div class="inline" id="thr">${Object.entries(s.quality.minKbps).map(([k, v]) => `<label class="inline small">${esc(k)} <input type="number" min="0" data-res="${esc(k)}" value="${v}" style="width:74px"></label>`).join('')}</div><div class="hint">Files below these values for their resolution are listed under Quality → Low-bitrate files.</div></div>
 
@@ -807,7 +934,7 @@ views.settings = async () => {
     </div>`;
 
   const rootsBody = $('#roots');
-  const rootRow = (r) => el(`<tr><td><input type="checkbox" class="r-on" ${r.enabled ? 'checked' : ''}></td><td><input type="text" class="r-label" value="${esc(r.label)}" style="width:110px"></td><td><div class="inline"><input type="text" class="r-path" value="${esc(r.path)}" style="flex:1"><button class="small r-pick">…</button></div></td><td><select class="r-type">${['tv', 'anime', 'movie'].map(t => `<option value="${t}" ${r.type === t ? 'selected' : ''}>${typeName(t)}</option>`).join('')}</select></td><td><button class="small r-del">✕</button></td></tr>`);
+  const rootRow = (r) => el(`<tr><td><input type="checkbox" class="r-on" ${r.enabled ? 'checked' : ''}></td><td><input type="text" class="r-label" value="${esc(r.label)}" style="width:110px"></td><td><div class="inline"><input type="text" class="r-path" value="${esc(r.path)}" style="flex:1"><button class="small r-pick">…</button></div></td><td><select class="r-type">${['tv', 'anime', 'movie', 'web', 'adult'].map(t => `<option value="${t}" ${r.type === t ? 'selected' : ''}>${t === 'adult' ? 'Adult (auto-detect anime / TV / movie)' : t === 'web' ? 'Web videos' : typeName(t)}</option>`).join('')}</select></td><td><button class="small r-del">✕</button></td></tr>`);
   const addRow = (r) => { const tr = rootRow(r); tr.dataset.id = r.id || ''; rootsBody.append(tr); $('.r-del', tr).onclick = () => tr.remove(); $('.r-pick', tr).onclick = async () => { const p = await L.pickFolder($('.r-path', tr).value); if (p) $('.r-path', tr).value = p; }; };
   s.roots.forEach(addRow);
   $('#addRoot').onclick = () => addRow({ id: '', label: 'New', path: '', type: 'tv', enabled: true });
@@ -837,6 +964,7 @@ views.settings = async () => {
       metadata: { ...s.metadata, enabled: $('#metaOn').checked, refreshDays: Number($('#metaDays').value) || 14 },
       watchFolders: $('#watchOn').checked, watchSettleSeconds: Number($('#watchSettle').value) || 90,
       renaming: { ...s.renaming, enabled: $('#renOn').checked },
+      adult: { exportCsv: $('#adultCsv').checked, defaultSubtype: $('#adultDefault').value },
       quality: { minKbps: Object.fromEntries([...document.querySelectorAll('#thr input[data-res]')].map(i => [i.dataset.res, Number(i.value) || 0])) },
       plex: { enabled: $('#plexOn').checked, baseUrl: $('#plexUrl').value.trim(), token: $('#plexToken').value.trim() },
       ui: s.ui,
@@ -929,6 +1057,7 @@ async function route() {
   try {
     if ((name === 'tv' || name === 'anime') && arg) await episodesView(name, decodeURIComponent(arg));
     else if (name === 'movies' && arg) await movieFilesView(decodeURIComponent(arg));
+    else if (name === 'web' && arg) await webVideosView(decodeURIComponent(arg));
     else if (views[name]) await views[name]();
     else await views.dashboard();
   } catch (e) { view.innerHTML = `<div class="empty">Error: ${esc(e.message)}</div>`; }

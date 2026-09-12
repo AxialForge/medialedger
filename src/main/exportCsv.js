@@ -65,10 +65,13 @@ function unionList(vals) {
   return [...s].join(';');
 }
 
+function adultClause(settings) { return settings && settings.adult && settings.adult.exportCsv ? '' : ' AND adult=0'; }
+
 function exportEpisodes(db, type, dir, prefix, settings) {
+  const ur = new Map(db.all('SELECT title_key, stars, note FROM user_ratings WHERE library_type=?', type).map(r => [r.title_key, r]));
   const metas = new Map(db.all('SELECT * FROM series_meta WHERE library_type=?', type).map(m => [m.show_name, m]));
   const thr = (settings && settings.quality && settings.quality.minKbps) || {};
-  const rows = db.all('SELECT * FROM files WHERE library_type = ? AND ignored=0 ORDER BY show_name, season, episode, file_name', type);
+  const rows = db.all('SELECT * FROM files WHERE library_type = ? AND ignored=0' + adultClause(settings) + ' ORDER BY show_name, season, episode, file_name', type);
   const header = ['show', 'season', 'episode', 'episode_end', 'episode_title', 'file_name', 'rel_path', 'edition_tag', 'parse_ok', 'parse_note', ...TECH_COLS];
   writeCsv(path.join(dir, `${prefix}_episodes.csv`), header, rows.map(r => ({
     show: r.show_name, season: r.season, episode: r.episode, episode_end: r.episode_end, episode_title: r.episode_title,
@@ -99,17 +102,19 @@ function exportEpisodes(db, type, dir, prefix, settings) {
         meta_source: m ? m.source : '', meta_title: m ? m.matched_title : '', meta_status: m ? m.status : '',
         expected_episodes: r ? r.expectedTotal : '', missing_episodes: r ? r.missingCount : '',
         missing_list: r ? r.missing.map(x => x.missing.length >= x.expected ? `S${x.season}: all ${x.expected}` : `S${x.season}: ${x.missing.length > 15 ? x.missing.slice(0, 15).join(',') + ',… (' + x.missing.length + ')' : x.missing.join(',')}`).join('; ') : '',
-        absolute_numbering: r && r.absolute ? 'yes' : '' }; })(),
+        absolute_numbering: r && r.absolute ? 'yes' : '',
+        online_rating: m && m.rating != null ? m.rating : '', my_rating: ur.get(show) ? ur.get(show).stars : '', my_note: ur.get(show) ? ur.get(show).note || '' : '' }; })(),
       mixed_resolution: new Set(list.map(r => r.resolution).filter(Boolean)).size > 1 ? 'yes' : 'no',
       low_bitrate_files: list.filter(r => r.resolution && thr[r.resolution] && r.bitrate_kbps != null && r.bitrate_kbps < thr[r.resolution]).length,
     });
   }
-  writeCsv(path.join(dir, `${prefix}_series.csv`), ['show', 'seasons', 'season_list', 'episodes', 'unparsed_files', 'total_duration_h', 'total_size_gb', 'avg_episode_min', 'resolutions', 'video_codecs', 'audio_langs', 'sub_langs', 'captions_pct', 'episode_gaps', 'probe_errors', 'meta_source', 'meta_title', 'meta_status', 'expected_episodes', 'missing_episodes', 'missing_list', 'absolute_numbering', 'mixed_resolution', 'low_bitrate_files'], summary);
+  writeCsv(path.join(dir, `${prefix}_series.csv`), ['show', 'seasons', 'season_list', 'episodes', 'unparsed_files', 'total_duration_h', 'total_size_gb', 'avg_episode_min', 'resolutions', 'video_codecs', 'audio_langs', 'sub_langs', 'captions_pct', 'episode_gaps', 'probe_errors', 'meta_source', 'meta_title', 'meta_status', 'expected_episodes', 'missing_episodes', 'missing_list', 'absolute_numbering', 'online_rating', 'my_rating', 'my_note', 'mixed_resolution', 'low_bitrate_files'], summary);
   return [`${prefix}_episodes.csv`, `${prefix}_series.csv`];
 }
 
-function exportMovies(db, dir) {
-  const rows = db.all('SELECT * FROM files WHERE library_type = ? AND ignored=0 ORDER BY movie_title, movie_year, file_name', 'movie');
+function exportMovies(db, dir, settings) {
+  const ur = new Map(db.all("SELECT title_key, stars, note FROM user_ratings WHERE library_type='movie'").map(r => [r.title_key, r]));
+  const rows = db.all('SELECT * FROM files WHERE library_type = ? AND ignored=0' + adultClause(settings) + ' ORDER BY movie_title, movie_year, file_name', 'movie');
   const groups = new Map();
   for (const r of rows) { if (r.missing) continue; if (!groups.has(r.group_key)) groups.set(r.group_key, []); groups.get(r.group_key).push(r); }
   const header = ['title', 'year', 'edition_tag', 'file_name', 'rel_path', 'versions_of_title', 'is_multiple', 'parse_note', ...TECH_COLS];
@@ -130,12 +135,20 @@ function exportMovies(db, dir) {
       duration_min: min(Math.max(...list.map(r => r.duration_s || 0)) || null),
       audio_langs: unionList(list.map(r => r.audio_langs)), sub_langs: unionList(list.map(r => r.sub_langs)),
       has_captions: list.some(r => r.has_captions === 1) ? 'yes' : 'no', files: list.map(r => r.file_name).join(' | '),
+      my_rating: ur.get(list[0].group_key) ? ur.get(list[0].group_key).stars : '', my_note: ur.get(list[0].group_key) ? ur.get(list[0].group_key).note || '' : '',
     });
   }
   titles.sort((a, b) => a.title.localeCompare(b.title) || (a.year || 0) - (b.year || 0));
-  writeCsv(path.join(dir, 'movies_titles.csv'), ['title', 'year', 'file_count', 'is_multiple', 'versions', 'best_resolution', 'total_size_gb', 'duration_min', 'audio_langs', 'sub_langs', 'has_captions', 'files'], titles);
+  writeCsv(path.join(dir, 'movies_titles.csv'), ['title', 'year', 'file_count', 'is_multiple', 'versions', 'best_resolution', 'total_size_gb', 'duration_min', 'audio_langs', 'sub_langs', 'has_captions', 'my_rating', 'my_note', 'files'], titles);
   writeCsv(path.join(dir, 'movies_multiples.csv'), ['title', 'year', 'file_count', 'versions', 'best_resolution', 'total_size_gb', 'files'], titles.filter(t => t.file_count > 1));
   return ['movies.csv', 'movies_titles.csv', 'movies_multiples.csv'];
+}
+
+function exportWeb(db, dir, settings) {
+  const rows = db.all('SELECT * FROM files WHERE library_type = ? AND ignored=0' + adultClause(settings) + ' ORDER BY channel, upload_date, movie_title', 'web');
+  const header = ['channel', 'title', 'upload_date', 'video_id', 'file_name', 'rel_path', ...TECH_COLS];
+  writeCsv(path.join(dir, 'web_videos.csv'), header, rows.map(r => ({ channel: r.channel, title: r.movie_title, upload_date: r.upload_date, video_id: r.video_id, file_name: r.file_name, rel_path: r.rel_path, ...techFields(r) })));
+  return ['web_videos.csv'];
 }
 
 function exportChanges(db, dir, scanId) {
@@ -151,7 +164,8 @@ function exportAll(db, outDir, scanId, settings) {
   const written = [
     ...exportEpisodes(db, 'tv', dir, 'tv', settings),
     ...exportEpisodes(db, 'anime', dir, 'anime', settings),
-    ...exportMovies(db, dir),
+    ...exportMovies(db, dir, settings),
+    ...exportWeb(db, dir, settings),
     ...exportChanges(db, dir, scanId),
   ];
   const latest = path.join(outDir, 'latest');

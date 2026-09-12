@@ -199,6 +199,28 @@ const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS idx_rename_items_batch ON rename_items(batch_id);
     `,
   },
+  {
+    version: 4, name: 'adult flag, web videos, online + user ratings',
+    sql: `
+      ALTER TABLE files ADD COLUMN adult INTEGER DEFAULT 0;
+      ALTER TABLE files ADD COLUMN channel TEXT;
+      ALTER TABLE files ADD COLUMN video_id TEXT;
+      ALTER TABLE files ADD COLUMN upload_date TEXT;
+      CREATE INDEX IF NOT EXISTS idx_files_adult ON files(adult);
+      ALTER TABLE series_meta ADD COLUMN rating REAL;
+      ALTER TABLE series_meta ADD COLUMN rating_votes INTEGER;
+      CREATE TABLE IF NOT EXISTS user_ratings (
+        id            INTEGER PRIMARY KEY,
+        library_type  TEXT NOT NULL,
+        title_key     TEXT NOT NULL,
+        title         TEXT,
+        stars         REAL,
+        note          TEXT,
+        updated       TEXT,
+        UNIQUE(library_type, title_key)
+      );
+    `,
+  },
 ];
 
 class Db {
@@ -320,13 +342,21 @@ class Db {
   getSeriesMeta(type, show) { return this.get('SELECT * FROM series_meta WHERE library_type=? AND show_name=?', type, show); }
   allSeriesMeta(type) { return new Map(this.all('SELECT * FROM series_meta WHERE library_type=?', type).map(m => [m.show_name, m])); }
   saveSeriesMeta(m) {
-    const cols = ['library_type', 'show_name', 'source', 'source_id', 'matched_title', 'status', 'seasons', 'total_episodes', 'url', 'fetched_at', 'locked', 'note'];
+    const cols = ['library_type', 'show_name', 'source', 'source_id', 'matched_title', 'status', 'seasons', 'total_episodes', 'url', 'fetched_at', 'locked', 'note', 'rating', 'rating_votes'];
     const vals = cols.map(c => c === 'seasons' && m[c] && typeof m[c] !== 'string' ? JSON.stringify(m[c]) : (m[c] ?? null));
     this.run(`INSERT INTO series_meta (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})
       ON CONFLICT(library_type, show_name) DO UPDATE SET ${cols.filter(c => c !== 'library_type' && c !== 'show_name').map(c => `${c}=excluded.${c}`).join(',')}`, ...vals);
     return this.getSeriesMeta(m.library_type, m.show_name);
   }
   deleteSeriesMeta(type, show) { return this.run('DELETE FROM series_meta WHERE library_type=? AND show_name=?', type, show).changes; }
+  // ---- user ratings ---------------------------------------------------------
+  setUserRating(type, key, title, stars, note) {
+    this.run(`INSERT INTO user_ratings (library_type, title_key, title, stars, note, updated) VALUES (?,?,?,?,?,?)
+      ON CONFLICT(library_type, title_key) DO UPDATE SET title=excluded.title, stars=excluded.stars, note=excluded.note, updated=excluded.updated`, type, key, title, stars, note, new Date().toISOString());
+    return this.get('SELECT * FROM user_ratings WHERE library_type=? AND title_key=?', type, key);
+  }
+  userRatings(type) { return type ? this.all('SELECT * FROM user_ratings WHERE library_type=?', type) : this.all('SELECT * FROM user_ratings'); }
+
   // ---- movie rename batches ------------------------------------------------
   createBatch(mode, layout, note) { return Number(this.run('INSERT INTO rename_batches (ts, mode, layout, status, note) VALUES (?,?,?,?,?)', new Date().toISOString(), mode, layout, 'running', note || null).lastInsertRowid); }
   finishBatch(id, patch) { const cols = Object.keys(patch); this.run(`UPDATE rename_batches SET finished=?, ${cols.map(c => `${c}=?`).join(',')} WHERE id=?`, new Date().toISOString(), ...cols.map(c => patch[c]), id); }

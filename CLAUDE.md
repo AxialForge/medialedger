@@ -77,7 +77,7 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 | `src/main/db.js` | `node:sqlite` wrapper, base schema + `MIGRATIONS`, backups, overrides/exports helpers |
 | `src/main/scanner.js` | Walk roots (single or threaded) → diff against DB → apply overrides → queue ffprobe → change log |
 | `src/main/scanWorker.js` | Worker thread: readdir/stat/parse one top-level folder or a list of loose files |
-| `src/main/parse.js` | Path/filename → show/season/episode or title/year/edition/group_key |
+| `src/main/parse.js` | Path/filename → show/season/episode or title/year/edition/group_key; `parseWeb`, `classifyAdult`, single `parseFor(rootType, rel)` dispatch |
 | `src/main/ffprobe.js` | Locate ffprobe.exe, run it, flatten streams into DB columns |
 | `src/main/ffmpegdl.js` | Download BtbN ffmpeg zip, extract with PowerShell `Expand-Archive` |
 | `src/main/exportCsv.js` | Eight CSVs per export, timestamped dir + `latest\` copy |
@@ -124,6 +124,17 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   instance opens the window itself (`promotedToGui`) and keeps going.
 
 ## Gotchas
+
+- **Adult filtering is a query-time string, not a view.** `AF(alias)` in
+  `main.js` appends ` AND adult=0` to every library query unless the runtime
+  `showAdult` flag is on. Any new query over `files` must include `${AF()}`
+  (or `${AF('f.')}` when aliased) or adult rows leak into the main views. The
+  flag is deliberately not persisted.
+- **Root type vs library_type.** A root of type `adult` produces rows with
+  `library_type` anime/tv/movie and `adult=1`; a root of type `web` produces
+  `library_type='web'`. Code that maps root → parser must go through
+  `parseFor`, and `reparseAll` needs the root's type from settings
+  (`_rootType`), not the row's `library_type`.
 
 - **The installed app holds the single-instance lock.** If `MediaLedger.exe` is
   running, `npx electron .` quits instantly with no log line and no error (both

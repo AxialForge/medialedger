@@ -31,3 +31,20 @@ assert.strictEqual(proposeName({ library_type: 'tv', parse_ok: 0, file_name: 'x.
 assert.strictEqual(proposeName({ library_type: 'tv', parse_ok: 1, ignored: 1, file_name: 'x.mkv', show_name: 'S', season: 1, episode: 1 }), null);
 
 console.log('feature tests passed');
+
+// ---- adult classification + web parsing (appended 0.5.0) ----
+{
+  const { parseFor, parseWeb, classifyAdult } = require('../src/main/parse');
+  const E = String.raw;
+  let p = parseFor('adult', E`Aesthetica of a Rogue Hero\1 Aesthetica of a Rogue Hero.mp4`);
+  assert.strictEqual(p.library_type, 'anime'); assert.strictEqual(p.adult, 1); assert.strictEqual(p.episode, 1); assert.strictEqual(p.show_name, 'Aesthetica of a Rogue Hero');
+  assert.strictEqual(classifyAdult(E`Show\Show S01E02.mkv`), 'tv');
+  assert.strictEqual(classifyAdult('Some Film (2019).mp4'), 'movie');
+  assert.strictEqual(parseFor('adult', 'Some Film (2019).mp4').movie_title, 'Some Film');
+  p = parseWeb(E`Kurzgesagt – In a Nutshell\20240115 The Egg [dQw4w9WgXcQ].mp4`);
+  assert.strictEqual(p.channel, 'Kurzgesagt – In a Nutshell'); assert.strictEqual(p.video_id, 'dQw4w9WgXcQ'); assert.strictEqual(p.upload_date, '2024-01-15'); assert.strictEqual(p.movie_title, 'The Egg');
+  p = parseWeb('Animation vs. Math.mp4'); assert.strictEqual(p.channel, null); assert.strictEqual(p.movie_title, 'Animation vs Math'); assert.strictEqual(p.parse_ok, 1);
+  assert.strictEqual(parseFor('web', 'x.mp4').library_type, 'web');
+  assert.strictEqual(parseFor('tv', E`Show\Show S01E01.mkv`).adult, 0);
+  console.log('adult/web parse tests passed');
+}
