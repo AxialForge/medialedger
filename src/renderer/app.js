@@ -98,7 +98,21 @@ $('#btnCancel').onclick = () => L.scan.cancel();
 
 $('#showAdult').onchange = async e => { await L.adult.toggle(e.target.checked); refreshBadges(); if (!e.target.checked && currentView === 'adult') location.hash = '#dashboard'; else route(); };
 let updateState = { state: 'idle' };
-L.update.onStatus(s => { updateState = s; paintUpdatePill(); if (currentView === 'about') route(); });
+L.update.onStatus(s => {
+  const prev = updateState.state; updateState = s; paintUpdatePill();
+  if (currentView !== 'about') return;
+  const line = $('#updLine');
+  if (line && s.state === prev) line.textContent = updLineText(s); // e.g. download percent: no full re-render, no flicker
+  else route();
+});
+function updLineText(u, packaged = true) {
+  return {
+    idle: packaged ? 'No check yet.' : 'Running from source: updates only apply to the installed app.',
+    checking: 'Checking GitHub Releases…', available: `Version ${u.version} is available; downloading in the background.`,
+    downloading: `Downloading update… ${u.percent || 0}%`, current: 'You are on the latest version.',
+    ready: `Version ${u.version} is downloaded and will install on the next restart.`, error: `Update check failed: ${u.message}`,
+  }[u.state] || '';
+}
 function paintUpdatePill() {
   const p = $('#updatePill');
   if (updateState.state === 'ready') { p.textContent = 'restart'; p.hidden = false; }
@@ -1018,12 +1032,7 @@ async function downloadFfmpeg(msgEl, progEl, barEl, after) {
 views.about = async () => {
   const info = await L.appInfo();
   const u = updateState.state === 'idle' ? info.updateStatus : updateState;
-  const updLine = {
-    idle: info.packaged ? 'No check yet.' : 'Running from source: updates only apply to the installed app.',
-    checking: 'Checking GitHub Releases…', available: `Version ${u.version} is available; downloading in the background.`,
-    downloading: `Downloading update… ${u.percent || 0}%`, current: 'You are on the latest version.',
-    ready: `Version ${u.version} is downloaded and will install on the next restart.`, error: `Update check failed: ${u.message}`,
-  }[u.state] || '';
+  const updLine = updLineText(u, info.packaged);
   view.innerHTML = `<h1>About</h1>
     <div class="grid2">
       <div class="card">

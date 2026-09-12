@@ -12,6 +12,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [0.6.2] - 2026-09-12
+
+### Fixed
+
+- About page no longer flickers while an update downloads: progress updates
+  the status line in place instead of rebuilding the page.
+- Long values on the About page (ffprobe path, version banner) wrap inside
+  their card instead of running off the right edge.
+
 ## [0.6.1] - 2026-09-12
 
 ### Changed
