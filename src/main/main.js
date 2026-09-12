@@ -64,12 +64,36 @@ if (!gotLock) {
     if (result.status === 'done' && settings.get().metadata.enabled) {
       try { await refreshMetadata({ onlyNew: true }); } catch (e) { log('metadata failed: ' + e.message); }
     }
+    if (result.status === 'done' && settings.get().plex.enabled && settings.get().plex.token) {
+      try { await runPlexSync(trigger); } catch { /* logged */ }
+    }
     if (settings.get().autoExportAfterScan && result.status === 'done') {
       try { const out = runExport(result.scanId, trigger); log('exported to ' + out.dir); result.export = out; }
       catch (e) { log('export failed: ' + e.message); }
     }
     db.checkpoint();
     return result;
+  }
+
+  // ---- Plex sync ---------------------------------------------------------------------
+  let plexJob = { running: false, message: '' };
+  async function runPlexSync(trigger = 'manual') {
+    if (plexJob.running) return { skipped: true };
+    const cfg = settings.get().plex;
+    if (!cfg.token) throw new Error('No Plex token set (Settings → Plex)');
+    plexJob = { running: true, message: 'Connecting to Plex…' }; send('plex:progress', plexJob);
+    try {
+      const r = await plex.syncLibrary(db, cfg, { log, onProgress: p => { plexJob = { running: true, ...p }; send('plex:progress', plexJob); } });
+      if (r.mappingSuggested && !(cfg.pathMap || []).length) settings.set({ plex: { pathMap: [r.mappingSuggested] } });
+      db.run('INSERT INTO plex_syncs (ts, sections, items, matched, unmatched, note) VALUES (?,?,?,?,?,?)', r.synced_at, r.sections, r.items, r.matched, r.unmatched, trigger);
+      plexJob = { running: false, message: `Plex sync: ${r.matched.toLocaleString()} of ${r.items.toLocaleString()} items matched`, result: r }; send('plex:progress', plexJob);
+      log(`plex sync (${trigger}): ${r.matched}/${r.items} matched, ${r.unmatched} unmatched, ${r.shows} shows`);
+      return r;
+    } catch (e) {
+      plexJob = { running: false, message: 'Plex sync failed: ' + e.message, error: e.message }; send('plex:progress', plexJob);
+      log('plex sync failed: ' + e.message);
+      throw e;
+    }
   }
 
   // ---- series metadata (expected episode counts) ---------------------------------
@@ -299,6 +323,16 @@ if (!gotLock) {
   h('db:stats', () => db.stats());
 
   h('plex:test', (cfg) => plex.testConnection(cfg || settings.get().plex));
+  h('plex:sync', () => runPlexSync('manual'));
+  h('plex:status', () => {
+    const last = db.get('SELECT * FROM plex_syncs ORDER BY id DESC LIMIT 1');
+    const linked = db.get('SELECT COUNT(*) n FROM files WHERE plex_rating_key IS NOT NULL AND missing=0').n;
+    const total = db.get('SELECT COUNT(*) n FROM files WHERE missing=0 AND ignored=0').n;
+    const watched = db.get('SELECT COUNT(*) n FROM files WHERE plex_view_count > 0 AND missing=0').n;
+    const rated = db.get('SELECT COUNT(*) n FROM files WHERE plex_user_rating IS NOT NULL AND missing=0').n + db.get('SELECT COUNT(*) n FROM plex_shows WHERE user_rating IS NOT NULL').n;
+    const unlinked = db.all(`SELECT library_type, show_name, movie_title, movie_year, rel_path FROM files WHERE plex_rating_key IS NULL AND missing=0 AND ignored=0 AND library_type IN ('tv','anime','movie')${AF()} ORDER BY library_type, rel_path LIMIT 300`);
+    return { job: plexJob, last, linked, total, watched, rated, unlinked, pathMap: settings.get().plex.pathMap || [] };
+  });
 
   // ---- overrides (manual fixes) --------------------------------------------------
   h('override:list', () => db.listOverrides());
@@ -355,8 +389,9 @@ if (!gotLock) {
 
   // ---- movie naming engine ---------------------------------------------------------------
   function moviePlan() {
+    const truth = (settings.get().movieRename || {}).truth || 'parser';
     const rows = db.all(`SELECT f.*, o.source AS source_override FROM files f LEFT JOIN overrides o ON o.root_id=f.root_id AND o.rel_path=f.rel_path WHERE f.library_type='movie' AND f.missing=0${AF('f.')} ORDER BY f.movie_title COLLATE NOCASE, f.file_name`);
-    return planMovieNames(rows);
+    return planMovieNames(rows.map(r => ({ ...r, truth })));
   }
   h('movie:plan', () => ({ plan: moviePlan(), lock: renameLock, settings: settings.get().movieRename }));
   h('movie:run', async (ids, opts) => {
@@ -405,16 +440,19 @@ if (!gotLock) {
   h('ratings:list', () => {
     const ur = new Map(db.userRatings().map(u => [u.library_type + '|' + u.title_key, u]));
     const out = [];
+    const plexShows = new Map(db.all('SELECT rating_key, user_rating, audience_rating, rating, leaf_count, viewed_leaf_count FROM plex_shows').map(s => [s.rating_key, s]));
     for (const t of ['tv', 'anime']) {
       const metas = db.allSeriesMeta(t);
-      for (const r of db.all(`SELECT show_name, COUNT(*) files, SUM(size) bytes FROM files WHERE library_type=? AND missing=0 AND ignored=0${AF()} GROUP BY show_name`, t)) {
-        const m = metas.get(r.show_name), u = ur.get(t + '|' + r.show_name);
-        out.push({ library_type: t, key: r.show_name, title: r.show_name, files: r.files, bytes: r.bytes, online: m ? m.rating : null, online_source: m && m.rating != null ? m.source : null, online_votes: m ? m.rating_votes : null, url: m ? m.url : null, stars: u ? u.stars : null, note: u ? u.note : null, updated: u ? u.updated : null });
+      for (const r of db.all(`SELECT show_name, COUNT(*) files, SUM(size) bytes, MAX(plex_show_key) plex_show_key, SUM(CASE WHEN plex_view_count>0 THEN 1 ELSE 0 END) watched FROM files WHERE library_type=? AND missing=0 AND ignored=0${AF()} GROUP BY show_name`, t)) {
+        const m = metas.get(r.show_name), u = ur.get(t + '|' + r.show_name), ps = r.plex_show_key ? plexShows.get(r.plex_show_key) : null;
+        out.push({ library_type: t, key: r.show_name, title: r.show_name, files: r.files, bytes: r.bytes, online: m ? m.rating : null, online_source: m && m.rating != null ? m.source : null, online_votes: m ? m.rating_votes : null, url: m ? m.url : null, stars: u ? u.stars : null, note: u ? u.note : null, updated: u ? u.updated : null,
+          plex_user: ps ? ps.user_rating : null, plex_audience: ps ? (ps.audience_rating ?? ps.rating) : null, watched: r.watched, plex_linked: !!r.plex_show_key });
       }
     }
-    for (const r of db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, SUM(size) bytes FROM files WHERE library_type='movie' AND missing=0 AND ignored=0${AF()} GROUP BY group_key`)) {
+    for (const r of db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, SUM(size) bytes, MAX(plex_user_rating) plex_user, MAX(plex_audience_rating) plex_audience, MAX(plex_view_count) watched, MAX(plex_rating_key) plex_key FROM files WHERE library_type='movie' AND missing=0 AND ignored=0${AF()} GROUP BY group_key`)) {
       const u = ur.get('movie|' + r.group_key);
-      out.push({ library_type: 'movie', key: r.group_key, title: r.year ? `${r.title} (${r.year})` : r.title, files: r.files, bytes: r.bytes, online: null, online_source: null, online_votes: null, url: null, stars: u ? u.stars : null, note: u ? u.note : null, updated: u ? u.updated : null });
+      out.push({ library_type: 'movie', key: r.group_key, title: r.year ? `${r.title} (${r.year})` : r.title, files: r.files, bytes: r.bytes, online: null, online_source: null, online_votes: null, url: null, stars: u ? u.stars : null, note: u ? u.note : null, updated: u ? u.updated : null,
+        plex_user: r.plex_user, plex_audience: r.plex_audience, watched: r.watched ? 1 : 0, plex_linked: !!r.plex_key });
     }
     for (const r of db.all(`SELECT COALESCE(channel,'(no channel)') channel, COUNT(*) files, SUM(size) bytes FROM files WHERE library_type='web' AND missing=0 AND ignored=0${AF()} GROUP BY COALESCE(channel,'(no channel)')`)) {
       const u = ur.get('web|' + r.channel);
@@ -481,12 +519,13 @@ if (!gotLock) {
       SUM(size) bytes, SUM(duration_s) seconds, SUM(CASE WHEN probe_ok=1 THEN 1 ELSE 0 END) probed,
       SUM(CASE WHEN has_captions=1 THEN 1 ELSE 0 END) captioned, SUM(CASE WHEN parse_ok=0 THEN 1 ELSE 0 END) unparsed,
       GROUP_CONCAT(DISTINCT resolution) resolutions, GROUP_CONCAT(DISTINCT video_codec) codecs, GROUP_CONCAT(DISTINCT audio_langs) audio_langs, GROUP_CONCAT(DISTINCT sub_langs) sub_langs,
-      MAX(last_seen) last_seen
+      MAX(last_seen) last_seen, SUM(CASE WHEN plex_view_count>0 THEN 1 ELSE 0 END) watched, MAX(plex_show_key) plex_show_key, SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) plex_linked
     FROM files WHERE library_type=? AND missing=0 AND ignored=0${AF()} GROUP BY show_name ORDER BY show_name COLLATE NOCASE`, type);
+    const plexShows = new Map(db.all('SELECT rating_key, user_rating FROM plex_shows').map(s => [s.rating_key, s]));
     const miss = new Map(missingSummary(type).map(m => [m.show_name, m]));
     const metas = db.allSeriesMeta(type);
     const ur = new Map(db.userRatings(type).map(u => [u.title_key, u]));
-    return rows.map(r => { const m = miss.get(r.show_name); const sm = metas.get(r.show_name); const u = ur.get(r.show_name); return { ...r, expected: m ? m.expected : 0, missing_count: m ? m.missing_count : 0, meta_source: m ? m.source : null, meta_status: m ? m.status : null, online_rating: sm ? sm.rating : null, my_rating: u ? u.stars : null }; });
+    return rows.map(r => { const m = miss.get(r.show_name); const sm = metas.get(r.show_name); const u = ur.get(r.show_name); const ps = r.plex_show_key ? plexShows.get(r.plex_show_key) : null; return { ...r, expected: m ? m.expected : 0, missing_count: m ? m.missing_count : 0, meta_source: m ? m.source : null, meta_status: m ? m.status : null, online_rating: sm ? sm.rating : null, my_rating: u ? u.stars : null, plex_user: ps ? ps.user_rating : null }; });
   });
   h('data:episodes', (type, show) => ({ files: db.all(`SELECT * FROM files WHERE library_type=? AND show_name=? AND ignored=0${AF()} ORDER BY missing, season, episode, file_name`, type, show), missing: missingSummary(type).find(m => m.show_name === show) || null }));
   h('data:movies', () => db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, SUM(size) bytes, MAX(duration_s) seconds,

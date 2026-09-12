@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('ledger', {
   update: { check: invoke('update:check'), install: invoke('update:install'), status: invoke('update:status'), onStatus: listen('update:status') },
   db: { backup: invoke('db:backup'), backups: invoke('db:backups'), stats: invoke('db:stats') },
   plexTest: invoke('plex:test'),
+  plex: { sync: invoke('plex:sync'), status: invoke('plex:status'), onProgress: listen('plex:progress') },
   override: { list: invoke('override:list'), bulkSource: invoke('override:bulkSource'), save: invoke('override:save'), delete: invoke('override:delete'), suggest: invoke('override:suggest') },
   meta: { refresh: invoke('meta:refresh'), status: invoke('meta:status'), get: invoke('meta:get'), search: invoke('meta:search'), setMatch: invoke('meta:setMatch'), setManual: invoke('meta:setManual'), setNone: invoke('meta:setNone'), unlock: invoke('meta:unlock'), onProgress: listen('meta:progress') },
   dup: { keep: invoke('dup:keep'), clear: invoke('dup:clear') },

@@ -270,8 +270,6 @@ No. An unreachable root is logged as `root_offline` and skipped.
 
 ## Roadmap
 
-- Plex integration: match files to Plex library items, pull watched state and
-  Plex titles.
 - Move-into-season-folder option for the rename tool.
 - Poster and synopsis from the metadata match on the series page.
 

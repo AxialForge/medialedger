@@ -117,6 +117,7 @@ async function refreshBadges() {
     const w = $('#watchLine'); w.hidden = !d.watch.enabled; w.textContent = d.watch.enabled ? `Watching ${d.watch.roots.length} root(s)${d.watch.pending ? ` · ${d.watch.pending} change(s) pending` : ''}` : '';
   } catch { /* ignore */ }
 }
+L.plex.onProgress(p => { const box = $('#metaProgress'); box.hidden = !p.running && !p.message; $('#metaBar').className = p.running ? 'indeterminate' : ''; $('#metaMsg').textContent = p.message || ''; if (!p.running) { setTimeout(() => { box.hidden = true; }, 8000); if (['ratings', 'settings', 'tv', 'anime', 'movies'].includes(currentView)) route(); } });
 L.meta.onProgress(p => {
   const box = $('#metaProgress'); box.hidden = !p.running && !p.message;
   const bar = $('#metaBar'); if (p.total) { bar.className = ''; bar.style.width = Math.round(p.done / p.total * 100) + '%'; } else bar.className = 'indeterminate';
@@ -309,7 +310,8 @@ async function seriesView(type) {
     { key: 'sub_langs', label: 'Subs', render: r => esc(uniqList(r.sub_langs)) },
     { key: 'captioned', label: 'Captions', num: true, sortVal: r => r.probed ? r.captioned / r.episodes : -1, render: r => r.probed ? `<span class="badge ${r.captioned === r.episodes ? 'ok' : r.captioned ? 'warn' : 'bad'}">${pct(r.captioned, r.episodes)}%</span>` : '<span class="muted">—</span>' },
     { key: 'online_rating', label: 'Rating', num: true, render: r => r.online_rating != null ? `<span title="online average">${r.online_rating.toFixed(1)}</span>` : '<span class="muted">—</span>' },
-    { key: 'my_rating', label: 'Mine', sortVal: r => r.my_rating || 0, render: r => starsHtml(r.my_rating, type, r.show_name, r.show_name) },
+    { key: 'my_rating', label: 'Mine', sortVal: r => r.my_rating || 0, render: r => starsHtml(r.my_rating, type, r.show_name, r.show_name) + (r.plex_user != null ? ` <span class="muted tiny" title="your Plex rating">P${Number(r.plex_user / 2).toFixed(1)}</span>` : '') },
+    { key: 'watched', label: 'Watched', num: true, sortVal: r => r.plex_linked ? r.watched / r.episodes : -1, render: r => r.plex_linked ? `<span class="${r.watched === r.episodes ? 'ok' : ''}">${pct(r.watched, r.episodes)}%</span>` : '<span class="muted">—</span>' },
     { key: 'missing_count', label: 'Missing', num: true, sortVal: r => r.expected ? r.missing_count : -1, render: r => r.expected ? (r.missing_count ? `<span class="badge bad">${r.missing_count}</span> <span class="muted tiny">of ${r.expected}</span>` : '<span class="badge ok">complete</span>') : (r.meta_source === 'none' ? '<span class="badge" title="no match found">no match</span>' : '<span class="muted">—</span>') },
     { key: 'unparsed', label: 'Issues', num: true, render: r => (r.unparsed ? `<span class="badge warn">${r.unparsed} unparsed</span>` : '') + (r.probed < r.episodes ? `<span class="badge">${r.episodes - r.probed} unprobed</span>` : '') },
   ];
@@ -659,7 +661,7 @@ views.movienames = async () => {
   const flagged = ready.filter(p => p.flags.length);
   const placeholders = ready.filter(p => p.flags.some(f => f === 'no_year' || f === 'no_source'));
   const flagCounts = {}; for (const p of ready) for (const f of p.flags) { const k = f.split(':')[0]; flagCounts[k] = (flagCounts[k] || 0) + 1; }
-  const FLAG_TEXT = { no_source: 'no source marker → "Source" placeholder', no_year: 'no year → "(Year)" placeholder', res_mismatch: 'name claimed a different resolution; probe wins', hdr_uncertain: 'BT.2020 colour without HDR transfer; treated as HDR', hdr_claimed_but_sdr: 'name says HDR but probe says SDR', audio_und: 'audio language undefined in the file', audio_partly_und: 'some audio tracks have no language tag', audio_unknown: 'no audio language data' };
+  const FLAG_TEXT = { plex_unlinked: 'truth source is Plex but this file is not linked to a Plex item; file-name title used', plex_title_differs: 'Plex\'s title differs from the file-name title; Plex\'s was used', no_source: 'no source marker → "Source" placeholder', no_year: 'no year → "(Year)" placeholder', res_mismatch: 'name claimed a different resolution; probe wins', hdr_uncertain: 'BT.2020 colour without HDR transfer; treated as HDR', hdr_claimed_but_sdr: 'name says HDR but probe says SDR', audio_und: 'audio language undefined in the file', audio_partly_und: 'some audio tracks have no language tag', audio_unknown: 'no audio language data' };
   view.innerHTML = `<h1>Movie names</h1>
     <p class="lead">Builds <span class="mono">Title (Year) - Source Resolution HDR Codec [Audio] [{edition-…}].ext</span> from the parsed title and year plus <b>probed</b> resolution, colour, codec and audio. Anything the probe cannot prove becomes a placeholder word for you to fill in; anything unsafe is blocked. Every batch is a dry run unless you flip the live switch, is pre-flighted as a whole, verified file by file, journaled, and can be undone.</p>
     ${lock ? `<div class="warnbox">A rename batch is running (${esc(lock.rootId)} since ${fmtDate(lock.since)}). Scans are paused until it finishes.</div>` : ''}
@@ -676,6 +678,7 @@ views.movienames = async () => {
       <div class="inline">
         <label class="inline small">Layout <select id="mrLayout"><option value="inplace" ${mr.layout === 'inplace' ? 'selected' : ''}>rename in place</option><option value="folders" ${mr.layout === 'folders' ? 'selected' : ''}>move into "Title (Year)" folders</option></select></label>
         <label class="inline small">Batch limit <input type="number" id="mrLimit" min="1" max="5000" value="${mr.batchLimit}" style="width:80px"></label>
+        <label class="inline small">Title &amp; year from <select id="mrTruth"><option value="parser" ${(mr.truth || 'parser') === 'parser' ? 'selected' : ''}>file name + my fixes</option><option value="plex" ${mr.truth === 'plex' ? 'selected' : ''}>Plex match (falls back to file name)</option></select></label>
         <label class="inline small"><input type="checkbox" id="mrEnabled" ${mr.enabled ? 'checked' : ''}> <b class="bad">Allow live renames</b></label>
         <button class="small" id="mrSave">Save</button>
         <span class="muted tiny">Folder layout copies, verifies size and a head/tail hash, then deletes the original. In-place uses an atomic rename.</span>
@@ -727,7 +730,7 @@ views.movienames = async () => {
     $('#bsGo', card).onclick = async () => { const n = await L.override.bulkSource(ids, v === 'clear' ? '' : v); closeModal(); toast(`Source set on ${n} file(s)`); views.movienames(); };
   };
   $('#mSelNone').onclick = () => { selected.clear(); render(); };
-  $('#mrSave').onclick = async () => { await L.settings.set({ movieRename: { layout: $('#mrLayout').value, batchLimit: Number($('#mrLimit').value) || 200, enabled: $('#mrEnabled').checked } }); toast('Batch settings saved'); views.movienames(); };
+  $('#mrSave').onclick = async () => { await L.settings.set({ movieRename: { layout: $('#mrLayout').value, batchLimit: Number($('#mrLimit').value) || 200, enabled: $('#mrEnabled').checked, truth: $('#mrTruth').value } }); toast('Batch settings saved'); views.movienames(); };
 
   const showResult = (r, live) => {
     const okN = r.results.filter(x => x.ok).length;
@@ -850,20 +853,23 @@ views.adult = async () => {
 views.ratings = async () => {
   const rows = await L.ratings.list();
   const rated = rows.filter(r => r.stars), online = rows.filter(r => r.online != null);
-  view.innerHTML = `<h1>Ratings</h1><p class="lead">Online averages come from TVmaze (TV) and AniList (anime) with the episode-count lookup; nothing extra is fetched. Your own rating is a 0–5 star score per title, stored locally and exported in the CSVs. Click a star to rate; click the same star again to clear. Plex user ratings will join this page with the Plex integration.</p>
+  view.innerHTML = `<h1>Ratings</h1><p class="lead">Online averages come from TVmaze (TV) and AniList (anime) with the episode-count lookup; nothing extra is fetched. Your own rating is a 0–5 star score per title, stored locally and exported in the CSVs. Click a star to rate; click the same star again to clear. "Plex" is the audience score Plex shows; "Plex mine" is the rating you set in Plex (shown out of 5). Watched comes from Plex play counts. Run a Plex sync from Settings to refresh them.</p>
     <div class="tiles compact">${tile('', 'Titles', rows.length.toLocaleString())}${tile('', 'With online rating', online.length.toLocaleString(), online.length ? `avg ${(online.reduce((a, r) => a + r.online, 0) / online.length).toFixed(1)} / 10` : '')}${tile('okt', 'Rated by you', rated.length, rated.length ? `avg ${(rated.reduce((a, r) => a + r.stars, 0) / rated.length).toFixed(1)} / 5` : '')}${tile('', 'Top online', online.length ? online.sort((a, b) => b.online - a.online)[0].title : '—', online.length ? `${online[0].online} / 10` : '')}</div>
-    <div class="toolbar" style="margin-top:12px"><select id="rType"><option value="">all libraries</option><option value="tv">TV</option><option value="anime">Anime</option><option value="movie">Movies</option><option value="web">Web channels</option></select><label class="inline small"><input type="checkbox" id="rMine"> Only rated by me</label><label class="inline small"><input type="checkbox" id="rUnrated"> Only unrated by me</label></div><div id="rTable"></div>`;
+    <div class="toolbar" style="margin-top:12px"><select id="rType"><option value="">all libraries</option><option value="tv">TV</option><option value="anime">Anime</option><option value="movie">Movies</option><option value="web">Web channels</option></select><label class="inline small"><input type="checkbox" id="rMine"> Only rated by me</label><label class="inline small"><input type="checkbox" id="rPlex"> Only with a Plex rating of mine</label><label class="inline small"><input type="checkbox" id="rUnrated"> Only unrated by me</label></div><div id="rTable"></div>`;
   const cols = [
     { key: 'library_type', label: 'Library', render: r => `<span class="badge ${r.library_type}">${typeName(r.library_type)}</span>` },
     { key: 'title', label: 'Title', cls: 'wrap', render: r => r.library_type === 'movie' ? `<a href="#movies/${encodeURIComponent(r.key)}">${esc(r.title)}</a>` : r.library_type === 'web' ? `<a href="#web/${encodeURIComponent(r.key)}">${esc(r.title)}</a>` : `<a href="#${r.library_type}/${encodeURIComponent(r.key)}">${esc(r.title)}</a>` },
     { key: 'online', label: 'Online', num: true, render: r => r.online != null ? `<b>${r.online.toFixed(1)}</b><span class="muted tiny"> /10 ${esc(r.online_source || '')}${r.online_votes ? ' · ' + r.online_votes.toLocaleString() : ''}</span>` : '<span class="muted">—</span>' },
+    { key: 'plex_audience', label: 'Plex', num: true, render: r => r.plex_audience != null ? `<b>${Number(r.plex_audience).toFixed(1)}</b><span class="muted tiny"> /10</span>` : (r.plex_linked ? '<span class="muted">—</span>' : '') },
+    { key: 'plex_user', label: 'Plex mine', num: true, render: r => r.plex_user != null ? `<span class="warn">★ ${Number(r.plex_user / 2).toFixed(1)}</span><span class="muted tiny"> /5</span>` : '' },
+    { key: 'watched', label: 'Watched', num: true, render: r => r.library_type === 'movie' ? (r.watched ? '<span class="badge ok">yes</span>' : (r.plex_linked ? '<span class="muted">no</span>' : '')) : (r.plex_linked ? `${pct(r.watched, r.files)}%` : '') },
     { key: 'stars', label: 'Mine', sortVal: r => r.stars || 0, render: r => starsHtml(r.stars, r.library_type, r.key, r.title) },
     { key: 'note', label: 'Note', cls: 'wrap', render: r => `<input class="ratingnote" data-type="${esc(r.library_type)}" data-key="${esc(r.key)}" data-title="${esc(r.title)}" data-stars="${r.stars ?? ''}" value="${esc(r.note || '')}" placeholder="note…">` },
     { key: 'files', label: 'Files', num: true }, { key: 'bytes', label: 'Size', num: true, render: r => fmtBytes(r.bytes) },
   ];
-  const build = () => { const t = $('#rType').value, mine = $('#rMine').checked, un = $('#rUnrated').checked; const list = rows.filter(r => (!t || r.library_type === t) && (!mine || r.stars) && (!un || !r.stars)); const tb = makeTable(list, cols, { search: r => r.title, defaultSort: { key: 'online', asc: false } }); const box = $('#rTable'); box.innerHTML = ''; box.append(searchToolbar(tb, list.length), tb.node); };
+  const build = () => { const t = $('#rType').value, mine = $('#rMine').checked, un = $('#rUnrated').checked, px = $('#rPlex').checked; const list = rows.filter(r => (!t || r.library_type === t) && (!mine || r.stars) && (!un || !r.stars) && (!px || r.plex_user != null)); const tb = makeTable(list, cols, { search: r => r.title, defaultSort: { key: 'online', asc: false } }); const box = $('#rTable'); box.innerHTML = ''; box.append(searchToolbar(tb, list.length), tb.node); };
   build();
-  ['#rType', '#rMine', '#rUnrated'].forEach(id => { $(id).onchange = build; });
+  ['#rType', '#rMine', '#rUnrated', '#rPlex'].forEach(id => { $(id).onchange = build; });
   $('#rTable').addEventListener('change', async e => { const i = e.target.closest('.ratingnote'); if (!i) return; await L.ratings.setUser(i.dataset.type, i.dataset.key, i.dataset.title, i.dataset.stars === '' ? null : Number(i.dataset.stars), i.value.trim() || null); toast('Note saved'); });
   $('#rTable').addEventListener('click', e => { if (e.target.closest('.ratingnote')) e.stopPropagation(); }, true);
 };
@@ -925,10 +931,13 @@ views.settings = async () => {
       <div class="field"><label>Automatic updates</label><input type="checkbox" id="updOn" ${s.updates.enabled ? 'checked' : ''}><div class="hint">Installed builds check GitHub Releases on launch and every 6 hours, download silently and apply on the next restart. Your database and settings are untouched by updates.</div></div>
       <div class="field"><label>GitHub token</label><input type="password" id="ghToken" value="${esc(s.githubToken)}" placeholder="only while the repository is private"><div class="hint">A fine-grained token with read access to the AxialForge/medialedger repository. Not needed once the repo is public.</div></div>
 
-      <h2>Plex (later)</h2>
-      <div class="field"><label>Enable Plex lookups</label><input type="checkbox" id="plexOn" ${s.plex.enabled ? 'checked' : ''}><div class="hint">Reserved for a later phase: matching files to Plex library items and watched state. Only the connection test works today.</div></div>
-      <div class="field"><label>Plex URL</label><input type="text" id="plexUrl" value="${esc(s.plex.baseUrl)}"></div>
-      <div class="field"><label>Plex token</label><div class="inline"><input type="password" id="plexToken" style="flex:1" value="${esc(s.plex.token)}"><button class="small" id="plexTest">Test</button></div><div class="hint" id="plexMsg"></div></div>
+      <h2>Plex</h2>
+      <div class="field"><label>Plex URL</label><input type="text" id="plexUrl" value="${esc(s.plex.baseUrl)}"><div class="hint">Your Plex Media Server on the LAN, e.g. <span class="mono">http://192.168.1.204:32400</span> if Plex runs on the NAS.</div></div>
+      <div class="field"><label>Plex token</label><div class="inline"><input type="password" id="plexToken" style="flex:1" value="${esc(s.plex.token)}" autocomplete="off"><button class="small" id="plexTest">Test</button></div><div class="hint" id="plexMsg">In Plex Web: any item → ⋯ → Get Info → View XML; copy the value after <span class="mono">X-Plex-Token=</span> in that page's address. Stored only in settings.json on this PC.</div></div>
+      <div class="field"><label>Sync after every scan</label><input type="checkbox" id="plexOn" ${s.plex.enabled ? 'checked' : ''}><div class="hint">Pulls every movie and show section, links each Plex item to a file by path, and stores Plex's title, year, ids, your Plex rating, audience rating and watched state. Read-only against Plex.</div></div>
+      <div class="field"><label>Path mapping</label><div id="plexMap"></div><div class="hint">How Plex's file paths translate to yours. Derived automatically from the first match; edit if Plex runs elsewhere.</div></div>
+      <div class="field"><label></label><div class="inline"><button class="small" id="plexSync">Sync now</button><span class="muted small" id="plexSyncMsg"></span></div></div>
+      <div class="field"><label></label><div class="status-line" id="plexStatus">Loading…</div></div>
 
       <div class="inline" style="margin-top:18px"><button class="primary" id="save">Save settings</button></div>
     </div>`;
@@ -966,7 +975,7 @@ views.settings = async () => {
       renaming: { ...s.renaming, enabled: $('#renOn').checked },
       adult: { exportCsv: $('#adultCsv').checked, defaultSubtype: $('#adultDefault').value },
       quality: { minKbps: Object.fromEntries([...document.querySelectorAll('#thr input[data-res]')].map(i => [i.dataset.res, Number(i.value) || 0])) },
-      plex: { enabled: $('#plexOn').checked, baseUrl: $('#plexUrl').value.trim(), token: $('#plexToken').value.trim() },
+      plex: { enabled: $('#plexOn').checked, baseUrl: $('#plexUrl').value.trim(), token: $('#plexToken').value.trim(), pathMap: [...document.querySelectorAll('#plexMap .inline')].map(r => ({ plex: $('.pm-plex', r).value.trim(), local: $('.pm-local', r).value.trim() })).filter(m => m.plex && m.local) },
       ui: s.ui,
     };
   };
@@ -979,7 +988,20 @@ views.settings = async () => {
   $('#installTask').onclick = async () => { await L.settings.replace(collect()); const r = await L.schedule.installTask(); toast(r.message || (r.ok ? 'Task installed' : 'Failed'), !r.ok); refreshTask(); };
   $('#removeTask').onclick = async () => { const r = await L.schedule.removeTask(); toast(r.message || 'Task removed', !r.ok); refreshTask(); };
   $('#runTask').onclick = async () => { const r = await L.schedule.runTaskNow(); toast(r.message || 'Task started', !r.ok); setTimeout(refreshTask, 2000); };
-  $('#plexTest').onclick = async () => { $('#plexMsg').textContent = 'Testing…'; const r = await L.plexTest({ baseUrl: $('#plexUrl').value.trim(), token: $('#plexToken').value.trim() }); $('#plexMsg').textContent = r.message; };
+  $('#plexTest').onclick = async () => { $('#plexMsg').textContent = 'Testing…'; const r = await L.plexTest({ baseUrl: $('#plexUrl').value.trim(), token: $('#plexToken').value.trim() }); $('#plexMsg').textContent = r.message; $('#plexMsg').className = 'hint ' + (r.ok ? 'ok' : 'bad'); };
+  const mapBox = $('#plexMap');
+  const mapRow = (m) => el(`<div class="inline" style="margin-bottom:4px"><input class="pm-plex" placeholder="/media" value="${esc(m.plex || '')}" style="width:220px"> <span class="muted">→</span> <input class="pm-local" placeholder="\\\\nas\\share" value="${esc(m.local || '')}" style="flex:1"> <button class="small pm-del">✕</button></div>`);
+  const addMap = (m) => { const r = mapRow(m); mapBox.append(r); $('.pm-del', r).onclick = () => r.remove(); };
+  (s.plex.pathMap || []).forEach(addMap);
+  mapBox.append(el('<button class="small" id="pmAdd">Add mapping</button>'));
+  $('#pmAdd').onclick = () => { addMap({}); mapBox.append($('#pmAdd')); };
+  const refreshPlex = async () => {
+    const st = await L.plex.status();
+    $('#plexStatus').innerHTML = st.last ? `Last sync ${fmtDate(st.last.ts)}: ${st.last.matched.toLocaleString()} of ${st.last.items.toLocaleString()} Plex items matched to files · ${st.linked.toLocaleString()} of ${st.total.toLocaleString()} files linked · ${st.watched.toLocaleString()} watched · ${st.rated} with your Plex rating${st.unlinked.length ? `<br><span class="muted">${st.unlinked.length}${st.unlinked.length === 300 ? '+' : ''} files not in Plex, e.g. ${esc(st.unlinked.slice(0, 3).map(u => u.rel_path).join(' · '))}</span>` : ''}` : 'Never synced.';
+    if (st.job && st.job.running) $('#plexSyncMsg').textContent = st.job.message || 'Syncing…';
+  };
+  $('#plexSync').onclick = async () => { await L.settings.replace(collect()); $('#plexSyncMsg').textContent = 'Starting…'; try { const r = await L.plex.sync(); toast(`Plex sync: ${r.matched.toLocaleString()} of ${r.items.toLocaleString()} matched`); views.settings(); } catch (e) { toast(e.message, true); $('#plexSyncMsg').textContent = e.message; } };
+  refreshPlex();
   refreshTask();
 };
 

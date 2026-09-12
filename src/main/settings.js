@@ -30,6 +30,7 @@ const DEFAULTS = {
     enabled: false,           // "Allow live renames" switch; dry runs always work
     layout: 'inplace',        // inplace | folders
     batchLimit: 200,
+    truth: 'parser',          // parser | plex  — where Title/Year come from
   },
   quality: {                  // low-bitrate thresholds in kbps by resolution label
     minKbps: { '4K': 6000, '1440p': 3000, '1080p': 1500, '720p': 700, '576p': 400, '480p': 350, SD: 250 },
@@ -47,10 +48,11 @@ const DEFAULTS = {
     taskTime: '03:00',        // HH:MM local, daily
     taskName: 'MediaLedger Scan',
   },
-  plex: {                     // reserved for the later Plex integration
-    enabled: false,
-    baseUrl: 'http://127.0.0.1:32400',
+  plex: {
+    enabled: false,           // sync after every scan
+    baseUrl: 'http://192.168.1.204:32400',
     token: '',
+    pathMap: [],              // [{ plex: '/media', local: '\\\\nas\\share' }]; derived automatically on first sync
   },
   ui: { theme: 'dark' },
 };

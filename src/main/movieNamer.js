@@ -87,10 +87,16 @@ function proposeMovieName(f) {
   if (f.ignored) return { ok: false, blocked: 'ignored', name: null, tokens, flags };
   if (f.library_type !== 'movie') return { ok: false, blocked: 'not a movie', name: null, tokens, flags };
 
-  tokens.title = cleanTitle(f.movie_title);
+  // Truth source: parser (+ manual fixes) by default; 'plex' uses Plex's matched title/year when the file is linked.
+  const usePlex = f.truth === 'plex' && f.plex_rating_key && f.plex_title;
+  const srcTitle = usePlex ? f.plex_title : f.movie_title;
+  const srcYear = usePlex ? (f.plex_year || f.movie_year) : f.movie_year;
+  if (f.truth === 'plex' && !usePlex) flags.push('plex_unlinked');
+  if (usePlex && cleanTitle(f.plex_title) !== cleanTitle(f.movie_title)) flags.push('plex_title_differs');
+  tokens.title = cleanTitle(srcTitle);
   if (!tokens.title) return { ok: false, blocked: 'no title', name: null, tokens, flags };
 
-  if (f.movie_year && Number(f.movie_year) >= 1880 && Number(f.movie_year) <= 2100) tokens.year = String(f.movie_year);
+  if (srcYear && Number(srcYear) >= 1880 && Number(srcYear) <= 2100) tokens.year = String(srcYear);
   else { tokens.year = 'Year'; flags.push('no_year'); }
 
   // A manual fix can state the source outright (Web / Rip); it beats any marker in the name.

@@ -88,7 +88,7 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 | `src/main/movieNamer.js` | Pure movie naming engine: row → `{ ok, blocked, name, tokens, flags }`, collision detection |
 | `src/main/movieRename.js` | Movie batch executor: pre-flight, dry/live, in-place or copy-verify-delete folders, journal, undo |
 | `src/main/updater.js` | Template silent auto-updater (electron-updater), plus pure version helpers |
-| `src/main/plex.js` | Placeholder: connection test only (later: match to Plex items) |
+| `src/main/plex.js` | Plex local API: test, list sections, `syncLibrary` (path-map join → files.plex_* + plex_shows); pure `mapPath`/`deriveMapping`/`matchItems` |
 | `src/preload.js` | `window.ledger.*` API surface |
 | `src/renderer/` | `index.html`, `styles.css`, `app.js` (hash router, sortable tables, fix modal) |
 | `test/` | Parser + updater tests, scan harness |
@@ -105,9 +105,10 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   `exportCsv.js` and the table columns in `app.js`.
 - **New fixable field**: override column (migration) + `applyOverride` list +
   the fix modal in `app.js` (`openFixModal`).
-- **Plex phase**: `plex.js` gets a `matchLibrary(db, cfg)` that pulls
-  `/library/sections/*/all` and joins on file path; store the Plex rating key
-  and view count on `files`.
+- **Plex**: `plex.syncLibrary` is the only Plex code path. Episodes are paged
+  500 at a time (`X-Plex-Container-Start/Size`). Plex paths are the NAS's own
+  (`/media/...`); never assume the UNC form. userRating is 0–10 in Plex; the
+  UI shows it /5.
 
 ## Scheduling model
 

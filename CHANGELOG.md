@@ -12,6 +12,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [0.6.0] - 2026-09-12
+
+### Added
+
+- **Plex integration (phase 2).** Settings → Plex takes the server URL and
+  token, tests the connection, and syncs every movie and show section over the
+  local Plex API (read-only, no Plex account). Each Plex item is linked to a
+  MediaLedger file by path; the path mapping (`/media` → `\nas\share`) is
+  derived automatically from the first match and editable. Stored per file:
+  Plex title, year, rating key, IMDb/TMDB/TVDB ids, your Plex rating, the
+  audience rating, play count, last viewed and resume offset; per show: Plex's
+  own ratings and watched counts. Optional sync after every scan.
+- Ratings tab gains Plex audience score, your Plex rating (shown out of 5) and
+  a watched column; series lists show watched percentage and your Plex rating.
+- Movie naming engine gets a per-batch truth source: title and year from the
+  file name plus fixes (default) or from the Plex match, with flags when Plex
+  disagrees or a file is not linked.
 ## [0.5.0] - 2026-09-11
 
 ### Added

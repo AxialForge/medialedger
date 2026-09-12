@@ -221,6 +221,47 @@ const MIGRATIONS = [
       );
     `,
   },
+  {
+    version: 5, name: 'plex links, ratings and watched state',
+    sql: `
+      ALTER TABLE files ADD COLUMN plex_rating_key TEXT;
+      ALTER TABLE files ADD COLUMN plex_title TEXT;
+      ALTER TABLE files ADD COLUMN plex_year INTEGER;
+      ALTER TABLE files ADD COLUMN plex_show_key TEXT;
+      ALTER TABLE files ADD COLUMN plex_guids TEXT;
+      ALTER TABLE files ADD COLUMN plex_user_rating REAL;
+      ALTER TABLE files ADD COLUMN plex_audience_rating REAL;
+      ALTER TABLE files ADD COLUMN plex_view_count INTEGER;
+      ALTER TABLE files ADD COLUMN plex_last_viewed TEXT;
+      ALTER TABLE files ADD COLUMN plex_view_offset_ms INTEGER;
+      ALTER TABLE files ADD COLUMN plex_section TEXT;
+      ALTER TABLE files ADD COLUMN plex_synced_at TEXT;
+      CREATE INDEX IF NOT EXISTS idx_files_plex ON files(plex_rating_key);
+      CREATE TABLE IF NOT EXISTS plex_shows (
+        rating_key        TEXT PRIMARY KEY,
+        section           TEXT,
+        title             TEXT,
+        year              INTEGER,
+        guids             TEXT,
+        user_rating       REAL,
+        audience_rating   REAL,
+        rating            REAL,
+        leaf_count        INTEGER,
+        viewed_leaf_count INTEGER,
+        content_rating    TEXT,
+        synced_at         TEXT
+      );
+      CREATE TABLE IF NOT EXISTS plex_syncs (
+        id          INTEGER PRIMARY KEY,
+        ts          TEXT NOT NULL,
+        sections    INTEGER,
+        items       INTEGER,
+        matched     INTEGER,
+        unmatched   INTEGER,
+        note        TEXT
+      );
+    `,
+  },
 ];
 
 class Db {
