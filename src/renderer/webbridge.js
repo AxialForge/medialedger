@@ -12,6 +12,10 @@
 // Does nothing when preload.js already installed window.ledger (desktop app).
 (function () {
   if (window.ledger || !window.LEDGER_SHAPE) return;
+  if (location.protocol === 'file:') { // desktop app whose preload failed: do not pretend to be a web client
+    document.addEventListener('DOMContentLoaded', () => { const m = document.querySelector('#view') || document.body; m.innerHTML = '<div class="empty">The desktop bridge did not load (preload.js failed). Reinstall MediaLedger or run from source with the log open.</div>'; });
+    return;
+  }
 
   function dialog({ title, text, fields, button }) {
     return new Promise((resolve) => {

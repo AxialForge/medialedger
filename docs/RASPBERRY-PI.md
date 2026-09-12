@@ -13,6 +13,65 @@ desktop database over, and troubleshooting.
 
 ---
 
+## Requirements at a glance
+
+| | |
+|---|---|
+| Board | Raspberry Pi 4B or 5 recommended; Pi 3 works on 64-bit OS but scans slowly |
+| OS | **Raspberry Pi OS Lite (64-bit)**, Trixie or newer. 32-bit is not supported |
+| Card | 32 GB A2 microSD or a USB SSD |
+| Network | Ethernet to the same LAN as the NAS |
+| Installed by the script | Node 22 (NodeSource), ffmpeg, cifs-utils, curl, openssl |
+| You need to know | the NAS share username and password; a web password of your choosing (8+ characters) |
+| Ports | 8080 on the Pi, LAN only |
+
+## The whole thing in four commands
+
+On your PC, after flashing the card with SSH enabled:
+
+```bash
+ssh medialedger.local
+```
+
+On the Pi:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AxialForge/medialedger/main/server/install.sh -o install.sh && sudo bash install.sh
+```
+
+Answer the share username, share password and web password prompts. Then open
+`http://medialedger.local:8080`, sign in, set the roots under Settings, press
+Scan now. Later:
+
+```bash
+sudo medialedger-update
+```
+
+```bash
+sudo medialedger --set-password
+```
+
+## Command reference
+
+| Command (on the Pi) | Does |
+|---|---|
+| `sudo medialedger-update` | download, verify and install the newest release, restart. Data untouched |
+| `sudo medialedger --set-password` | set or reset the web password; signs everyone out |
+| `systemctl status medialedger` | running? since when? last log lines |
+| `journalctl -u medialedger -f` | follow the log live |
+| `journalctl -u medialedger -n 50 --no-pager` | last 50 log lines |
+| `sudo systemctl restart medialedger` | restart (also `stop`, `start`) |
+| `ls /mnt/media` | is the share mounted |
+| `sudo mount /mnt/media` | re-mount after a NAS reboot |
+| `sudo rm /etc/medialedger-cifs.cred` + rerun installer | change share credentials |
+| `sudo bash install.sh` | rerun: repairs service, mount and commands, keeps data |
+| `sudo bash install.sh --https` | add a self-signed certificate and serve HTTPS |
+| `vcgencmd measure_temp` | chip temperature from the shell |
+
+Everything below is the long form.
+
+---
+
 ## 1. Hardware
 
 | Part | Minimum | Recommended |

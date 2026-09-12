@@ -8,6 +8,7 @@ const updater = require('./updater');
 const { createService } = require('./service');
 
 const HEADLESS = process.argv.includes('--scan');
+const urlArg = (process.argv.find(a => a.startsWith('--url=')) || '').slice('--url='.length);
 // `--profile=<dir>`: use a separate data folder (dev/testing next to an installed copy).
 const profileArg = process.argv.find(a => a.startsWith('--profile='));
 if (profileArg) app.setPath('userData', profileArg.slice('--profile='.length));
@@ -58,9 +59,11 @@ function createWindow() {
       backgroundColor: '#0f1115',
       autoHideMenuBar: true,
       icon: path.join(__dirname, '..', '..', 'build', 'icon.png'),
-      webPreferences: { preload: path.join(__dirname, '..', 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+      // `--url=<http://…>` renders the web server's UI (no preload, so the browser bridge is used) — for documentation screenshots.
+      // sandbox must be false: the preload requires renderer/bridge-shape.js, which a sandboxed preload cannot load (it dies silently and the page shows "Failed to fetch").
+      webPreferences: { preload: urlArg ? undefined : path.join(__dirname, '..', 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
     });
-    win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+    if (urlArg) win.loadURL(urlArg); else win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
     win.on('closed', () => { win = null; });
   }
 
@@ -106,10 +109,22 @@ function createWindow() {
       ['dashboard', '#dashboard'], ['tv', '#tv'], ['anime', '#anime'], ['movies', '#movies'],
       ['episodes', '#anime/' + encodeURIComponent('One Piece')], ['movie-versions', '#movies/' + encodeURIComponent('pacificrim|2013')],
       ['missing', '#missing'], ['duplicates', '#duplicates'], ['movienames', '#movienames'], ['web', '#web'], ['ratings', '#ratings'], ['quality', '#quality'], ['rename', '#rename'],
-      ['changes', '#changes'], ['problems', '#problems'], ['export', '#export'], ['settings', '#settings'], ['about', '#about'],
+      ['changes', '#changes'], ['problems', '#problems'], ['export', '#export'], ['system', '#system'], ['settings', '#settings'], ['about', '#about'],
     ];
     await new Promise(r => win.webContents.once('did-finish-load', r));
     await sleep(1500);
+    if (urlArg) {
+      // Web build: capture the sign-in dialog, sign in with MEDIALEDGER_SHOT_PASSWORD, then the web-only screens.
+      await sleep(1500);
+      const img0 = await win.webContents.capturePage(); if (!img0.isEmpty()) { fs.writeFileSync(path.join(dir, 'web-login.png'), img0.toPNG()); log('screenshot web-login'); }
+      await win.webContents.executeJavaScript(`(() => { const f = document.querySelector('.webauth form'); if (!f) return false; f.elements.password.value = ${JSON.stringify(process.env.MEDIALEDGER_SHOT_PASSWORD || '')}; f.querySelector('button[type=submit]').click(); return true; })()`);
+      await sleep(2500);
+      for (const [name, hash] of [['web-security', '#security'], ['web-system', '#system'], ['web-about', '#about'], ['web-dashboard', '#dashboard']]) {
+        await win.webContents.executeJavaScript(`location.hash = ${JSON.stringify(hash)}`); await sleep(2500);
+        const im = await win.webContents.capturePage(); if (!im.isEmpty()) { fs.writeFileSync(path.join(dir, `${name}.png`), im.toPNG()); log('screenshot ' + name); }
+      }
+      return;
+    }
     const social = (process.argv.find(a => a.startsWith('--social=')) || '').slice('--social='.length);
     if (/^\d+x\d+$/.test(social)) {
       const [w, hgt] = social.split('x').map(Number);

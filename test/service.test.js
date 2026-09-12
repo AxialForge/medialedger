@@ -34,4 +34,7 @@ const served = new Set([...svc.handlers.keys(), ...electronOnly]);
 for (const ch of bridge) if (!events.has(ch)) assert.ok(served.has(ch), `bridge calls ${ch} but nothing serves it`);
 for (const ch of served) assert.ok(bridge.has(ch), `${ch} is served but the bridge never calls it`);
 
+// 3. preload.js's only project require must resolve; a sandboxed preload cannot load it at all (see CLAUDE.md gotchas)
+assert.ok(/require\('\.\/renderer\/bridge-shape\.js'\)/.test(read('preload.js')), 'preload builds from bridge-shape.js');
+assert.ok(/sandbox: false/.test(read('main/main.js')), 'BrowserWindow must set sandbox: false while preload.js requires a project file');
 console.log(`service tests passed (${svc.handlers.size} core handlers, ${electronOnly.size} electron-only, ${events.size} events)`);

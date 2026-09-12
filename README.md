@@ -30,8 +30,10 @@ last week?* MediaLedger answers those by reading the files themselves with
 `ffprobe`, keeping the results in a local SQLite database, and diffing every
 scan against the last one.
 
-It runs entirely on your PC. There is no web server, no browser tab, no account,
-and nothing leaves the machine except an update check against this repository.
+It runs entirely on your PC as a desktop app, or as a password-protected
+website on a Raspberry Pi for your LAN. No account, no cloud, nothing leaves
+your network except the update check against this repository and the optional
+keyless episode-count lookups.
 
 ## Highlights
 
@@ -52,6 +54,8 @@ and nothing leaves the machine except an update check against this repository.
 | **Scheduling** | An in-app timer while the app is open, a Windows Task Scheduler job that runs even when it is closed, and an optional folder watch that scans as soon as the share goes quiet after a change. |
 | **Movie naming engine** | Builds `Title (Year) - Source Resolution HDR Codec` names from parsed title/year plus *probed* facts only. Placeholders for anything unproven, blocking for anything unsafe, dry run by default, whole-batch pre-flight, per-file verification, journal and undo. |
 | **Rename tool for TV/anime (opt-in)** | Proposes Plex-standard episode names from what the app already knows, renames only what you tick, in place, never overwriting, with a full log. Off by default. |
+| **System tab** | Health verdict, CPU per core, memory, disk and per-root free space, network throughput, and on a Pi the SoC temperature, clock, voltage and throttling flags. |
+| **Raspberry Pi web server** | The same app served to the LAN: scrypt password, LAN-only by default, lockout, optional two-factor codes, password re-entry for anything that touches the share, audit log and a Security tab. One install script, one update command, a 120 kB dependency-free package. |
 | **Self-contained** | Downloads ffmpeg on first launch if none is installed, updates itself silently from GitHub Releases, and keeps its database and settings in your user profile so reinstalling or updating never loses data. |
 
 ## Screenshots
@@ -305,6 +309,15 @@ shares. Each install keeps its own database and fixes.
 
 **The NAS was off during a scheduled scan. Did everything get marked missing?**
 No. An unreachable root is logged as `root_offline` and skipped.
+
+## Documentation
+
+| Document | For |
+|---|---|
+| [User Manual (Word)](docs/MediaLedger-Manual.docx) | Every tab and dialog, step-by-step procedures, settings reference, the Pi chapter, troubleshooting. Screenshots throughout. |
+| [Raspberry Pi guide](docs/RASPBERRY-PI.md) | Requirements, OS, install, commands, security, moving the database, troubleshooting, uninstall. Also the README inside the server package. |
+| [CHANGELOG](CHANGELOG.md) | What changed in each release. |
+| [CLAUDE.md](CLAUDE.md) | Architecture map, non-negotiables and the gotchas list, for anyone changing the code. |
 
 ## Roadmap
 

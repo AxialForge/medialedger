@@ -1,7 +1,7 @@
 {
   "name": "medialedger",
   "productName": "MediaLedger",
-  "version": "0.8.2",
+  "version": "1.0.0",
   "description": "Local desktop tracker for a Plex media share: TV, anime and movie inventory with ffprobe details, CSV export, scheduled scans and a change log.",
   "main": "src/main/main.js",
   "author": "AxialForge",

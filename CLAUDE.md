@@ -196,6 +196,14 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 - **Web shell: `EventSource` must not open before login.** It 401s and retries
   forever, flooding the log; `webbridge.js` opens it after the first successful
   call.
+- **A sandboxed preload cannot `require` project files.** 0.7.0 made
+  `preload.js` require `renderer/bridge-shape.js` while the window still had
+  `sandbox: true`. The preload died silently, `window.ledger` was never
+  defined, `webbridge.js` took over and every desktop screen said "Failed to
+  fetch". Versions 0.7.0 to 0.8.2 shipped broken on the desktop while the web
+  build worked. Fix: `sandbox: false` (contextIsolation stays on). Guarded by
+  `test/service.test.js`. **Release gate: run the desktop screenshot pass and
+  look at `dashboard.png` before every tag.** Web-only testing is not enough.
 - **GNU tar on Windows treats `C:` as a remote host.** `tar -czf C:\path\out.tgz` fails with "Cannot connect to C". `pack-server.js` runs tar with `cwd` set and a relative output name, then copies the file.
 - **RFC 6238 test vectors are 8 digits.** The 6-digit code is the last six: T=59 → 287082, T=1111111109 → 081804, T=2000000000 → 279037 (not 005924, which is T=1234567890).
 - **Security handlers take a context first.** `server.js` calls `security:*` as `fn({ session, ip }, ...args)`; every other handler gets the renderer's arguments only. The desktop shell answers `security:status` with `{ available: false }` so the tab explains itself there.

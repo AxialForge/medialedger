@@ -12,6 +12,32 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [1.0.0] - 2026-09-12
+
+The first stable release. Both shells, the Windows desktop app and the
+Raspberry Pi web server, share one core, one database format and one manual.
+
+### Added
+
+- **User manual** regenerated for 1.0 with new chapters: System, Security, and
+  *Running MediaLedger on a Raspberry Pi* (requirements, step-by-step install,
+  first run, command reference, security, moving the desktop database, file
+  locations, troubleshooting). Screenshots of the web build included.
+- `docs/README.md` index; README gains a Documentation section, System and
+  Raspberry Pi rows in Highlights.
+- Pi guide opens with a requirements table, the four commands that do
+  everything, and a command reference.
+- Screenshot mode can capture the web build (`--url=http://<pi>:8080`).
+
+### Fixed
+
+- **Desktop app did not load in 0.7.0 through 0.8.2**: every screen showed
+  "Failed to fetch". The preload script could not load the shared bridge shape
+  inside Electron's sandbox, so the browser bridge took over. The window now
+  runs the preload unsandboxed (context isolation stays on), a test guards it,
+  and the desktop screenshot pass is a release gate. The web server was not
+  affected.
+
 ## [0.8.2] - 2026-09-12
 
 ### Changed
