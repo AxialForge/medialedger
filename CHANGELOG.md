@@ -12,6 +12,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [0.8.2] - 2026-09-12
+
+### Changed
+
+- System tab samples and refreshes every 5 s instead of 15 s (history still one hour).
+
+### Fixed
+
+- Pi throttling / voltage tile was missing: the installer now adds the service user to the `video` group so `vcgencmd` works. Rerun the installer or `sudo usermod -aG video medialedger && sudo systemctl restart medialedger`.
+
 ## [0.8.1] - 2026-09-12
 
 ### Fixed

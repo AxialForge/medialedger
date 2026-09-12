@@ -40,6 +40,8 @@ echo "node $(node -v), $(ffprobe -version | head -1 | cut -d' ' -f1-3)"
 say "Service user and data folder"
 id -u "$SVC_USER" >/dev/null 2>&1 || useradd --system --home-dir "$DATA_DIR" --shell /usr/sbin/nologin "$SVC_USER"
 install -d -o "$SVC_USER" -g "$SVC_USER" -m 0750 "$DATA_DIR"
+# video group: lets the service read the firmware throttling flags and core voltage (vcgencmd) for the System tab
+getent group video >/dev/null && usermod -aG video "$SVC_USER"
 
 say "Application at $APP_DIR"
 # fetch_release: download the server-only package from the latest GitHub Release, verify SHA-256, swap into APP_DIR.

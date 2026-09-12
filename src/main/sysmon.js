@@ -11,7 +11,7 @@ const os = require('os');
 const fs = require('fs');
 const { execFile } = require('child_process');
 
-const SAMPLE_MS = 15000;
+const SAMPLE_MS = 5000;
 const KEEP = Math.round(3600000 / SAMPLE_MS); // one hour
 
 const isLinux = process.platform === 'linux';
