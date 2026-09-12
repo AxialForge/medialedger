@@ -8,6 +8,11 @@ const os = require('os');
 function findFfprobe(configured) {
   const candidates = [];
   if (configured) candidates.push(configured);
+  if (process.platform !== 'win32') {
+    for (const dir of ['/usr/bin', '/usr/local/bin', '/opt/homebrew/bin', ...(process.env.PATH || '').split(path.delimiter)]) candidates.push(path.join(dir, 'ffprobe'));
+    for (const c of candidates) { try { if (fs.statSync(c).isFile()) return c; } catch { /* next */ } }
+    return null;
+  }
   // Common Windows install spots
   const roots = ['C:\\ffmpeg', 'C:\\Program Files\\ffmpeg', 'C:\\Program Files (x86)\\ffmpeg', 'C:\\tools\\ffmpeg'];
   for (const r of roots) {

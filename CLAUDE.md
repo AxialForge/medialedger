@@ -90,7 +90,12 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 | `src/main/movieRename.js` | Movie batch executor: pre-flight, dry/live, in-place or copy-verify-delete folders, journal, undo |
 | `src/main/updater.js` | Template silent auto-updater (electron-updater), plus pure version helpers |
 | `src/main/plex.js` | Plex local API: test, list sections, `syncLibrary` (path-map join → files.plex_* + plex_shows); pure `mapPath`/`deriveMapping`/`matchItems` |
-| `src/preload.js` | `window.ledger.*` API surface |
+| `src/preload.js` | Desktop bridge: builds `window.ledger` from `bridge-shape.js` over IPC |
+| `src/renderer/bridge-shape.js` | The one description of the `window.ledger` tree (leaf = channel, `!` prefix = event). Both bridges build from it; `test/service.test.js` checks it against the handlers |
+| `src/renderer/webbridge.js` | Browser bridge: same tree over `POST /api/<channel>` + `EventSource /api/events`; shows the login form on 401. No-op inside Electron |
+| `src/server/server.js` | Web shell (Pi): node:http, static renderer, cookie sessions in `<data>/web.json`, SSE broadcast as `send`, web versions of the 9 Electron-only handlers |
+| `src/main/paths.js` | `absOf(rootPath, rel)`: stored `rel_path` uses `\` on every OS; join with the local separator only when touching disk |
+| `server/install.sh` | Pi installer: Node 22, ffmpeg, CIFS fstab mount at `/mnt/media`, `medialedger` system user, systemd unit, `medialedger` / `medialedger-update` commands |
 | `src/renderer/` | `index.html`, `styles.css`, `app.js` (hash router, sortable tables, fix modal) |
 | `test/` | Parser + updater tests, scan harness |
 | `tools/make-icon.js` | Icon generator |
@@ -179,6 +184,13 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   `forced` / `sdh` suffix stripped. None exist on the share today.
 - **ffprobe `format_name` for mp4 is `mov,mp4,m4a,3gp,3g2,mj2`**; mapped to a
   short label in `containerLabel()`. Do not show the raw string.
+- **`rel_path` is backslash-separated everywhere, including Linux.** The
+  scanner builds it with a literal `'\\'` so a database is portable between the
+  Windows desktop and the Pi server. Never `path.join(root, rel)` directly: on
+  Linux that yields `/mnt/media/Show\S01\ep.mkv`. Use `paths.absOf()`.
+- **Web shell: `EventSource` must not open before login.** It 401s and retries
+  forever, flooding the log; `webbridge.js` opens it after the first successful
+  call.
 - **`node:sqlite` prints an ExperimentalWarning** on start. Harmless.
 - **npm blocked Electron's postinstall** (`allow-scripts`) on first install;
   the binary was fetched with `node node_modules/electron/install.js`.

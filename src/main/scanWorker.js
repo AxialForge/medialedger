@@ -6,6 +6,7 @@ const { parentPort, workerData } = require('worker_threads');
 const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
+const { absOf } = require('./paths');
 const { parseFor } = require('./parse');
 
 const { videoExt, subExt, ignore, statConcurrency } = workerData;
@@ -39,7 +40,7 @@ async function walkJob(job) {
   }
   while (dirs.length) {
     const rel = dirs.shift();
-    const abs = rel ? path.join(job.rootPath, rel) : job.rootPath;
+    const abs = absOf(job.rootPath, rel);
     let entries;
     try { entries = await fsp.readdir(abs, { withFileTypes: true }); }
     catch (e) { errors.push({ rel, message: 'readdir failed: ' + e.message }); continue; }

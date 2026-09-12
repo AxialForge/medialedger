@@ -107,7 +107,7 @@ L.update.onStatus(s => {
 });
 function updLineText(u, packaged = true) {
   return {
-    idle: packaged ? 'No check yet.' : 'Running from source: updates only apply to the installed app.',
+    idle: L.isWeb ? 'Web server: update from the Pi with sudo medialedger-update.' : packaged ? 'No check yet.' : 'Running from source: updates only apply to the installed app.',
     checking: 'Checking GitHub Releases…', available: `Version ${u.version} is available; downloading in the background.`,
     downloading: `Downloading update… ${u.percent || 0}%`, current: 'You are on the latest version.',
     ready: `Version ${u.version} is downloaded and will install on the next restart.`, error: `Update check failed: ${u.message}`,

@@ -4,11 +4,13 @@
 const fs = require('fs');
 const path = require('path');
 
+// Windows talks to the share by UNC path; the Linux server sees it where fstab mounted it.
+const SHARE = process.platform === 'win32' ? '\\\\192.168.1.204\\Apocrypha_Media_Pool\\' : '/mnt/media/';
 const DEFAULTS = {
   roots: [
-    { id: 'movies', label: 'Movies', path: '\\\\192.168.1.204\\Apocrypha_Media_Pool\\Movies', type: 'movie', enabled: true },
-    { id: 'anime', label: 'Anime', path: '\\\\192.168.1.204\\Apocrypha_Media_Pool\\Anime', type: 'anime', enabled: true },
-    { id: 'tv', label: 'TV Shows', path: '\\\\192.168.1.204\\Apocrypha_Media_Pool\\TV_Shows', type: 'tv', enabled: true },
+    { id: 'movies', label: 'Movies', path: SHARE + 'Movies', type: 'movie', enabled: true },
+    { id: 'anime', label: 'Anime', path: SHARE + 'Anime', type: 'anime', enabled: true },
+    { id: 'tv', label: 'TV Shows', path: SHARE + 'TV_Shows', type: 'tv', enabled: true },
   ],
   adult: { exportCsv: false, defaultSubtype: 'anime' }, // adult roots: hidden by default (runtime toggle), kept out of CSVs unless allowed
   ffprobePath: '',            // empty = auto-detect

@@ -102,7 +102,8 @@ function createService({ userData, log, send, host }) {
     const staleBefore = new Date(Date.now() - (Number(cfg.refreshDays) || 14) * 86400000).toISOString();
     for (const t of types) {
       const have = db.allSeriesMeta(t);
-      const series = db.all(`SELECT DISTINCT show_name FROM files WHERE library_type=? AND missing=0 AND ignored=0 AND show_name IS NOT NULL ORDER BY show_name`, t).map(r => r.show_name);
+      // Adult-root series are never looked up: AniList refuses them (403) and the titles should not leave this machine.
+      const series = db.all(`SELECT DISTINCT show_name FROM files WHERE library_type=? AND missing=0 AND ignored=0 AND adult=0 AND show_name IS NOT NULL ORDER BY show_name`, t).map(r => r.show_name);
       for (const s of series) {
         if (shows && !shows.includes(s)) continue;
         const m = have.get(s);

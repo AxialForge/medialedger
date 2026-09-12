@@ -112,6 +112,32 @@ Updates are checked on launch and every six hours and installed silently on the
 next restart. No account or token is needed; the token field under
 Settings → Updates is only a fallback for a private fork.
 
+## Run it on a Raspberry Pi
+
+The same app runs as a website on any Linux box with Node 22, built for a
+Raspberry Pi 4 on Raspberry Pi OS Lite (64-bit). One script installs everything:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AxialForge/medialedger/main/server/install.sh -o install.sh
+sudo bash install.sh
+```
+
+It installs Node 22 and ffmpeg, mounts the share at `/mnt/media` (asks once for
+the share login, stored root-only in `/etc/medialedger-cifs.cred`), creates a
+`medialedger` system user and service on port 8080, and asks for the web
+password. Then open `http://medialedger.local:8080` from any device on the LAN.
+
+| Command | Does |
+|---|---|
+| `sudo medialedger-update` | pull the latest release and restart |
+| `sudo medialedger --set-password` | change the web password (signs everyone out) |
+| `journalctl -u medialedger -f` | follow the log |
+
+Every tab works in the browser. Differences from the desktop app: folder paths
+are typed rather than picked, "open folder" buttons do nothing, and updates come
+from `medialedger-update` instead of the in-app updater. The database format is
+identical, so `medialedger.db` can be copied between the PC and the Pi.
+
 ## What a scan does
 
 1. **List.** Each enabled root is walked. With multi-threading on (the default),

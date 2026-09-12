@@ -18,6 +18,7 @@
 //              head/tail hash → delete source. Never a bare cross-folder move.
 const fs = require('fs');
 const path = require('path');
+const { absOf } = require('./paths');
 const crypto = require('crypto');
 
 const SAMPLE = 4 * 1024 * 1024; // hash the first and last 4 MB (a 20 GB remux over SMB is not re-read in full)
@@ -37,7 +38,7 @@ function targetFor(item, layout, rootPath) {
   // item: { abs_path, rel_path, dir, name, tokens }
   if (layout === 'folders') {
     const folder = `${item.tokens.title} (${item.tokens.year})`;
-    return { to_rel: folder + '\\' + item.name, to_abs: path.join(rootPath, folder, item.name) };
+    return { to_rel: folder + '\\' + item.name, to_abs: absOf(rootPath, folder + '\\' + item.name) };
   }
   return { to_rel: (item.dir ? item.dir + '\\' : '') + item.name, to_abs: path.join(path.dirname(item.abs_path), item.name) };
 }

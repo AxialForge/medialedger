@@ -22,9 +22,13 @@ const svc = createService({ userData: fs.mkdtempSync(path.join(require('os').tmp
 assert.ok(svc.handlers.size > 50, 'core exposes its handlers before init');
 
 // 2. Bridge ⇄ handlers agree
-const bridge = new Set([...read('preload.js').matchAll(/(?:invoke|listen)\('([a-zA-Z]+:[a-zA-Z]+)'\)/g)].map(m => m[1]));
-const events = new Set([...read('preload.js').matchAll(/listen\('([a-zA-Z]+:[a-zA-Z]+)'\)/g)].map(m => m[1]));
+const shape = require('../src/renderer/bridge-shape.js');
+const leaves = []; (function walk(n) { for (const v of Object.values(n)) typeof v === 'string' ? leaves.push(v) : walk(v); })(shape);
+const bridge = new Set(leaves.map(l => l.replace(/^!/, '')));
+const events = new Set(leaves.filter(l => l.startsWith('!')).map(l => l.slice(1)));
 const electronOnly = new Set([...read('main/main.js').matchAll(/^\s*h\('([a-zA-Z]+:[a-zA-Z]+)'/gm)].map(m => m[1]));
+const webOnly = new Set([...read('server/server.js').matchAll(/^\s*\['([a-zA-Z]+:[a-zA-Z]+)', /gm)].map(m => m[1]));
+assert.deepStrictEqual([...webOnly].sort(), [...electronOnly].sort(), 'the web shell must cover exactly the channels the Electron shell keeps for itself');
 const served = new Set([...svc.handlers.keys(), ...electronOnly]);
 for (const ch of bridge) if (!events.has(ch)) assert.ok(served.has(ch), `bridge calls ${ch} but nothing serves it`);
 for (const ch of served) assert.ok(bridge.has(ch), `${ch} is served but the bridge never calls it`);

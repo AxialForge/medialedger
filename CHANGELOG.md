@@ -10,10 +10,39 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Internal: the application core (scanning, jobs, every data query) moved out of
-  the Electron entry point into `src/main/service.js` so a web server shell for
-  the Raspberry Pi can share it. No behaviour change; `test/service.test.js`
-  guards the split.
+### Fixed
+
+## [0.7.0] - 2026-09-12
+
+### Added
+
+- **Web server for the Raspberry Pi (and any Linux box).** `npm run web` /
+  `src/server/server.js` serves the complete app in a browser: same renderer,
+  same tabs, same database format. Zero extra dependencies (node:http), one
+  shared password (scrypt hash, HttpOnly SameSite cookie, login rate limit),
+  same-origin API, server-sent events for scan / metadata / Plex / rename
+  progress. `server/install.sh` sets up Node 22, ffmpeg, the CIFS mount of the
+  share at `/mnt/media`, a hardened systemd service on port 8080 and the
+  `medialedger` / `medialedger-update` commands.
+- `renderer/bridge-shape.js` is now the single description of the
+  `window.ledger` API; `preload.js` (IPC) and `renderer/webbridge.js` (HTTP)
+  both build from it.
+
+### Changed
+
+- The application core moved out of the Electron entry point into
+  `src/main/service.js`; the desktop shell is now 175 lines. No behaviour
+  change; `test/service.test.js` guards the split and the bridge contract.
+- Stored `rel_path` values keep `\` separators on every OS; `paths.absOf()`
+  joins them for the local file system, so a database moves between Windows and
+  the Pi unchanged.
+- Default roots on Linux are `/mnt/media/{Movies,Anime,TV_Shows}`.
+- ffprobe is found on `PATH` / `/usr/bin` on Linux and macOS.
+
+### Fixed
+
+- Series from the adult root are no longer sent to AniList / TVmaze for
+  expected-episode lookups (AniList answered 403 to every one).
 
 ### Changed
 
