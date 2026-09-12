@@ -73,7 +73,18 @@ const webHandlers = new Map([
   ['shell:open', () => false],
   ['shell:openExternal', () => false], // the renderer falls back to a normal link when this returns false
   ['shell:showItem', () => false],
-  ['update:check', () => ({ state: 'error', message: 'On the server, update with: sudo medialedger-update' })],
+  ['update:check', async () => {
+    // The service cannot replace itself (that needs root), but it can say whether a newer release exists.
+    const newer = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) > (y[i] || 0)) return true; if ((x[i] || 0) < (y[i] || 0)) return false; } return false; };
+    try {
+      const r = await fetch('https://api.github.com/repos/AxialForge/medialedger/releases/latest', { headers: { 'user-agent': 'medialedger-server', accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(8000) });
+      if (!r.ok) throw new Error(`GitHub answered ${r.status}`);
+      const latest = String((await r.json()).tag_name || '').replace(/^v/, '');
+      return newer(latest, pkg.version)
+        ? { state: 'available', version: latest, message: `Version ${latest} is available. On the Pi run: sudo medialedger-update` }
+        : { state: 'current', version: latest, message: `You are on the latest version (${pkg.version}).` };
+    } catch (e) { return { state: 'error', message: 'Could not reach GitHub: ' + e.message }; }
+  }],
   ['update:install', () => ({ ok: false })],
   ['update:status', () => ({ state: 'idle' })],
   ['security:status', (ctx) => sec.status(ctx.session.id, {

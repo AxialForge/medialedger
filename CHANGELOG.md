@@ -12,6 +12,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [0.8.1] - 2026-09-12
+
+### Fixed
+
+- Web server: the About page's Check for updates button was greyed out. It now
+  asks GitHub for the latest release and says whether `sudo medialedger-update`
+  has anything to install.
+
 ## [0.8.0] - 2026-09-12
 
 ### Added

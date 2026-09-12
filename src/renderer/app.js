@@ -107,8 +107,8 @@ L.update.onStatus(s => {
 });
 function updLineText(u, packaged = true) {
   return {
-    idle: L.isWeb ? 'Web server: update from the Pi with sudo medialedger-update.' : packaged ? 'No check yet.' : 'Running from source: updates only apply to the installed app.',
-    checking: 'Checking GitHub Releases…', available: `Version ${u.version} is available; downloading in the background.`,
+    idle: L.isWeb ? 'Press Check for updates. Installing on the Pi is one command: sudo medialedger-update.' : packaged ? 'No check yet.' : 'Running from source: updates only apply to the installed app.',
+    checking: 'Checking GitHub Releases…', available: L.isWeb ? `Version ${u.version} is available. On the Pi run: sudo medialedger-update` : `Version ${u.version} is available; downloading in the background.`,
     downloading: `Downloading update… ${u.percent || 0}%`, current: 'You are on the latest version.',
     ready: `Version ${u.version} is downloaded and will install on the next restart.`, error: `Update check failed: ${u.message}`,
   }[u.state] || '';
@@ -1148,7 +1148,7 @@ views.about = async () => {
       <div class="card">
         <h3>Updates</h3>
         <div class="status-line" id="updLine">${esc(updLine)}</div>
-        <div class="inline" style="margin-top:10px"><button class="primary" id="chkUpd" ${info.packaged ? '' : 'disabled'}>Check for updates</button>${u.state === 'ready' ? '<button id="restartUpd">Restart and install</button>' : ''}<button id="relLink">Open releases page</button></div>
+        <div class="inline" style="margin-top:10px"><button class="primary" id="chkUpd" ${info.packaged || L.isWeb ? '' : 'disabled'}>Check for updates</button>${u.state === 'ready' ? '<button id="restartUpd">Restart and install</button>' : ''}<button id="relLink">Open releases page</button></div>
         <p class="muted tiny" style="margin:10px 0 0">Updates come from GitHub Releases for this repository, are verified against the release manifest, and never touch your database or settings.</p>
         <h3 style="margin-top:16px">Runtime</h3>
         <table class="kv">
@@ -1173,7 +1173,7 @@ views.about = async () => {
   $('#issueLink').onclick = e => { e.preventDefault(); L.openExternal(info.repo + '/issues'); };
   $('#relLink').onclick = () => L.openExternal(info.repo + '/releases');
   $('#dataLink').onclick = e => { e.preventDefault(); L.openPath(info.userData); };
-  $('#chkUpd').onclick = async () => { $('#updLine').textContent = 'Checking…'; const r = await L.update.check(); updateState = r; if (r.state === 'error') $('#updLine').textContent = 'Update check failed: ' + r.message; else setTimeout(() => views.about(), 1500); };
+  $('#chkUpd').onclick = async () => { $('#updLine').textContent = 'Checking…'; const r = await L.update.check(); updateState = r; if (r.state === 'error') $('#updLine').textContent = 'Update check failed: ' + r.message; else if (L.isWeb) $('#updLine').textContent = r.message; else setTimeout(() => views.about(), 1500); };
   if ($('#restartUpd')) $('#restartUpd').onclick = () => L.update.install();
 };
 
