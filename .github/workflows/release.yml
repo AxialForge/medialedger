@@ -29,6 +29,9 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Build server package
+        run: node tools/pack-server.js
+
       - name: Build .exe
         # --publish never: electron-builder only builds; the step below does the
         # GitHub release (otherwise electron-builder demands GH_TOKEN).
@@ -60,4 +63,7 @@ jobs:
             dist/*.exe
             dist/latest.yml
             dist/*.blockmap
+            dist/medialedger-server-*.tar.gz
+            dist/medialedger-server.tar.gz
+            dist/medialedger-server.tar.gz.sha256
           generate_release_notes: true

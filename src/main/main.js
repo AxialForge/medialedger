@@ -170,6 +170,10 @@ function createWindow() {
     catch (e) { updateStatus = { state: 'error', message: explainUpdateError(updater.friendlyError(e)) }; return updateStatus; }
   });
 
+  // Security controls belong to the web server (sessions, 2FA, lockout). The desktop app has no login, so it only reports that.
+  h('security:status', () => ({ available: false }));
+  for (const ch of ['security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revoke', 'security:revokeOthers']) h(ch, () => { throw new Error('Only available on the web server'); });
+
   // Everything else comes from the core, unchanged in name and signature.
   for (const [ch, fn] of svc.handlers) h(ch, fn);
 }

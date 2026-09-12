@@ -28,6 +28,7 @@ const renamer = require('./renamer');
 const { planMovieNames } = require('./movieNamer');
 const movieRename = require('./movieRename');
 const plex = require('./plex');
+const sysmon = require('./sysmon');
 
 function createService({ userData, log, send, host }) {
   let settings, db, scanner, scheduler, watcher;
@@ -171,6 +172,7 @@ function createService({ userData, log, send, host }) {
     scheduler = new Scheduler(host, settings, runScan);
     watcher = new Watcher(settings, runScan, log);
     scanner.onProgress(p => send('scan:progress', p));
+    sysmon.start({ settings, userData, get scanner() { return scanner; }, get db() { return db; } });
     if (settings.get().parserVersion !== PARSER_VERSION) {
       const n = scanner.reparseAll();
       settings.set({ parserVersion: PARSER_VERSION });
@@ -179,11 +181,12 @@ function createService({ userData, log, send, host }) {
   }
 
   function shutdown() {
-    scheduler && scheduler.stop(); watcher && watcher.stop();
+    sysmon.stop(); scheduler && scheduler.stop(); watcher && watcher.stop();
     try { db && db.close(); } catch { /* ignore */ }
   }
 
   // ---- handlers (shared by every shell) ----------------------------------------------
+  h('sys:stats', () => sysmon.stats({ settings, userData, scanner, db }));
   h('settings:get', () => settings.get());
   h('settings:set', (patch) => { const s = settings.set(patch); watcher.apply(); return s; });
   h('settings:replace', (next) => { const s = settings.replace(next); watcher.apply(); return s; });

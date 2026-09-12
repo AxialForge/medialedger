@@ -170,6 +170,24 @@ td .sub { display: block; color: var(--muted); font-size: 11px; line-height: 1.2
 .seasons-edit { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
 .seasons-edit label { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
 .seasons-edit input { width: 64px; }
+.spark { width: 100%; height: 44px; display: block; }
+.spark path { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+.spark .fill { fill: var(--accent); opacity: .12; stroke: none; }
+.meter { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+.meter > div { height: 100%; background: var(--accent); }
+.meter.warn > div { background: var(--warn); }
+.meter.bad > div { background: var(--bad); }
+.cores { display: flex; gap: 3px; margin-top: 6px; }
+.cores > div { flex: 1; height: 18px; background: var(--line); border-radius: 2px; position: relative; overflow: hidden; }
+.cores > div > div { position: absolute; bottom: 0; left: 0; right: 0; background: var(--accent); }
+.webauth .field { margin-top: 8px; } .webauth input { width: 100%; }
+.checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; }
+.check { display: flex; gap: 10px; align-items: flex-start; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; }
+.check .dot { width: 10px; height: 10px; border-radius: 50%; margin-top: 4px; flex: none; background: var(--ok); }
+.check.warn .dot { background: var(--warn); } .check.bad .dot { background: var(--bad); }
+.check b { display: block; font-size: 12.5px; } .check span { color: var(--muted); font-size: 11.5px; }
+.secret { font-family: Consolas, monospace; font-size: 15px; letter-spacing: 2px; user-select: all; }
+.health-ok { color: var(--ok); } .health-warn { color: var(--warn); } .health-bad { color: var(--bad); }
 .kv { width: 100%; table-layout: fixed; }
 .kv td { overflow-wrap: anywhere; white-space: normal; vertical-align: top; }
 .kv td:first-child { color: var(--muted); width: 180px; }

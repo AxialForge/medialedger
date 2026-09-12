@@ -1,43 +1,79 @@
 // Browser bridge: builds window.ledger from bridge-shape.js over HTTP.
 //
 // Requests: POST /api/<channel> with a JSON array of arguments; the reply is
-// { ok: true, result } or { ok: false, error }. Events: one EventSource on
-// /api/events carrying { channel, payload } messages. A 401 means the session
-// is missing or expired, so a login form is shown and the call retried after.
+// { ok: true, result } or { ok: false, reason, error }. Events: one EventSource
+// on /api/events carrying { channel, payload } messages.
+//
+// 401 handling by `reason`:
+//   login      no session → sign-in dialog (password, then a 2FA code if asked)
+//   totp       password accepted, code required → same dialog shows the code field
+//   reauth     a sensitive action needs the password again → re-auth dialog, then retry
 //
 // Does nothing when preload.js already installed window.ledger (desktop app).
 (function () {
   if (window.ledger || !window.LEDGER_SHAPE) return;
 
-  let loginPromise = null;
-  function askLogin() {
-    if (loginPromise) return loginPromise;
-    loginPromise = new Promise((resolve) => {
+  function dialog({ title, text, fields, button }) {
+    return new Promise((resolve) => {
       const box = document.createElement('div');
-      box.id = 'webLogin';
-      box.innerHTML = '<form class="card" id="webLoginForm"><h2>MediaLedger</h2><p class="muted">Enter the password set on the server.</p>' +
-        '<input type="password" id="webLoginPw" autocomplete="current-password" autofocus placeholder="Password">' +
-        '<div class="inline" style="margin-top:10px"><button class="primary" type="submit">Sign in</button><span class="bad small" id="webLoginErr"></span></div></form>';
+      box.className = 'webauth';
+      box.innerHTML = `<form class="card"><h2>${title}</h2><p class="muted">${text}</p>${fields.map(f => `<div class="field"><label>${f.label}</label><input type="${f.type}" name="${f.name}" autocomplete="${f.autocomplete || 'off'}" inputmode="${f.inputmode || 'text'}" placeholder="${f.placeholder || ''}"></div>`).join('')}<div class="inline" style="margin-top:10px"><button class="primary" type="submit">${button}</button><span class="bad small err"></span></div></form>`;
       Object.assign(box.style, { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.75)', display: 'grid', placeItems: 'center', zIndex: 9999 });
       document.body.append(box);
-      const form = box.querySelector('#webLoginForm');
-      form.style.minWidth = '320px';
+      const form = box.querySelector('form'); form.style.minWidth = '340px';
+      setTimeout(() => form.querySelector('input').focus(), 0);
       form.onsubmit = async (e) => {
         e.preventDefault();
-        const r = await fetch('api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: box.querySelector('#webLoginPw').value }) });
-        if (r.ok) { box.remove(); loginPromise = null; resolve(); }
-        else { box.querySelector('#webLoginErr').textContent = r.status === 429 ? 'Too many attempts; wait a minute.' : 'Wrong password.'; }
+        const values = Object.fromEntries(fields.map(f => [f.name, form.elements[f.name].value]));
+        const err = await resolveAttempt(values);
+        if (err === null) { box.remove(); resolve(); } else form.querySelector('.err').textContent = err;
       };
+      let resolveAttempt = () => null;
+      box.attempt = (fn) => { resolveAttempt = fn; };
+      dialog.current = box;
     });
-    return loginPromise;
+  }
+
+  let loginPromise = null;
+  function askLogin(needCode) {
+    if (loginPromise) return loginPromise;
+    const fields = [
+      { label: 'Password', name: 'password', type: 'password', autocomplete: 'current-password' },
+      { label: 'Authenticator code', name: 'code', type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code', placeholder: needCode ? '6 digits, required' : 'only if 2FA is on' },
+    ];
+    loginPromise = dialog({ title: 'MediaLedger', text: 'Enter the password set on the server.', fields, button: 'Sign in' });
+    dialog.current.attempt(async (v) => {
+      if (!v.code) delete v.code;
+      const r = await fetch('api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(v) });
+      if (r.ok) return null;
+      let b = {}; try { b = await r.json(); } catch { /* ignore */ }
+      return b.error || 'Sign-in failed';
+    });
+    return loginPromise.finally(() => { loginPromise = null; });
+  }
+
+  let reauthPromise = null;
+  function askReauth() {
+    if (reauthPromise) return reauthPromise;
+    reauthPromise = dialog({ title: 'Confirm it is you', text: 'This action changes files or security settings. Re-enter your password to continue (valid for 5 minutes).', fields: [{ label: 'Password', name: 'password', type: 'password', autocomplete: 'current-password' }], button: 'Confirm' });
+    dialog.current.attempt(async (v) => {
+      const r = await fetch('api/reauth', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(v) });
+      if (r.ok) return null;
+      let b = {}; try { b = await r.json(); } catch { /* ignore */ }
+      return b.error || 'Wrong password';
+    });
+    return reauthPromise.finally(() => { reauthPromise = null; });
   }
 
   async function call(ch, args) {
     for (;;) {
       const r = await fetch('api/' + encodeURIComponent(ch), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(args) });
-      if (r.status === 401) { await askLogin(); continue; }
       let body;
       try { body = await r.json(); } catch { throw new Error(`Server error ${r.status}`); }
+      if (r.status === 401) {
+        if (body.reason === 'reauth') { await askReauth(); continue; }
+        await askLogin(body.reason === 'totp'); continue;
+      }
       if (!body.ok) throw new Error(body.error || `Server error ${r.status}`);
       if (listeners.size) ensureEvents(); // open the event stream only once a call has proven the session
       return body.result;
@@ -63,4 +99,5 @@
   }
   window.ledger = build(window.LEDGER_SHAPE);
   window.ledger.isWeb = true;
+  window.ledger.logout = async () => { await fetch('api/logout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); location.reload(); };
 })();

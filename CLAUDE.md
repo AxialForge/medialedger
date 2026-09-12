@@ -93,7 +93,12 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 | `src/preload.js` | Desktop bridge: builds `window.ledger` from `bridge-shape.js` over IPC |
 | `src/renderer/bridge-shape.js` | The one description of the `window.ledger` tree (leaf = channel, `!` prefix = event). Both bridges build from it; `test/service.test.js` checks it against the handlers |
 | `src/renderer/webbridge.js` | Browser bridge: same tree over `POST /api/<channel>` + `EventSource /api/events`; shows the login form on 401. No-op inside Electron |
-| `src/server/server.js` | Web shell (Pi): node:http, static renderer, cookie sessions in `<data>/web.json`, SSE broadcast as `send`, web versions of the 9 Electron-only handlers |
+| `src/server/server.js` | Web shell (Pi): node:http(s), static renderer, SSE broadcast as `send`, web versions of the Electron-only handlers plus `security:*`; `SENSITIVE` set = channels that need password re-entry (`isSensitive` inspects `movie:run`'s `live` flag) |
+| `src/server/security.js` | Password (scrypt), sessions, lockout, LAN-only guard, TOTP, re-auth, audit log; state in `<data>/web.json` (0600), events in `security.log`. Pure Node, tested in `test/security.test.js` |
+| `src/server/totp.js` | RFC 6238 TOTP + base32, tested against the RFC vectors |
+| `src/main/sysmon.js` | Host health sampler (15 s ring buffer, one hour): CPU, memory, disks via `fs.statfsSync`, `/proc/net/dev`, Pi thermal/`vcgencmd`. `healthOf()` holds the thresholds |
+| `tools/pack-server.js` | Builds `dist/medialedger-server*.tar.gz` + `.sha256`; CI attaches them to the release; the installer downloads them |
+| `docs/RASPBERRY-PI.md` | The Pi guide; also becomes the README inside the server package |
 | `src/main/paths.js` | `absOf(rootPath, rel)`: stored `rel_path` uses `\` on every OS; join with the local separator only when touching disk |
 | `server/install.sh` | Pi installer: Node 22, ffmpeg, CIFS fstab mount at `/mnt/media`, `medialedger` system user, systemd unit, `medialedger` / `medialedger-update` commands |
 | `src/renderer/` | `index.html`, `styles.css`, `app.js` (hash router, sortable tables, fix modal) |
@@ -191,7 +196,10 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 - **Web shell: `EventSource` must not open before login.** It 401s and retries
   forever, flooding the log; `webbridge.js` opens it after the first successful
   call.
-- **`node:sqlite` prints an ExperimentalWarning** on start. Harmless.
+- **GNU tar on Windows treats `C:` as a remote host.** `tar -czf C:\path\out.tgz` fails with "Cannot connect to C". `pack-server.js` runs tar with `cwd` set and a relative output name, then copies the file.
+- **RFC 6238 test vectors are 8 digits.** The 6-digit code is the last six: T=59 → 287082, T=1111111109 → 081804, T=2000000000 → 279037 (not 005924, which is T=1234567890).
+- **Security handlers take a context first.** `server.js` calls `security:*` as `fn({ session, ip }, ...args)`; every other handler gets the renderer's arguments only. The desktop shell answers `security:status` with `{ available: false }` so the tab explains itself there.
+- **`node:sqlite` prints an ExperimentalWarning** on start. Harmless in the desktop app; the Pi service sets `NODE_OPTIONS=--disable-warning=ExperimentalWarning` because it printed over the password prompt.
 - **npm blocked Electron's postinstall** (`allow-scripts`) on first install;
   the binary was fetched with `node node_modules/electron/install.js`.
 - **electron-updater feed and private repos**: the repo went public on

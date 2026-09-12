@@ -12,6 +12,41 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [0.8.0] - 2026-09-12
+
+### Added
+
+- **System tab** (both shells): health verdict with reasons, Raspberry Pi SoC
+  temperature / clock / core voltage / firmware throttling flags, CPU per core,
+  memory and swap, data-disk and per-root free space, network throughput, an
+  hour of in-memory history as sparklines, refreshed every 15 s.
+- **Security tab and hardening for the web server**: posture checklist,
+  password change, LAN-only switch (on by default; non-private addresses are
+  refused), idle sign-out, TOTP two-factor codes with in-page setup, session
+  list with revoke, per-address lockout (8 failures / 15 min), password
+  re-entry within 5 minutes for live renames, undo, TV/anime renames, purge and
+  every security change, strict CSP + security headers, audit log
+  (`security.log`), optional HTTPS from `<data>/tls`.
+- **Server-only release package** `medialedger-server.tar.gz` (+ `.sha256`),
+  built by CI on every tag: core, renderer, server and installer only, no
+  Electron, no dependencies. `server/install.sh` downloads and verifies it;
+  `medialedger-update` upgrades from it. `--branch=<git branch>` remains for
+  development, `--https` creates a self-signed certificate.
+- `docs/RASPBERRY-PI.md`: the complete Pi guide (hardware, OS, install, first
+  run, daily use, updating, security, moving the desktop database, System tab,
+  troubleshooting, file locations, uninstall).
+
+### Changed
+
+- Sign-in dialog has an authenticator-code field (used only when 2FA is on) and
+  a separate re-authentication dialog for sensitive actions.
+- The installer silences Node's SQLite experimental warning that used to print
+  over the password prompt.
+
+### Fixed
+
+- Pre-0.8 web sessions without an activity timestamp are dropped on upgrade.
+
 ## [0.7.0] - 2026-09-12
 
 ### Added

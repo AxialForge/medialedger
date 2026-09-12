@@ -122,10 +122,22 @@ curl -fsSL https://raw.githubusercontent.com/AxialForge/medialedger/main/server/
 sudo bash install.sh
 ```
 
-It installs Node 22 and ffmpeg, mounts the share at `/mnt/media` (asks once for
-the share login, stored root-only in `/etc/medialedger-cifs.cred`), creates a
-`medialedger` system user and service on port 8080, and asks for the web
-password. Then open `http://medialedger.local:8080` from any device on the LAN.
+It installs Node 22 and ffmpeg, downloads the verified **server-only package**
+(`medialedger-server.tar.gz` from Releases, no Electron, no dependencies),
+mounts the share at `/mnt/media` (asks once for the share login, stored
+root-only in `/etc/medialedger-cifs.cred`), creates a `medialedger` system user
+and hardened service on port 8080, and asks for the web password. Then open
+`http://medialedger.local:8080` from any device on the LAN.
+
+The complete guide, from flashing the card to security hardening, moving your
+desktop database over and troubleshooting, is
+**[docs/RASPBERRY-PI.md](docs/RASPBERRY-PI.md)**.
+
+Security on the web server: scrypt password, HttpOnly SameSite cookies,
+per-address lockout, LAN-only by default, optional two-factor codes (TOTP),
+password re-entry for actions that touch the share, strict CSP, an audit log
+and a **Security** tab to manage all of it. A **System** tab shows Pi
+temperature, throttling, CPU, memory, disks and network.
 
 | Command | Does |
 |---|---|

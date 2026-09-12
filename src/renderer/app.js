@@ -1029,6 +1029,106 @@ async function downloadFfmpeg(msgEl, progEl, barEl, after) {
   finally { progEl.hidden = true; if (ffDlUnsub) { ffDlUnsub(); ffDlUnsub = null; } }
 }
 
+// ---- System: host health and hardware ------------------------------------------------
+let sysTimer = null;
+const fmtRate = (bps) => bps == null ? '—' : bps >= 1e6 ? (bps / 1e6).toFixed(1) + ' MB/s' : (bps / 1e3).toFixed(0) + ' kB/s';
+const fmtUptime = (s) => { const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`; };
+function sparkline(values, { max = null, min = 0 } = {}) {
+  const v = values.filter(x => x != null);
+  if (v.length < 2) return '<svg class="spark" viewBox="0 0 100 44" preserveAspectRatio="none"></svg>';
+  const hi = max != null ? max : Math.max(...v) * 1.05 || 1, lo = min;
+  const pts = values.map((x, i) => x == null ? null : [i / (values.length - 1) * 100, 42 - (Math.min(Math.max(x, lo), hi) - lo) / (hi - lo) * 40]).filter(Boolean);
+  const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+  return `<svg class="spark" viewBox="0 0 100 44" preserveAspectRatio="none"><path class="fill" d="${d} L${pts[pts.length - 1][0].toFixed(1)} 44 L${pts[0][0].toFixed(1)} 44 Z"></path><path d="${d}"></path></svg>`;
+}
+const meter = (pct, warn = 80, bad = 92) => `<div class="meter ${pct >= bad ? 'bad' : pct >= warn ? 'warn' : ''}"><div style="width:${Math.min(100, pct || 0)}%"></div></div>`;
+views.system = async () => {
+  const s = await L.sys.stats();
+  const h = s.history, last = (k) => h.map(x => x[k]);
+  const health = s.health || { level: 'ok', reasons: [] };
+  const pill = $('#sysPill'); pill.hidden = health.level === 'ok'; pill.textContent = health.level === 'bad' ? '!' : '•'; pill.className = 'pill ' + (health.level === 'bad' ? 'bad' : 'warn');
+  const pi = s.pi;
+  const tempTile = pi && pi.tempC != null ? tile(pi.tempC >= 80 ? 'bad' : pi.tempC >= 70 ? 'warn' : '', 'SoC temperature', `${pi.tempC.toFixed(1)} °C`, `${pi.clockMHz ? pi.clockMHz + ' MHz' : ''}${pi.voltage ? ' · ' + pi.voltage.toFixed(2) + ' V' : ''}`) : '';
+  const thr = pi && pi.throttled;
+  const thrTile = thr ? tile(thr.now ? 'bad' : thr.ever ? 'warn' : 'ok', 'Power & throttling', thr.now ? 'Throttled now' : thr.ever ? 'Throttled earlier' : 'Healthy', thr.flags.length ? esc(thr.flags.join(' · ')) : 'no under-voltage or frequency capping since boot') : '';
+  const dataDisk = s.disks[0];
+  view.innerHTML = `<h1>System</h1>
+    <p class="muted">${esc(s.host.hostname)} · ${esc(pi ? pi.model : s.host.platform)} · up ${fmtUptime(s.host.uptimeS)} · MediaLedger service up ${fmtUptime(s.service.uptimeS)} · refreshes every ${Math.round(s.sampleMs / 1000)} s</p>
+    <div class="tiles">
+      ${tile(health.level === 'ok' ? 'ok' : health.level, 'Health', `<span class="health-${health.level}">${health.level === 'ok' ? 'All good' : health.level === 'warn' ? 'Attention' : 'Problem'}</span>`, health.reasons.length ? esc(health.reasons.join(' · ')) : 'no rule triggered')}
+      ${tempTile}${thrTile}
+      ${tile('', 'CPU', s.cpu.pct == null ? '…' : `${s.cpu.pct}%`, `${s.cpu.cores} cores · load ${s.cpu.load.join(' / ')}`)}
+      ${tile('', 'Memory', `${s.memory.pct}%`, `${fmtBytes(s.memory.used)} of ${fmtBytes(s.memory.total)}${s.memory.swap ? ` · swap ${fmtBytes(s.memory.swap.used)}` : ''}`)}
+      ${tile(dataDisk.ok ? (dataDisk.pct >= 92 ? 'bad' : dataDisk.pct >= 80 ? 'warn' : '') : 'bad', 'Data disk', dataDisk.ok ? `${dataDisk.pct}%` : 'unreadable', dataDisk.ok ? `${fmtBytes(dataDisk.free)} free · database ${fmtBytes(s.service.dbBytes || 0)}` : esc(dataDisk.error || ''))}
+      ${tile('', 'Network', s.network.rate ? `↓ ${fmtRate(s.network.rate.rxBps)}` : (s.network.interfaces[0] ? esc(s.network.interfaces[0].address) : '—'), s.network.rate ? `↑ ${fmtRate(s.network.rate.txBps)} · ${esc(s.network.interfaces.map(i => `${i.name} ${i.address}`).join(', '))}` : esc(s.network.interfaces.map(i => i.name).join(', ')))}
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>CPU <span class="right">${s.cpu.pct == null ? '' : s.cpu.pct + '%'}</span></h3>${sparkline(last('cpu'), { max: 100 })}<div class="cores">${(s.cpu.perCore || []).map(p => `<div title="${p}%"><div style="height:${p}%"></div></div>`).join('')}</div><div class="muted tiny" style="margin-top:6px">${esc(s.cpu.model || '')}</div></div>
+      <div class="card"><h3>Memory <span class="right">${s.memory.pct}%</span></h3>${sparkline(last('mem'), { max: 100 })}${meter(s.memory.pct)}<div class="muted tiny" style="margin-top:6px">MediaLedger process ${fmtBytes(s.service.rss)} · Node ${esc(s.service.node)} · pid ${s.service.pid}${s.service.scanRunning ? ' · <b>scan running</b>' : ''}</div></div>
+      ${pi && pi.tempC != null ? `<div class="card"><h3>Temperature <span class="right">${pi.tempC.toFixed(1)} °C</span></h3>${sparkline(last('temp'), { min: 30, max: 90 })}${meter(pi.tempC, 70, 80)}<div class="muted tiny" style="margin-top:6px">Pi firmware soft-limits at 80 °C and throttles at 85 °C</div></div>` : ''}
+      ${s.network.rate ? `<div class="card"><h3>Network <span class="right">↓ ${fmtRate(s.network.rate.rxBps)} · ↑ ${fmtRate(s.network.rate.txBps)}</span></h3>${sparkline(last('rx'))}<div class="muted tiny">download (share reads during a scan show here)</div></div>` : ''}
+    </div>
+    <h2>Storage</h2>
+    <div class="card"><table class="kv">${s.disks.map(d => `<tr><td>${esc(d.label)}</td><td>${d.ok ? `${fmtBytes(d.free)} free of ${fmtBytes(d.total)} (${d.pct}% used)${meter(d.pct, 90, 97)}` : `<span class="bad">not reachable: ${esc(d.error || '')}</span>`}<div class="muted tiny mono">${esc(d.path)}</div></td></tr>`).join('')}</table></div>`;
+  clearInterval(sysTimer);
+  sysTimer = setInterval(() => { if (currentView === 'system') views.system(); else clearInterval(sysTimer); }, s.sampleMs);
+};
+
+// ---- Security: web-server access controls -------------------------------------------
+views.security = async () => {
+  const st = await L.security.status();
+  const pill = $('#secPill');
+  if (!st.available) {
+    pill.hidden = true;
+    view.innerHTML = `<h1>Security</h1><div class="card"><p>The desktop app has no login: it runs as you, on this PC, and only this PC can reach it.</p><p class="muted">Password, two-factor codes, sessions, lockout and the audit log live on the Raspberry Pi web server, where anyone on the LAN could otherwise open the page. Open this tab there to manage them.</p></div>`;
+    return;
+  }
+  const bad = st.checks.filter(c => !c.ok && c.level === 'bad').length, warn = st.checks.filter(c => !c.ok && c.level === 'warn').length;
+  pill.hidden = !bad; pill.textContent = bad; pill.className = 'pill bad';
+  const ago = (ms) => { const s = Math.round((Date.now() - ms) / 1000); return s < 60 ? 'just now' : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`; };
+  const EVENT_TEXT = { login: 'Signed in', login_failed: 'Failed sign-in', login_blocked: 'Blocked (locked out)', ip_locked: 'Address locked out', logout: 'Signed out', reauth: 'Password re-entered', reauth_failed: 'Re-entry failed', sensitive_action: 'Sensitive action', password_changed: 'Password changed', password_change_failed: 'Password change refused', '2fa_enabled': '2FA turned on', '2fa_disabled': '2FA turned off', options_changed: 'Options changed', session_revoked: 'Session revoked', sessions_revoked: 'Other sessions revoked', refused_non_lan: 'Refused: outside LAN', cross_origin_refused: 'Refused: cross-origin' };
+  const evClass = (e) => /failed|blocked|locked|refused/.test(e) ? 'bad' : /sensitive|changed|revoked|disabled/.test(e) ? 'warn' : '';
+  view.innerHTML = `<h1>Security</h1>
+    <p class="muted">Web server on ${st.https ? 'HTTPS' : 'HTTP'} port ${st.port} · ${st.sessions.length} active session${st.sessions.length === 1 ? '' : 's'} · ${st.failedLogins24h} failed sign-in${st.failedLogins24h === 1 ? '' : 's'} in 24 h · ${st.banned.length} address${st.banned.length === 1 ? '' : 'es'} locked out</p>
+    <div class="checks">${st.checks.map(c => `<div class="check ${c.ok ? '' : c.level}"><div class="dot"></div><div><b>${esc(c.name)}</b><span>${esc(c.detail)}</span></div></div>`).join('')}</div>
+    <div class="grid2" style="margin-top:14px">
+      <div class="card"><h3>Password</h3>
+        <div class="field"><label>Current</label><input type="password" id="pwCur" autocomplete="current-password"></div>
+        <div class="field"><label>New (${st.limits.minPassword}+ chars)</label><input type="password" id="pwNew" autocomplete="new-password"></div>
+        <div class="field"><label>Repeat</label><input type="password" id="pwNew2" autocomplete="new-password"></div>
+        <div class="inline"><button class="primary" id="pwChange">Change password</button><span class="muted tiny">Signs out every other session.</span></div>
+        <h3 style="margin-top:16px">Options</h3>
+        <div class="field"><label>LAN only</label><input type="checkbox" id="optLan" ${st.lanOnly ? 'checked' : ''}><div class="hint">Refuse connections from outside private address ranges. Leave on unless you know why.</div></div>
+        <div class="field"><label>Idle sign-out</label><div class="inline"><input type="number" id="optIdle" min="0" max="10080" value="${st.idleMinutes}" style="width:90px"> <span class="muted">minutes (0 = off)</span></div></div>
+        <div class="inline"><button id="optSave">Save options</button></div>
+      </div>
+      <div class="card"><h3>Two-factor codes ${st.totpEnabled ? '<span class="right ok">on</span>' : '<span class="right muted">off</span>'}</h3>
+        ${st.totpEnabled
+          ? `<p>Sign-in requires your password and a 6-digit code from your authenticator app.</p><div class="field"><label>Password</label><input type="password" id="totpPw"></div><div class="inline"><button class="danger" id="totpOff">Turn off 2FA</button></div>`
+          : `<p class="muted">Adds a code from Google Authenticator, Aegis, Bitwarden, 1Password or any TOTP app. Even a leaked password then cannot sign in.</p><div id="totpBox"><button class="primary" id="totpStart">Set up 2FA</button></div>`}
+        <h3 style="margin-top:16px">Sessions</h3>
+        <table><thead><tr><th>Where</th><th>Browser</th><th>Last seen</th><th></th></tr></thead><tbody>${st.sessions.map(s => `<tr><td>${esc(s.ip || '')}${s.current ? ' <span class="badge ok">this</span>' : ''}</td><td class="muted tiny" title="${esc(s.ua)}">${esc((s.ua || '').replace(/^Mozilla\/5\.0 /, '').slice(0, 48))}</td><td>${ago(s.lastSeen)}</td><td>${s.current ? '' : `<button class="small revoke" data-id="${s.id}">Sign out</button>`}</td></tr>`).join('')}</tbody></table>
+        <div class="inline" style="margin-top:8px"><button id="revokeOthers" ${st.sessions.length > 1 ? '' : 'disabled'}>Sign out other sessions</button><button id="logoutBtn">Sign out here</button></div>
+        ${st.banned.length ? `<p class="muted tiny" style="margin-top:8px">Locked out: ${st.banned.map(b => `${esc(b.ip)} until ${new Date(b.until).toLocaleTimeString()}`).join(', ')}</p>` : ''}
+      </div>
+    </div>
+    <h2>Audit log</h2>
+    <div class="card"><table><thead><tr><th>When</th><th>Event</th><th>Address</th><th>Detail</th></tr></thead><tbody>${st.events.map(e => `<tr><td class="muted">${fmtDate(e.ts)}</td><td class="${evClass(e.event)}">${esc(EVENT_TEXT[e.event] || e.event)}</td><td>${esc(e.ip || '')}</td><td class="muted">${esc(e.detail || '')}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">No events yet.</td></tr>'}</tbody></table>
+    <p class="muted tiny">Lockout after ${st.limits.lockFails} failures in ${st.limits.lockMinutes} min · sensitive actions ask for the password again after ${st.limits.reauthMinutes} min · sessions last ${st.limits.sessionDays} days · full log in ${esc(st.dataDir)}/security.log</p></div>`;
+  const act = async (fn, okMsg) => { try { await fn(); if (okMsg) toast(okMsg); views.security(); } catch (e) { toast(e.message, true); } };
+  $('#pwChange').onclick = () => { if ($('#pwNew').value !== $('#pwNew2').value) return toast('New passwords differ', true); act(() => L.security.changePassword($('#pwCur').value, $('#pwNew').value), 'Password changed'); };
+  $('#optSave').onclick = () => act(() => L.security.setOptions({ lanOnly: $('#optLan').checked, idleMinutes: Number($('#optIdle').value) }), 'Options saved');
+  $('#revokeOthers').onclick = () => act(() => L.security.revokeOthers(), 'Other sessions signed out');
+  $('#logoutBtn').onclick = () => L.logout();
+  document.querySelectorAll('.revoke').forEach(b => { b.onclick = () => act(() => L.security.revoke(b.dataset.id), 'Session signed out'); });
+  if ($('#totpStart')) $('#totpStart').onclick = () => act(async () => {
+    const r = await L.security.totpSetup();
+    $('#totpBox').innerHTML = `<p>1. In your authenticator app choose <b>Add account → enter key manually</b> and type this secret (or paste the link):</p><div class="secret">${esc(r.secret.replace(/(.{4})/g, '$1 ').trim())}</div><p class="muted tiny mono" style="word-break:break-all">${esc(r.url)}</p><p>2. Enter the 6-digit code it shows to confirm:</p><div class="inline"><input type="text" id="totpCode" inputmode="numeric" placeholder="000000" style="width:120px"><button class="primary" id="totpConfirm">Turn on 2FA</button></div>`;
+    $('#totpConfirm').onclick = () => act(() => L.security.totpEnable($('#totpCode').value), 'Two-factor codes are on');
+  });
+  if ($('#totpOff')) $('#totpOff').onclick = () => act(() => L.security.totpDisable($('#totpPw').value), 'Two-factor codes are off');
+};
+
 views.about = async () => {
   const info = await L.appInfo();
   const u = updateState.state === 'idle' ? info.updateStatus : updateState;
