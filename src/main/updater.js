@@ -173,6 +173,7 @@ function installNow() {
 
 module.exports = {
   start,
+  friendlyError,
   installNow,
   onStatus,
   // pure helpers, exported for tests / UI:

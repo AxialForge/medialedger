@@ -109,8 +109,8 @@ into its data folder automatically. An existing install under `C:\ffmpeg`,
 winget, scoop or `PATH` is picked up instead.
 
 Updates are checked on launch and every six hours and installed silently on the
-next restart. While this repository is private the updater needs a GitHub token
-with read access (Settings → Updates).
+next restart. No account or token is needed; the token field under
+Settings → Updates is only a fallback for a private fork.
 
 ## What a scan does
 

@@ -181,9 +181,13 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 - **`node:sqlite` prints an ExperimentalWarning** on start. Harmless.
 - **npm blocked Electron's postinstall** (`allow-scripts`) on first install;
   the binary was fetched with `node node_modules/electron/install.js`.
-- **Private repo + electron-updater**: the feed needs a token until the repo is
-  public. `settings.githubToken` is passed via `autoUpdater.setFeedURL(...,
-  private: true, token)`. Making the repo public removes the need.
+- **electron-updater feed and private repos**: the repo went public on
+  2026-09-12 so no token is needed. If it is ever private again,
+  `applyUpdateFeed()` in main.js passes `settings.githubToken` via
+  `setFeedURL({ private: true, token })`. It must run on every manual check,
+  not just at launch: a token typed into Settings after start was otherwise
+  ignored and the public `releases.atom` feed answered 404. Never surface
+  electron-updater's raw error text; it includes GitHub's response cookies.
 - **Timings on this network** (gigabit SMB to 192.168.1.204): first full scan
   of 24,628 files took 25 min at 4 probes/1 thread; the TV root alone
   (11,419 files) takes 2 min 40 s at 8 probes/4 threads, and a no-change rescan

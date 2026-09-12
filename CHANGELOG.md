@@ -12,6 +12,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [0.6.1] - 2026-09-12
+
+### Changed
+
+- The GitHub repository is now public, so the in-app updater works with no
+  token. The token field in Settings → Updates stays as a fallback.
+
+### Fixed
+
+- **Check for updates** now re-reads the GitHub token from Settings on every
+  click; before, a token pasted after launch was ignored until a restart.
+- Update errors are shown as a short explanation instead of the raw HTTP
+  response (which dumped GitHub's headers and cookies into the panel).
+
 ## [0.6.0] - 2026-09-12
 
 ### Added

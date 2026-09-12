@@ -165,7 +165,26 @@ if (!gotLock) {
     return { thresholds: thr, mixed, perSeasonMixed, low: low.slice(0, 2000), lowTotal: low.length, undAudio, short, noAudio };
   }
 
-  function createWindow() {
+  // Point electron-updater at the private API when a token is set, or back at the public feed when it is not.
+// Called at launch and again on every manual check so a token pasted into Settings works without a restart.
+function applyUpdateFeed() {
+  try {
+    const { autoUpdater } = require('electron-updater');
+    const token = settings.get().githubToken;
+    const feed = { provider: 'github', owner: 'AxialForge', repo: 'medialedger' };
+    autoUpdater.setFeedURL(token ? { ...feed, private: true, token } : feed);
+  } catch (e) { log('feed url: ' + e.message); }
+}
+
+// A private repository answers 404 to the update feed; say what to do instead of the generic message.
+function explainUpdateError(msg) {
+  if (!/No update information|404/i.test(msg || '')) return msg;
+  return settings.get().githubToken
+    ? 'GitHub answered 404 to the update check. The token is rejected or lacks read access to AxialForge/medialedger (fine-grained token, repository permission "Contents: read").'
+    : 'The update feed is not reachable: the GitHub repository is private and no token is set. Add a read-only token under Settings → Updates, or make the repository public.';
+}
+
+function createWindow() {
     win = new BrowserWindow({
       width: 1400, height: 900, minWidth: 980, minHeight: 620,
       title: 'MediaLedger',
@@ -211,10 +230,9 @@ if (!gotLock) {
     scheduler.start();
     watcher.apply();
     const s = settings.get();
-    if (s.githubToken) { try { const { autoUpdater } = require('electron-updater'); autoUpdater.setFeedURL({ provider: 'github', owner: 'AxialForge', repo: 'medialedger', private: true, token: s.githubToken }); } catch (e) { log('feed url: ' + e.message); } }
+    applyUpdateFeed();
     updater.start({ enabled: s.updates.enabled, onStatus: st => {
-      // A private repository answers 404 to the update feed; say so instead of the generic message.
-      if (st.state === 'error' && /No update information/i.test(st.message || '') && !settings.get().githubToken) st = { ...st, message: 'The update feed is not reachable: the GitHub repository is private and no token is set. Add a read-only token under Settings → Updates, or make the repository public.' };
+      if (st.state === 'error') st = { ...st, message: explainUpdateError(st.message) };
       updateStatus = st; log('update: ' + JSON.stringify(st)); send('update:status', st);
     } });
     // First-time metadata fill runs in the background once the window is up.
@@ -312,8 +330,9 @@ if (!gotLock) {
 
   h('update:check', async () => {
     if (!app.isPackaged) return { state: 'error', message: 'Updates only run in the installed app.' };
+    applyUpdateFeed(); // pick up a token typed into Settings since launch
     try { const { autoUpdater } = require('electron-updater'); await autoUpdater.checkForUpdates(); return updateStatus; }
-    catch (e) { updateStatus = { state: 'error', message: e.message }; return updateStatus; }
+    catch (e) { updateStatus = { state: 'error', message: explainUpdateError(updater.friendlyError(e)) }; return updateStatus; }
   });
   h('update:install', () => updater.installNow());
   h('update:status', () => updateStatus);
