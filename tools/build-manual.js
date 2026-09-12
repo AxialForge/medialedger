@@ -1,0 +1,447 @@
+'use strict';
+// Builds the MediaLedger user manual (.docx) from a folder of screenshots.
+// Usage: node tools/build-manual.js <screenshot-dir> <out.docx>
+const fs = require('fs');
+const path = require('path');
+const { Document, Packer, Paragraph, TextRun, HeadingLevel, ImageRun, Table, TableRow, TableCell, WidthType, AlignmentType, TableOfContents, PageBreak, LevelFormat, BorderStyle, ShadingType, Footer, Header, PageNumber } = require('docx');
+
+const shots = process.argv[2];
+const out = process.argv[3];
+const version = require('../package.json').version;
+
+const F = 'Calibri';
+const img = (name, caption) => {
+  const p = path.join(shots, name + '.png');
+  if (!fs.existsSync(p)) return [new Paragraph({ children: [new TextRun({ text: `[screenshot ${name} missing]`, italics: true, color: '999999' })] })];
+  const w = 624, h = Math.round(624 * 1203 / 1926);
+  return [
+    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 120, after: 60 }, children: [new ImageRun({ type: 'png', data: fs.readFileSync(p), transformation: { width: w, height: h } })] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 200 }, children: [new TextRun({ text: caption, italics: true, size: 18, color: '555555' })] }),
+  ];
+};
+const H1 = t => new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun(t)], pageBreakBefore: true });
+const H2 = t => new Paragraph({ heading: HeadingLevel.HEADING_2, children: [new TextRun(t)] });
+const H3 = t => new Paragraph({ heading: HeadingLevel.HEADING_3, children: [new TextRun(t)] });
+const P = (t, o = {}) => new Paragraph({ spacing: { after: 120 }, children: rich(t, o) });
+const note = t => new Paragraph({ spacing: { before: 60, after: 160 }, indent: { left: 360 }, border: { left: { style: BorderStyle.SINGLE, size: 12, color: '5AA9FF', space: 8 } }, children: rich(t) });
+const warn = t => new Paragraph({ spacing: { before: 60, after: 160 }, indent: { left: 360 }, border: { left: { style: BorderStyle.SINGLE, size: 12, color: 'F0B429', space: 8 } }, children: rich(t) });
+const bullets = arr => arr.map(t => new Paragraph({ numbering: { reference: 'bul', level: 0 }, spacing: { after: 60 }, children: rich(t) }));
+let stepInstance = 0;
+const steps = arr => { const inst = ++stepInstance; return arr.map(t => new Paragraph({ numbering: { reference: 'num', level: 0, instance: inst }, spacing: { after: 60 }, children: rich(t) })); };
+// **bold** and `code` inline
+function rich(t, o = {}) {
+  const parts = String(t).split(/(\*\*[^*]+\*\*|`[^`]+`)/g).filter(Boolean);
+  return parts.map(x => x.startsWith('**') ? new TextRun({ text: x.slice(2, -2), bold: true, ...o }) : x.startsWith('`') ? new TextRun({ text: x.slice(1, -1), font: 'Consolas', size: 19, shading: { type: ShadingType.CLEAR, fill: 'EEF1F5' }, ...o }) : new TextRun({ text: x, ...o }));
+}
+function table(header, rows, widths) {
+  const total = widths.reduce((a, b) => a + b, 0);
+  const cell = (t, bold, fill) => new TableCell({ width: { size: 0, type: WidthType.DXA }, shading: fill ? { type: ShadingType.CLEAR, fill } : undefined, margins: { top: 60, bottom: 60, left: 100, right: 100 }, children: [new Paragraph({ children: rich(t, { bold, size: 19 }) })] });
+  const mk = (cells, bold, fill) => new TableRow({ children: cells.map((c, i) => { const tc = cell(c, bold, fill); tc.options.width = { size: widths[i], type: WidthType.DXA }; return tc; }) });
+  return new Table({ width: { size: total, type: WidthType.DXA }, columnWidths: widths, rows: [mk(header, true, 'DDE6F2'), ...rows.map(r => mk(r, false))] });
+}
+const numbering = { config: [
+  { reference: 'bul', levels: [{ level: 0, format: LevelFormat.BULLET, text: '•', alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 540, hanging: 270 } } } }] },
+  { reference: 'num', levels: [{ level: 0, format: LevelFormat.DECIMAL, text: '%1.', alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 540, hanging: 360 } } } }] },
+] };
+
+const TOC_ENTRIES = [
+  '1. What MediaLedger is', '1.1 What it never does', '1.2 Core concepts',
+  '2. Installing and first run', '2.1 Install', '2.2 First launch', '2.3 Where your data lives', '2.4 Updates',
+  '3. The window',
+  '4. Dashboard', '4.1 Top tiles', '4.2 Charts', '4.3 Panels',
+  '5. TV Shows and Anime', '5.1 Episode detail',
+  '6. Movies', '7. Web videos', '8. Adult library',
+  '9. Missing episodes', '9.1 The Match dialog',
+  '10. Duplicates', '11. Quality', '12. Ratings',
+  '13. Problems', '13.1 The Fix dialog',
+  '14. Change log',
+  '15. Movie names (the naming engine)', '15.1 The pattern', '15.2 Ready, flagged, blocked', '15.3 Batch settings', '15.4 Running a batch', '15.5 Undo', '15.6 Bulk source, collisions, placeholders',
+  '16. Rename TV / anime', '17. CSV export', '18. Settings reference',
+  '19. Plex integration', '19.1 Setup', '19.2 What a sync stores',
+  '20. Troubleshooting', '21. Glossary',
+];
+const body = [];
+const add = (...x) => body.push(...x.flat());
+
+// ---------------- Title ----------------
+add(
+  new Paragraph({ spacing: { before: 3000 }, alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'MediaLedger', bold: true, size: 72, color: '1F3864' })] }),
+  new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'User Manual', size: 40, color: '444444' })] }),
+  new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 400 }, children: [new TextRun({ text: `Version ${version}`, size: 24, color: '666666' })] }),
+  new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'A local Windows desktop ledger for your Plex media share', size: 24, color: '666666' })] }),
+  new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 2400 }, children: [new TextRun({ text: 'AxialForge · github.com/AxialForge/medialedger', size: 20, color: '888888' })] }),
+  new Paragraph({ children: [new PageBreak()] }),
+  new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun('Contents')] }),
+  ...TOC_ENTRIES.map(t => new Paragraph({ spacing: { after: 40 }, indent: { left: /^\d+\.\d/.test(t) ? 540 : 0 }, children: [new TextRun({ text: t, size: /^\d+\.\d/.test(t) ? 20 : 22, bold: !/^\d+\.\d/.test(t) })] })),
+);
+
+// ---------------- 1 Welcome ----------------
+add(H1('1. What MediaLedger is'),
+  P('MediaLedger is a desktop application for Windows that keeps a **ledger** of everything on your media share: every TV episode, anime episode, movie file and web video, what each file is technically made of, what changed since the last look, and what is missing. It reads the files directly over the network with the ffprobe tool, stores the results in a local database on your PC, and shows the picture in a set of tabs.'),
+  P('It is not a player, a downloader or a replacement for Plex. It sits beside Plex and answers the questions Plex is bad at: which series are missing episodes, which movies exist in two resolutions, which shows have no subtitles, what arrived on the NAS last week, and which files carry names that Plex will struggle with.'),
+  H2('1.1 What it never does'),
+  bullets([
+    'It never deletes a file. Files that disappear from the share are flagged **missing** in the ledger until you press a button to forget them.',
+    'It never writes to the share unless you turn on one of the two rename tools, tick specific files, and confirm. Everything else is read-only.',
+    'It never sends your library anywhere. The only network calls are: the update check against GitHub, the optional ffmpeg download, episode-count lookups to TVmaze and AniList (series titles only), and your own Plex server on the LAN.',
+    'It has no web server and no browser tab. It is a plain desktop window.',
+    'It never needs an account, a subscription or an API key.',
+  ]),
+  H2('1.2 Core concepts'),
+  table(['Term', 'Meaning'], [
+    ['Root', 'A folder MediaLedger watches, with a type: TV, Anime, Movies, Web videos or Adult. Usually a UNC path such as `\\\\192.168.1.204\\Apocrypha_Media_Pool\\Anime`.'],
+    ['Scan', 'One pass over every enabled root: list files, compare with the ledger, parse names, probe new or changed files, write the change log, export CSVs.'],
+    ['Parse', 'Working out series, season, episode, title and year from the folder and file name. Fast and offline.'],
+    ['Probe', 'Running ffprobe on a file to read its real resolution, length, codecs, languages and subtitle tracks. This is the slow part; it only happens for new or changed files.'],
+    ['Fix', 'A manual correction you make to a parsed result. Fixes live in the database and are re-applied on every scan, so a corrected file stays corrected.'],
+    ['Change log', 'The record of what each scan found: added, removed, modified and returned files, plus errors.'],
+    ['Expected episodes', 'Per-season episode counts fetched from TVmaze (TV) or AniList (anime), used to say exactly which episodes you lack.'],
+    ['Placeholder', 'A literal word such as `Year` or `Source` that the movie naming engine writes into a name when it cannot prove the value. Deliberately visible so you can fill it in later.'],
+  ], [1800, 7560]),
+);
+
+// ---------------- 2 Install ----------------
+add(H1('2. Installing and first run'),
+  H2('2.1 Install'),
+  steps([
+    'Download `medialedger-<version>-setup.exe` from the Releases page of the repository.',
+    'Run it. It is a one-click, per-user install with no administrator prompt. The build is not code-signed, so Windows SmartScreen will show a blue box the first time: click **More info**, then **Run anyway**.',
+    'The app opens automatically when the installer finishes and is added to the Start menu.',
+  ]),
+  H2('2.2 First launch'),
+  P('On the first launch MediaLedger checks for ffprobe. If an ffmpeg install exists under `C:\\ffmpeg`, via winget or scoop, or on your PATH, it is used. If nothing is found, the app downloads the latest static Windows build of ffmpeg from the BtbN project into its own data folder and points itself at it. A toast in the corner shows progress; it is about 100 MB.'),
+  P('Next, open **Settings → Library roots** and point each root at your shares. The defaults match the AxialForge NAS layout; change the paths if yours differ. Press **Save settings**, then **Scan now** in the bottom-left corner.'),
+  note('The first scan probes every file and takes a while: about 25 minutes for 24,000 files over gigabit SMB. Every later scan only probes new or changed files and finishes in seconds. You can close the window during a scan started by the scheduler, but a manual scan is cancelled if you quit.'),
+  H2('2.3 Where your data lives'),
+  table(['Item', 'Location'], [
+    ['Database, settings, log, downloaded ffmpeg', '`%APPDATA%\\MediaLedger\\`'],
+    ['Automatic database backups', '`%APPDATA%\\MediaLedger\\medialedger.db.backups\\` (taken before every schema upgrade; newest 10 kept)'],
+    ['CSV exports', '`%APPDATA%\\MediaLedger\\exports\\<timestamp>\\` plus a `latest\\` copy'],
+    ['The program itself', '`%LOCALAPPDATA%\\Programs\\MediaLedger\\`'],
+  ], [3600, 5760]),
+  P('Because the data sits in your user profile and not in the program folder, reinstalling or updating never loses the ledger, your fixes or your ratings.'),
+  H2('2.4 Updates'),
+  P('The installed app checks GitHub Releases on launch and every six hours, downloads a newer version silently and installs it the next time you close the app. The About page has a **Check for updates** button and shows the current state. While the repository is private the check needs a GitHub token entered under Settings → Updates; once the repository is public no token is needed.'),
+);
+
+// ---------------- 3 The window ----------------
+add(H1('3. The window'),
+  P('The left sidebar is the only navigation. It is grouped into **Library** (what you have), **Review** (what needs attention), **Maintenance** (tools that change or export things) and **App**. Orange counters on Missing, Duplicates, Problems and Movie names show how many items wait for you.'),
+  bullets([
+    '**Scan now** starts a manual scan. While a scan runs the button becomes **Cancel scan** and a progress bar shows the phase (listing, indexing, probing), the rate and an estimate of the time left.',
+    'A second thin progress bar appears while expected-episode lookups or a Plex sync run in the background.',
+    'The **Show adult content** switch appears only when an Adult root is configured. It is off on every launch.',
+    'The version in the bottom-left corner shows "(dev)" when the app is run from source rather than installed.',
+  ]),
+  P('Every table in the app can be sorted by clicking a column heading (click again to reverse) and filtered with the search box above it. Many rows are clickable: a series opens its episodes, a movie title opens its files, an episode or movie file reveals itself in Windows Explorer.'),
+);
+
+// ---------------- 4 Dashboard ----------------
+add(H1('4. Dashboard'), ...img('dashboard', 'The Dashboard after a full scan.'),
+  P('The Dashboard is a summary of the whole ledger. Everything on it is computed live from the database.'),
+  H2('4.1 Top tiles'),
+  table(['Tile', 'What it shows'], [
+    ['Library', 'Total files, total size and total hours of video across every non-adult root.'],
+    ['TV Shows / Anime / Movies', 'Number of series or titles, number of files, size, and the share of files that have captions (embedded or sidecar subtitles).'],
+    ['Movie multiples', 'Titles that exist as more than one file, how many extra files that is, and their combined size.'],
+    ['Library health', '100% minus the share of files that are unparsed, failed to probe, or are missing.'],
+    ['Captions', 'Files with any subtitle track or sidecar.'],
+    ['Below 720p', 'Files whose probed resolution is 576p, 480p or SD.'],
+    ['Avg bitrate', 'Average video bitrate, overall and per library.'],
+    ['Last scan', 'When it ran, how long it took, and its added / removed / modified counts.'],
+    ['Manual fixes', 'How many corrections you have saved.'],
+    ['Last export', 'When CSVs were last written and how many files.'],
+    ['Missing episodes', 'Episodes you lack according to TVmaze / AniList, how many series have gaps, and how many series are matched, unmatched or still pending.'],
+    ['Duplicate episodes', 'Season/episode combinations that exist as several files.'],
+    ['Mixed-quality series', 'Series with more than one resolution.'],
+    ['Low-bitrate files', 'Files under the bitrate threshold for their resolution (thresholds are in Settings).'],
+    ['Undefined audio language', 'Files whose audio track carries no language tag.'],
+    ['Folder watch', 'Whether the optional folder watcher is on and when it last saw a change.'],
+  ], [2600, 6760]),
+  H2('4.2 Charts'),
+  P('Eight stacked bar charts break the probed files down by resolution, video codec, audio codec, container, audio language, subtitle language, frame rate and dynamic range. Each bar is split by library (blue TV, purple Anime, orange Movies); hover a segment for the exact count.'),
+  H2('4.3 Panels'),
+  bullets([
+    '**Recently added** – the newest files by first-seen time, with a link to the change log.',
+    '**Largest series** and **Largest movie files** – by size on disk.',
+    '**Most missing episodes** – the series with the biggest gaps, with the exact episodes listed; whole missing seasons collapse into ranges such as "S6–S12 entirely".',
+    '**Scan history** – the last eight scans with status, trigger, thread count, duration and counts.',
+  ]),
+);
+
+// ---------------- 5 TV & Anime ----------------
+add(H1('5. TV Shows and Anime'), ...img('anime', 'The Anime list. TV Shows looks the same.'),
+  P('One row per series. The summary strip counts series, episodes, size, runtime, how many series have full captions and how many have parse issues.'),
+  table(['Column', 'Meaning'], [
+    ['Seasons', 'Distinct season numbers on disk, with the range when it is not 1..N.'],
+    ['Episodes', 'Files that belong to the series.'],
+    ['Runtime / Size', 'Totals from the probe.'],
+    ['Resolution / Codec', 'Every resolution and codec present.'],
+    ['Audio / Subs', 'Union of audio and subtitle languages across the series.'],
+    ['Rating', 'The online average (TVmaze or AniList) once the series has been matched.'],
+    ['Mine', 'Your own 0–5 stars. Click a star to set it; click the same star again to clear. A small "P4.5" beside it is your Plex rating when Plex is synced.'],
+    ['Watched', 'Share of episodes Plex has marked played (needs a Plex sync).'],
+    ['Captions', 'Share of episodes with subtitles: green 100%, amber partial, red none.'],
+    ['Missing', 'Episodes you lack out of the expected total, or "complete", or "no match" when the online lookup could not find the series.'],
+    ['Issues', 'Unparsed or unprobed files in the series.'],
+  ], [1800, 7560]),
+  H2('5.1 Episode detail'), ...img('episodes', 'A series opened from the Anime list, with the expected-episode grid at the top.'),
+  P('Click a series to open it. The header shows the totals and a **Match…** button (see chapter 10). When expected counts exist, a grid shows every season with each episode number as a green (present) or red (missing) cell.'),
+  P('The table lists every file with its parsed episode number, title, file name, probed length, resolution and pixel size, fps, video codec with bit depth and HDR badge, audio languages and codecs, subtitle tracks, captions flag, bitrate and size. Badges mark files that are **missing** from disk or have a manual **fixed** override. Click a row to reveal the file in Explorer; click **Fix…** to correct its details (chapter 14.2).'),
+);
+
+// ---------------- 6 Movies ----------------
+add(H1('6. Movies'), ...img('movies', 'The Movies list; a ×2 badge marks titles with two files.'),
+  P('One row per title. Files are grouped by a normalised title plus year, so `Pacific Rim (2013).mp4` and `Pacific Rim (2013) [4k].mkv` become one title with two versions. The **Only titles with multiple files** checkbox narrows the list to those.'),
+  ...img('movie-versions', 'The files behind one title.'),
+  P('Click a title to see its files side by side: edition tag, length, resolution, fps, video codec and profile, audio, subtitles, captions, bitrate, size and container. Each row has **Fix…** for corrections and reveals the file in Explorer when clicked.'),
+);
+
+// ---------------- 7 Web ----------------
+add(H1('7. Web videos'), ...img('web', 'Web videos grouped by channel folder.'),
+  P('A root of type **Web videos** is for downloaded web content, typically from yt-dlp. The top-level folder is treated as the channel; loose files at the root fall under "(no channel)". The file name becomes the title after stripping a trailing `[videoId]` and any `YYYYMMDD` date. When an id is present the video list links to it on YouTube.'),
+  P('The channel list shows video count, runtime, size, resolutions, the upload-date range and when the last file arrived. Open a channel to see its videos with every probed field. A channel can be rated with stars from its header.'),
+);
+
+// ---------------- 8 Adult ----------------
+add(H1('8. Adult library'),
+  P('A root of type **Adult** holds content you want kept apart. MediaLedger classifies each file under it as anime, TV or movie from its folder and name, so the ordinary series and movie views and tools all work on it. What differs is visibility:'),
+  bullets([
+    'Adult files are excluded from every list, count, chart and query until the **Show adult content** switch at the bottom of the sidebar is on.',
+    'The switch is **off on every launch**. Nothing remembers it.',
+    'While it is on, an **Adult** tab appears under Library with its own summary, resolution chart, recently added, series list, movie list and unparsed list. Series open in the normal episode view.',
+    'Adult files are left out of CSV exports unless **Settings → Adult content → Include in CSV exports** is ticked.',
+    'Screenshots and the README never include adult content.',
+  ]),
+  P('Under Settings → Adult content you can also choose whether files that match none of the classification patterns are treated as anime or TV.'),
+);
+
+// ---------------- 9 Missing ----------------
+add(H1('9. Missing episodes'), ...img('missing', 'Series ranked by how many episodes are missing.'),
+  P('After each scan MediaLedger looks up every series it has not seen before on TVmaze (TV) or AniList (anime) and stores the number of episodes in each season. Both services are free and need no key; lookups run at about one series per second in the background, and airing series are re-checked every two weeks. Comparing those counts with what is on disk, per season, gives an exact list of what you lack.'),
+  table(['Column', 'Meaning'], [
+    ['Source', 'tvmaze, anilist, manual or none. A lock badge means you chose the match or entered counts yourself; automatic re-checks never overwrite a locked series.'],
+    ['Status', 'Running / Ended (TVmaze) or RELEASING / FINISHED (AniList).'],
+    ['Expected / Have / Missing', 'Regular-season episodes only; specials (season 0) are not counted.'],
+    ['Which', 'The missing episodes per season. Whole missing seasons collapse into ranges.'],
+    ['absolute numbering', 'A badge shown when a season on disk is numbered far beyond its expected length (for example One Piece folders numbered 62–77). That season is skipped rather than reported as missing.'],
+  ], [2200, 7160]),
+  H2('9.1 The Match dialog'),
+  P('Press **Match…** on any series (here, on the series page, or in the lists) when a series was matched to the wrong entry, was not found, or you know the counts yourself. The dialog shows the current match, lets you search either TVmaze or AniList regardless of library type, and lists candidates with year, format and episode count; click one to use it. Below that you can type counts per season by hand, declare that the series has no expected counts, or return a locked series to automatic.'),
+  note('AniList numbers anime by cour, so a split season shows up as separate "Part 2" entries. MediaLedger merges those into the same season automatically. If a series still lines up better with broadcast seasons, switch its source to TVmaze in the Match dialog.'),
+  P('The two buttons above the list start a background pass: **Look up new series** for anything not yet looked up, **Re-check all unlocked series** to refresh everything that you have not locked.'),
+);
+
+// ---------------- 10 Duplicates ----------------
+add(H1('10. Duplicates'), ...img('duplicates', 'Two files for the same episode, side by side.'),
+  P('Every season/episode that exists as more than one file is shown as a group, each file as a card with size, length, resolution, bitrate, codec, HDR, audio, subtitles and container. The card with the highest resolution and bitrate is marked **best quality**.'),
+  P('Press **Keep this** on the file you want. It is marked keep, the others are marked discard candidates and drawn faded, and the group moves to the decided state. Nothing is deleted: use **Reveal** to open a file in Explorer and delete it there if you wish. Decisions are stored with the file and survive scans and renames; **Clear decision** undoes them. **Hide decided** narrows the list to groups still waiting.'),
+);
+
+// ---------------- 11 Quality ----------------
+add(H1('11. Quality'), ...img('quality', 'The Quality report.'),
+  P('Lists files and series whose technical quality looks off:'),
+  bullets([
+    '**Mixed-resolution series** and **Mixed seasons** – a series, or a single season, that holds more than one resolution.',
+    '**Low-bitrate files** – files whose video bitrate is below the threshold for their resolution. Thresholds are editable under Settings → Quality thresholds; the defaults are 6000 kbps for 4K, 1500 for 1080p and 700 for 720p.',
+    '**No audio track**, **Undefined audio language** and **Under 2 minutes** – usually samples, trailers, or damaged files. Use **Fix…** to ignore a file that is not real media.',
+  ]),
+);
+
+// ---------------- 12 Ratings ----------------
+add(H1('12. Ratings'), ...img('ratings', 'Online averages beside your own stars.'),
+  table(['Column', 'Meaning'], [
+    ['Online', 'The average score from TVmaze or AniList, out of 10, stored when the series was matched. Movies have no online score.'],
+    ['Plex', 'The audience score Plex shows for the title, once Plex is synced.'],
+    ['Plex mine', 'The rating you gave the title inside Plex, shown out of 5.'],
+    ['Watched', 'From Plex play counts: a percentage for series, yes/no for movies.'],
+    ['Mine', 'Your MediaLedger rating, 0–5 stars. Click to set, click the same star to clear.'],
+    ['Note', 'Free text saved when you leave the field.'],
+  ], [1800, 7560]),
+  P('Filters narrow the list to one library, to titles you have rated, to titles you have not, or to titles with a Plex rating of yours. Your stars and notes are exported in the series and movie CSVs.'),
+);
+
+// ---------------- 13 Problems ----------------
+add(H1('13. Problems'), ...img('problems', 'Everything the scanner could not resolve.'),
+  P('The summary strip counts open problems. Sections below list unparsed file names with the parser\'s best guess, ffprobe errors, duplicate episodes, missing files, and your saved manual fixes (including ignored files).'),
+  bullets([
+    '**Forget missing files** removes the records of files that have vanished. Until you press it they stay flagged, which protects you from a NAS outage being mistaken for a deletion.',
+    'A root that cannot be reached during a scan is logged as `root_offline` and skipped entirely; its files are never marked missing.',
+  ]),
+  H2('13.1 The Fix dialog'), ...img('fix-modal', 'Correcting an episode that the parser could not place.'),
+  P('**Fix…** appears on every file row in the app. The dialog states what the parser currently thinks, then lets you set the correct values:'),
+  bullets([
+    'Episodes: series (with suggestions), season, episode and an optional end episode for double episodes, episode title.',
+    'Movies: title, year, edition tag, and **Source** (Web or Rip) for the naming engine.',
+    '**Ignore this file** hides a file from every list, CSV and rename plan without touching it on disk.',
+    'A free-text note.',
+  ]),
+  P('Saved fixes are stored by root and relative path, re-applied on every future scan, and follow the file through the app\'s own rename tools. **Remove fix** returns a file to what the parser says.'),
+);
+
+// ---------------- 14 Change log ----------------
+add(H1('14. Change log'), ...img('changes', 'The change log with its 30-day activity chart.'),
+  P('Every scan writes one entry per event: **added**, **removed**, **modified** (size or date changed), **returned** (a missing file came back), **probe_error**, **root_offline** and **warning**. The strip at the top counts totals and the last seven days; the chart shows activity per day for the last 30. Pick a scan in the dropdown to see only its events with its duration, files seen and thread count, or filter by kind.'),
+);
+
+// ---------------- 15 Movie names ----------------
+add(H1('15. Movie names (the naming engine)'), ...img('movienames', 'Proposed names with flags; every batch is a dry run until the live switch is armed.'),
+  P('This tab renames movie files to a consistent pattern built from facts the app can prove. It is the most carefully guarded part of MediaLedger, because it is one of only two places that write to the share.'),
+  H2('15.1 The pattern'),
+  P('`Title (Year) - Source Resolution HDR Codec [Audio] [{edition-Name}].ext`'),
+  P('Examples: `A Breed Apart (2025) - Web 1080p SDR H264.mp4` and `Avatar (2009) - Rip 4K HDR HEVC {edition-Extended Collector\'s Edition}.mkv`.'),
+  table(['Token', 'Where it comes from', 'When unknown'], [
+    ['Title, Year', 'The parser and your manual fixes, or the Plex match when the truth source is set to Plex.', 'Year becomes the word `Year`; the file is flagged.'],
+    ['Source', '`Web` when the old name carries a LiLTV or WEB marker; `Rip` for BRrip, BluRay, BDRip, Remux or DVD; or whatever you set in the Fix dialog or with bulk source.', 'The word `Source`; the file is flagged.'],
+    ['Resolution', 'ffprobe pixel size: 4K, 1440p, 1080p, 720p, 576p, 480p or SD.', 'Blocked.'],
+    ['HDR / SDR', 'ffprobe colour transfer: HDR10, Dolby Vision and HLG all become `HDR`.', '`SDR`.'],
+    ['Codec', 'ffprobe video codec: H264, HEVC, AV1, MPEG4, VC1…', 'Blocked.'],
+    ['Audio', 'ffprobe audio languages, only when they are not plain English, e.g. `ENG+JPN`.', 'Omitted; flagged if undefined.'],
+    ['Edition', 'Edition words found in the old name, in Plex\'s `{edition-…}` form.', 'Omitted.'],
+  ], [1500, 5200, 2660]),
+  P('The title keeps your existing words. Colons and question marks are dropped, slashes become dashes, other characters Windows forbids are removed, and trailing dots and spaces are trimmed. Nothing is re-capitalised.'),
+  H2('15.2 Ready, flagged, blocked'),
+  bullets([
+    '**Ready** – the proposed name differs from the current one and every check passes.',
+    '**Flagged** – ready, but worth a look. Flags include `no_source`, `no_year`, `res_mismatch` (the old name claimed a resolution the probe disagrees with; the probe wins), `hdr_claimed_but_sdr`, `audio_und`, `plex_title_differs` and `plex_unlinked`. The tab explains each flag under "What the flags mean".',
+    '**Blocked** – never renamed: no successful probe, no title, or a **collision** where two or more files would receive the identical name.',
+  ]),
+  H2('15.3 Batch settings'),
+  table(['Setting', 'Effect'], [
+    ['Layout', '**Rename in place** changes only the file name (an atomic rename). **Move into "Title (Year)" folders** creates Plex\'s preferred folder layout by copying the file, verifying its size and a head-and-tail hash, then deleting the original.'],
+    ['Batch limit', 'The most files one live batch may contain. Forces review in chunks.'],
+    ['Title & year from', '**File name + my fixes** (default) or **Plex match**. With Plex, unlinked files fall back to the file name and are flagged.'],
+    ['Allow live renames', 'The arming switch. Until it is on, only dry runs are possible.'],
+  ], [2200, 7160]),
+  H2('15.4 Running a batch'),
+  steps([
+    'Filter and tick the files you want. **Select shown** ticks every ready file currently listed.',
+    'Press **Dry run N**. Nothing is touched; the result window lists exactly what would happen and the batch is recorded as a dry run in the Batches table.',
+    'When satisfied, tick **Allow live renames**, press **Save**, then **Rename N live**.',
+    'A confirmation lists the renames and asks you to type `RENAME`.',
+    '**Pre-flight** then checks every file: it still exists, its size matches the last scan, the target name is free, the root is writable, the path is under 255 characters and no two files share a target. If any check fails, the whole batch is aborted and nothing is renamed.',
+    'Each rename is followed by a re-check of the file\'s size before the database is updated. A failure stops the batch; earlier renames stand and are journaled.',
+  ]),
+  P('While a live batch runs, scans and the folder watcher wait.'),
+  H2('15.5 Undo'),
+  P('Every live batch is listed under **Batches** with an **Undo** button. Undo walks the journal in reverse; for each file it confirms the renamed file still exists with the recorded size and that the original name is free, then renames it back. Files that fail the check are left alone and reported, and the batch shows as "partially undone". **Items** shows the per-file journal of any batch.'),
+  H2('15.6 Bulk source, collisions, placeholders'),
+  bullets([
+    '**Set source for selected…** applies Web, Rip or "clear" to every ticked file (or to everything shown when nothing is ticked). It only records a fix; nothing is renamed.',
+    '**Name collisions** groups the blocked pairs with their sizes. **Keep this, ignore others** marks the rest ignored (still on disk) so the kept file can be renamed; alternatively give one file a distinguishing edition via Fix….',
+    '**Placeholders on disk** lists files already renamed with `(Year)` or `Source` in their name. Plex will not match a `(Year)` file, so fill the value with Fix… and rename again.',
+  ]),
+  warn('Before the first large live batch, run one small batch of 20 or 30 files in place, check the result in Explorer and in Plex, then undo it. That proves the whole path on your NAS before you trust it with the full library.'),
+);
+
+// ---------------- 16 Rename TV/anime ----------------
+add(H1('16. Rename TV / anime'), ...img('rename', 'The episode rename tool, shown here while disabled.'),
+  P('A simpler tool for episodes. It is **off** until you enable it under Settings → Renaming. When on, it lists every episode file whose name differs from `Show - S01E02 - Title.ext`, built from the parsed details and your fixes. Tick files, press **Rename**, confirm. Files are renamed in place, never moved or overwritten, and every attempt is logged in the History table. Fix anything wrong under Problems first, because the proposal is only as good as the parse.'),
+);
+
+// ---------------- 17 CSV ----------------
+add(H1('17. CSV export'), ...img('export', 'The export tab with history.'),
+  P('Every export writes a set of CSV files into `exports\\<timestamp>\\` and refreshes the `latest\\` copy, so a spreadsheet can always point at the same file names. Exports run automatically after each scan (Settings → CSV export) or on demand with **Export now**. The history table lists past exports with an **Open** button.'),
+  table(['File', 'Contents'], [
+    ['tv_episodes.csv / anime_episodes.csv', 'One row per episode file with every parsed and probed field.'],
+    ['tv_series.csv / anime_series.csv', 'One row per series: seasons, episodes, runtime, size, resolutions, codecs, languages, captions %, episode gaps, metadata source, expected and missing episodes with the exact list, online rating, your rating and note, mixed-resolution and low-bitrate flags.'],
+    ['movies.csv', 'One row per movie file, with the number of versions of that title.'],
+    ['movies_titles.csv', 'One row per title: file count, versions, best resolution, size, languages, captions, your rating and note.'],
+    ['movies_multiples.csv', 'Only titles with more than one file.'],
+    ['web_videos.csv', 'One row per web video: channel, title, upload date, video id and every probed field.'],
+    ['changes.csv', 'The change log for the scan that triggered the export.'],
+  ], [3000, 6360]),
+  P('Adult roots are excluded unless allowed in Settings. Ignored files are always excluded.'),
+);
+
+// ---------------- 18 Settings ----------------
+add(H1('18. Settings reference'), ...img('settings', 'The top of the Settings page.'),
+  H2('Library roots'), P('One row per folder: on/off, label, path (UNC or local; the … button browses), and type: TV, Anime, Movies, Web videos, or Adult (auto-detect anime / TV / movie). Roots with the same type may repeat. Press **Save settings** after editing.'),
+  H2('Scanning'), bullets([
+    '**Multi-threaded listing** deals show folders out to worker threads so directory listing over SMB overlaps. 0 threads means automatic (CPU count minus one). Turn off if the NAS struggles.',
+    '**Parallel ffprobe processes** – how many files are probed at once; 8 suits gigabit SMB.',
+    '**Re-probe unchanged files** – force ffprobe on everything next scan.',
+    '**Video extensions**, **Subtitle sidecar extensions**, **Ignore patterns** – what counts as media, what counts as a caption sidecar, and glob patterns to skip.',
+  ]),
+  H2('ffprobe (ffmpeg)'), P('Shows where ffprobe was found and its version. A path override and a **Download** button fetch the latest static build into the data folder.'),
+  H2('Expected episodes'), P('Turn the TVmaze / AniList lookups on or off and set how often airing series are re-checked.'),
+  H2('Folder watch'), P('Uses Windows change notifications on each root and starts a scan once the folder has been quiet for the settle time. A copy in progress keeps pushing the timer back.'),
+  H2('Renaming'), P('Enables the TV / anime rename tool. Off by default.'),
+  H2('Adult content'), P('Whether adult roots appear in CSVs, and the fallback subtype for files that match no pattern.'),
+  H2('Quality thresholds'), P('Minimum video bitrate per resolution for the Quality report.'),
+  H2('CSV export'), P('Output folder and whether to export after every scan.'),
+  H2('Schedule'), bullets([
+    '**In-app timer** – scans every N hours while the window is open.',
+    '**Windows Task Scheduler** – installs a daily task that launches MediaLedger with `--scan`, which scans, exports and exits even when the app is closed. If the app is already open, the open window runs the scan instead. Re-install the task after upgrading so it points at the current program.',
+  ]),
+  H2('Data'), P('Database path and size, schema version, counts, and buttons to back up now, open the backups folder, the data folder and the log.'),
+  H2('Updates'), P('Automatic updates on/off, and the GitHub token needed only while the repository is private.'),
+  H2('Plex'), P('See chapter 19.'),
+);
+
+// ---------------- 19 Plex ----------------
+add(H1('19. Plex integration'),
+  P('MediaLedger talks to your own Plex Media Server over its local HTTP API. It never writes to Plex and needs no Plex account: only the server\'s address and a token.'),
+  H2('19.1 Setup'),
+  steps([
+    'In Plex Web, open any movie or episode, click the ⋯ menu, choose **Get Info**, then **View XML**.',
+    'The page that opens has `X-Plex-Token=` at the end of its address. Copy the value after the equals sign. Do not share it; it grants access to your server.',
+    'In MediaLedger, Settings → Plex: enter the server URL (for Plex on the NAS, `http://192.168.1.204:32400`), paste the token, press **Test**. It reports the server version and lists the libraries it can see.',
+    'Press **Sync now**. The first sync derives the path mapping from the first file it recognises, for example `/media` → `\\\\192.168.1.204\\Apocrypha_Media_Pool`, and shows it for editing.',
+    'Tick **Sync after every scan** to keep it current.',
+  ]),
+  H2('19.2 What a sync stores'),
+  table(['Per file', 'Per show'], [
+    ['Plex title and year, rating key, IMDb / TMDB / TVDB ids, your Plex rating, audience rating, play count, last viewed, resume offset, library section', 'Plex\'s title and year, ids, your rating, audience rating, episode and watched counts, content rating'],
+  ], [4680, 4680]),
+  P('These appear on the Ratings tab (Plex, Plex mine, Watched), on the series lists (Watched %, your Plex rating beside your stars), and as the optional truth source for the movie naming engine. The status line under the Sync button reports how many Plex items matched a file and lists examples of files Plex does not have.'),
+);
+
+// ---------------- 20 Troubleshooting ----------------
+add(H1('20. Troubleshooting'),
+  table(['Symptom', 'Cause and fix'], [
+    ['Scan finishes instantly and the change log says root_offline', 'The path in Settings is wrong or the NAS is off. Fix the path; the files are untouched and never marked missing.'],
+    ['Files show but resolution and length are empty', 'ffprobe was not found when they were scanned. Check Settings → ffprobe, download it if needed, then scan again (unprobed files are probed automatically).'],
+    ['A series is missing episodes it clearly has', 'Either the parser could not place some files (see Problems → Unparsed, use Fix…) or the online match is wrong (use Match… and pick the right entry or enter counts).'],
+    ['Missing shows "absolute numbering"', 'Episode numbers on disk continue across seasons. That season is skipped; enter per-season counts by hand or fix the episode numbers with Fix….'],
+    ['Update check says the feed is not reachable', 'The repository is private. Enter a read-only GitHub token under Settings → Updates or make the repository public.'],
+    ['Movie name blocked as collision', 'Two files would get the same name. Keep one and ignore the other under Name collisions, or give one an edition with Fix….'],
+    ['Rename batch aborted in pre-flight', 'Something changed since the last scan (size differs, target exists, share read-only). The report names each problem; fix or deselect those files and run again. Nothing was renamed.'],
+    ['Plex sync matched 0 items', 'The path mapping is wrong. Compare a Plex file path (from View XML) with the same file\'s path in MediaLedger and set the mapping under Settings → Plex.'],
+    ['Adult tab is not there', 'Either no Adult root is enabled, or the Show adult content switch is off (it resets on every launch).'],
+    ['The app will not start a second copy', 'Only one instance runs; launching again focuses the open window. A scheduled --scan hands its request to the open window.'],
+  ], [3000, 6360]),
+  P('The log at `%APPDATA%\\MediaLedger\\medialedger.log` records every scan, sync, rename and error with timestamps; Settings → Data → Open log opens it.'),
+);
+
+// ---------------- Glossary ----------------
+add(H1('21. Glossary'),
+  table(['Word', 'Meaning'], [
+    ['ffprobe', 'Part of ffmpeg; reads a media file\'s streams and reports resolution, codecs, languages and more without playing it.'],
+    ['Sidecar', 'A subtitle, poster or metadata file that sits next to a video with the same base name.'],
+    ['Override / fix', 'A manual correction stored in the ledger and re-applied on every scan.'],
+    ['Placeholder', 'A literal word written into a movie name where the engine could not prove a value.'],
+    ['Pre-flight', 'The set of checks run over an entire rename batch before any file is touched.'],
+    ['Journal', 'The per-file record of a rename batch that makes undo possible.'],
+    ['Truth source', 'Where the naming engine takes title and year from: file name plus fixes, or the Plex match.'],
+    ['Root', 'A watched folder with a library type.'],
+    ['Rating key', 'Plex\'s internal id for an item.'],
+  ], [1800, 7560]),
+);
+
+const doc = new Document({
+  creator: 'AxialForge', title: 'MediaLedger User Manual', description: `MediaLedger ${version} manual`,
+  styles: { default: { document: { run: { font: F, size: 22 } } }, paragraphStyles: [
+    { id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: { size: 34, bold: true, color: '1F3864', font: F }, paragraph: { spacing: { before: 360, after: 160 }, outlineLevel: 0 } },
+    { id: 'Heading2', name: 'Heading 2', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: { size: 26, bold: true, color: '2E5597', font: F }, paragraph: { spacing: { before: 240, after: 100 }, outlineLevel: 1 } },
+    { id: 'Heading3', name: 'Heading 3', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: { size: 23, bold: true, color: '444444', font: F }, paragraph: { spacing: { before: 160, after: 80 }, outlineLevel: 2 } },
+  ] },
+  numbering,
+  sections: [{
+    properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1300, bottom: 1300, left: 1440, right: 1440 } } },
+    headers: { default: new Header({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: `MediaLedger ${version} · User Manual`, size: 16, color: '888888' })] })] }) },
+    footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Page ', size: 16, color: '888888' }), new TextRun({ children: [PageNumber.CURRENT], size: 16, color: '888888' })] })] }) },
+    children: body,
+  }],
+});
+Packer.toBuffer(doc).then(buf => { fs.writeFileSync(out, buf); console.log('wrote', out, Math.round(buf.length / 1024) + ' KB'); });
