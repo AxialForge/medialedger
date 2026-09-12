@@ -10,6 +10,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Internal: the application core (scanning, jobs, every data query) moved out of
+  the Electron entry point into `src/main/service.js` so a web server shell for
+  the Raspberry Pi can share it. No behaviour change; `test/service.test.js`
+  guards the split.
+
+### Changed
+
 ### Fixed
 
 ## [0.6.2] - 2026-09-12

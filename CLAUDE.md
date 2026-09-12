@@ -72,7 +72,8 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 
 | Path | Role |
 |------|------|
-| `src/main/main.js` | App lifecycle, single-instance lock, `--scan` headless mode, updater wiring, all IPC handlers and SQL queries for the UI |
+| `src/main/main.js` | Electron shell only: window, single-instance lock, `--scan` headless mode, updater, dialogs/shell handlers, and `for (const [ch, fn] of svc.handlers) ipcMain.handle(ch, …)` |
+| `src/main/service.js` | The shared core: `createService({ userData, log, send, host })` owns settings, db, scanner, scheduler, watcher, scan/metadata/Plex jobs and every data handler as a `Map` of channel → function. No Electron. The web shell for the Raspberry Pi mounts the same map as HTTP routes. `test/service.test.js` enforces both rules |
 | `src/main/settings.js` | JSON settings with defaults + deep merge |
 | `src/main/db.js` | `node:sqlite` wrapper, base schema + `MIGRATIONS`, backups, overrides/exports helpers |
 | `src/main/scanner.js` | Walk roots (single or threaded) → diff against DB → apply overrides → queue ffprobe → change log |
@@ -127,7 +128,7 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 ## Gotchas
 
 - **Adult filtering is a query-time string, not a view.** `AF(alias)` in
-  `main.js` appends ` AND adult=0` to every library query unless the runtime
+  `service.js` appends ` AND adult=0` to every library query unless the runtime
   `showAdult` flag is on. Any new query over `files` must include `${AF()}`
   (or `${AF('f.')}` when aliased) or adult rows leak into the main views. The
   flag is deliberately not persisted.
