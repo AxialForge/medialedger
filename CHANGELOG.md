@@ -12,6 +12,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [1.0.1] - 2026-09-14
+
+### Added
+
+- Favicon in the browser tab, an Apple touch icon and a web-app manifest, so the Pi site shows the MediaLedger icon and can be added to a phone home screen as a standalone app.
+
 ## [1.0.0] - 2026-09-12
 
 The first stable release. Both shells, the Windows desktop app and the
