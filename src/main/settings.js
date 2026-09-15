@@ -35,6 +35,7 @@ const DEFAULTS = {
     layout: 'inplace',        // inplace | folders
     batchLimit: 200,
     truth: 'parser',          // parser | plex  — where Title/Year come from
+    parts: ['source', 'resolution', 'hdr', 'codec', 'audio', 'edition'], // what follows "Title (Year) -", in order; drop entries to leave them out
   },
   quality: {                  // low-bitrate thresholds in kbps by resolution label
     minKbps: { '4K': 6000, '1440p': 3000, '1080p': 1500, '720p': 700, '576p': 400, '480p': 350, SD: 250 },

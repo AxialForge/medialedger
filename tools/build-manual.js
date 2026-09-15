@@ -300,6 +300,7 @@ add(H1('15. Movie names (the naming engine)'), ...img('movienames', 'Proposed na
   P('This tab renames movie files to a consistent pattern built from facts the app can prove. It is the most carefully guarded part of MediaLedger, because it is one of only two places that write to the share.'),
   H2('15.1 The pattern'),
   P('`Title (Year) - Source Resolution HDR Codec [Audio] [{edition-Name}].ext`'),
+  P('Only `Title (Year)` is fixed, because Plex matches on it. Everything after the dash is a **name part** you can leave out or reorder under Batch settings → **Name parts**: click a chip to switch it off (it shows struck through) or on, use the ◂ ▸ arrows to move it, and watch the preview. The whole list rebuilds at once. The same thing works from the list itself: every word in a proposed name is clickable, so clicking `Source` in any row removes Source from every name, the way editing one dimension in a CAD sketch updates the whole part. If you do not like `Web` / `Rip` in your names, click it once and it is gone; the `no_source` flag disappears with it.'),
   P('Examples: `A Breed Apart (2025) - Web 1080p SDR H264.mp4` and `Avatar (2009) - Rip 4K HDR HEVC {edition-Extended Collector\'s Edition}.mkv`.'),
   table(['Token', 'Where it comes from', 'When unknown'], [
     ['Title, Year', 'The parser and your manual fixes, or the Plex match when the truth source is set to Plex.', 'Year becomes the word `Year`; the file is flagged.'],
@@ -500,7 +501,7 @@ add(H1('21. Security'),
   steps([
     'Security → HTTPS → **Turn on HTTPS**, then confirm. The server writes a certificate valid for ten years covering every name it answers to (`medialedger.local`, the hostname, your custom domain if the installer was given one, and every LAN address), audits the change, and restarts. Sign-in sessions survive the restart.',
     'The page reopens on `https://`. If the Pi was installed with `--port=80`, the site moves to port 443 (no port in the address) and port 80 redirects there, so `http://medialedger.home` keeps working.',
-    'The browser warns that the certificate is not trusted. Either accept the warning for this site, or remove it for good: press **Download certificate** and follow the per-device steps under *Removing the browser warning* (Windows: Trusted Root Certification Authorities; Android: install a CA certificate; iPhone: install the profile, then Certificate Trust Settings; macOS: Keychain, Always Trust).',
+    'The browser warns that the certificate is not trusted. Either accept the warning for this site, or remove it for good: press **Download certificate** (a `.crt` file Windows opens with its own installer on double-click) and follow the per-device steps under *Removing the browser warning* (Windows: Trusted Root Certification Authorities; Android: install a CA certificate; iPhone: install the profile, then Certificate Trust Settings; macOS: Keychain, Always Trust).',
   ]),
   warn('Adding a new name for the Pi later (a custom domain, a rename) needs a new certificate: delete `/var/lib/medialedger/tls/` on the Pi, restart the service, and turn HTTPS on again. Installing the certificate on a device is per device; the file itself is public, only `key.pem` on the Pi is secret.'),
 );

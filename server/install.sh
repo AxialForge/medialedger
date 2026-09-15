@@ -170,7 +170,9 @@ if [[ $HTTPS -eq 1 && ! -f "$DATA_DIR/tls/cert.pem" ]]; then
   chown "$SVC_USER:$SVC_USER" "$DATA_DIR/tls/"*.pem; chmod 600 "$DATA_DIR/tls/"*.pem
 fi
 
-if ! grep -q passwordHash "$DATA_DIR/web.json" 2>/dev/null; then
+# An admin account exists when web.json has a user with role admin (1.1+) or the pre-1.1 passwordHash (migrated on first start).
+has_admin() { node -e "const s=require(process.argv[1]);process.exit((s.passwordHash||Object.values(s.users||{}).some(u=>u.role==='admin'))?0:1)" "$DATA_DIR/web.json" 2>/dev/null; }
+if ! has_admin; then
   say "Web password"
   /usr/local/bin/medialedger --set-password
 fi

@@ -15,6 +15,11 @@ html[data-theme="lavender"] { --bg: #14101f; --panel: #1d182d; --panel2: #27203c
 /* hard */
 html[data-theme="gunmetal"] { --bg: #0e1012; --panel: #16191d; --panel2: #1f2328; --panel3: #292e34; --line: #2c3238; --text: #dfe3e8; --muted: #8c949d; --accent: #ff7a1a; --warn: #ffb020; --tv: #ff9a4d; --anime: #c8ced6; --movie: #ffd166; }
 html[data-theme="crimson"] { --bg: #0f0a0b; --panel: #1a1013; --panel2: #24161a; --panel3: #2f1c21; --line: #3a2229; --text: #f0e4e6; --muted: #a58a90; --accent: #ff3b4a; --bad: #ff8090; --tv: #ff6b6b; --anime: #ffb4a2; --movie: #ffd6a5; }
+.chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border: 1px solid var(--accent); border-radius: 12px; font-size: 12px; cursor: pointer; user-select: none; color: var(--text); background: var(--panel2); }
+.chip.off { border-color: var(--line); color: var(--muted); text-decoration: line-through; opacity: .7; }
+.chip.fixed { cursor: default; border-style: dashed; }
+.chip .mv { font-style: normal; color: var(--muted); padding: 0 2px; } .chip .mv:hover { color: var(--accent); }
+.seg-part { cursor: pointer; border-bottom: 1px dotted var(--muted); } .seg-part:hover { color: var(--accent); border-bottom-color: var(--accent); }
 .qrbox { display: inline-block; background: #fff; padding: 8px; border-radius: 8px; line-height: 0; }
 .qrbox svg { display: block; }
 * { box-sizing: border-box; }

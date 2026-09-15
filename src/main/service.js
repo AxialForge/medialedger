@@ -310,9 +310,10 @@ function createService({ userData, log, send, host }) {
 
   // ---- movie naming engine ---------------------------------------------------------------
   function moviePlan() {
-    const truth = (settings.get().movieRename || {}).truth || 'parser';
+    const mr = settings.get().movieRename || {};
+    const truth = mr.truth || 'parser', parts = mr.parts;
     const rows = db.all(`SELECT f.*, o.source AS source_override FROM files f LEFT JOIN overrides o ON o.root_id=f.root_id AND o.rel_path=f.rel_path WHERE f.library_type='movie' AND f.missing=0${AF('f.')} ORDER BY f.movie_title COLLATE NOCASE, f.file_name`);
-    return planMovieNames(rows.map(r => ({ ...r, truth })));
+    return planMovieNames(rows.map(r => ({ ...r, truth, parts })));
   }
   h('movie:plan', () => ({ plan: moviePlan(), lock: renameLock, settings: settings.get().movieRename }));
   h('movie:run', async (ids, opts) => {

@@ -759,6 +759,12 @@ views.movienames = async () => {
         <button class="small" id="mrSave">Save</button>
         <span class="muted tiny">Folder layout copies, verifies size and a head/tail hash, then deletes the original. In-place uses an atomic rename.</span>
       </div>
+      <div class="inline" style="margin-top:10px;align-items:center;flex-wrap:wrap">
+        <span class="small">Name parts</span>
+        <span class="chip fixed" title="Always present: Plex matches on it">Title (Year)</span><span class="muted">-</span>
+        <span id="mrParts"></span>
+        <span class="muted tiny">Click a part to leave it out or put it back; ◂ ▸ move it. The same works by clicking a word in any proposed name below. Preview: <span class="mono" id="mrPreview"></span></span>
+      </div>
     </div>
     <div class="toolbar" style="margin-top:12px">
       <input type="search" id="mq" placeholder="Filter…">
@@ -790,7 +796,7 @@ views.movienames = async () => {
       return !q || `${p.from} ${p.name || ''} ${p.blocked || ''}`.toLowerCase().includes(q);
     }).slice(0, 1500);
     $('#mcount').textContent = `${shown.length.toLocaleString()} of ${plan.length.toLocaleString()}`;
-    $('#mtable').innerHTML = `<table><thead><tr><th></th><th>Current name</th><th></th><th>Proposed name</th><th>Flags</th><th></th></tr></thead><tbody>${shown.map(p => `<tr class="rename-row ${p.ok ? '' : 'blockedrow'}"><td>${p.ok && !p.unchanged ? `<input type="checkbox" class="msel" data-id="${p.id}" ${selected.has(p.id) ? 'checked' : ''}>` : ''}</td><td class="wrap">${esc(p.from)}${p.dir ? `<span class="sub">${esc(p.dir)}</span>` : ''}</td><td class="arrow">→</td><td class="wrap">${p.ok ? (p.unchanged ? '<span class="muted">unchanged</span>' : `<b>${esc(p.name)}</b>`) : `<span class="bad">blocked: ${esc(p.blocked)}</span>`}</td><td class="wrap">${p.flags.map(f => `<span class="badge ${/^no_|mismatch|claimed/.test(f) ? 'warn' : ''}" title="${esc(FLAG_TEXT[f.split(':')[0]] || '')}">${esc(f)}</span>`).join('')}</td><td class="nowrap">${fixBtn(p)}${p.ok && !p.unchanged && mr.enabled && !lock ? ` <button class="small danger mOne" data-id="${p.id}" title="Rename just this file, live">Rename</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">Nothing matches.</td></tr>'}</tbody></table>`;
+    $('#mtable').innerHTML = `<table><thead><tr><th></th><th>Current name</th><th></th><th>Proposed name</th><th>Flags</th><th></th></tr></thead><tbody>${shown.map(p => `<tr class="rename-row ${p.ok ? '' : 'blockedrow'}"><td>${p.ok && !p.unchanged ? `<input type="checkbox" class="msel" data-id="${p.id}" ${selected.has(p.id) ? 'checked' : ''}>` : ''}</td><td class="wrap">${esc(p.from)}${p.dir ? `<span class="sub">${esc(p.dir)}</span>` : ''}</td><td class="arrow">→</td><td class="wrap">${p.ok ? (p.unchanged ? '<span class="muted">unchanged</span>' : `<b>${p.segments ? p.segments.map(x => `<span class="seg${['title', 'year', 'ext'].includes(x.part) ? '' : ' seg-part'}" data-part="${x.part}" title="${['title', 'year', 'ext'].includes(x.part) ? '' : 'Click to leave ' + x.part + ' out of every name'}">${esc(x.text)}</span>`).join('') : esc(p.name)}</b>`) : `<span class="bad">blocked: ${esc(p.blocked)}</span>`}</td><td class="wrap">${p.flags.map(f => `<span class="badge ${/^no_|mismatch|claimed/.test(f) ? 'warn' : ''}" title="${esc(FLAG_TEXT[f.split(':')[0]] || '')}">${esc(f)}</span>`).join('')}</td><td class="nowrap">${fixBtn(p)}${p.ok && !p.unchanged && mr.enabled && !lock ? ` <button class="small danger mOne" data-id="${p.id}" title="Rename just this file, live">Rename</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">Nothing matches.</td></tr>'}</tbody></table>`;
     syncButtons();
   };
   const syncButtons = () => {
@@ -816,7 +822,28 @@ views.movienames = async () => {
     $('#bsGo', card).onclick = async () => { const n = await L.override.bulkSource(ids, v === 'clear' ? '' : v); closeModal(); toast(`Source set on ${n} file(s)`); views.movienames(); };
   };
   $('#mSelNone').onclick = () => { selected.clear(); render(); };
-  $('#mrSave').onclick = async () => { await L.settings.set({ movieRename: { layout: $('#mrLayout').value, batchLimit: Number($('#mrLimit').value) || 200, enabled: $('#mrEnabled').checked, truth: $('#mrTruth').value } }); toast('Batch settings saved'); views.movienames(); };
+  // ---- name parts: ordered chips, off = left out of every name. Saved with the batch settings; the plan is rebuilt by the core.
+  const PART_LABEL = { source: 'Source', resolution: 'Resolution', hdr: 'HDR/SDR', codec: 'Codec', audio: '[Audio]', edition: '{edition}' };
+  const PART_SAMPLE = { source: 'Web', resolution: '1080p', hdr: 'SDR', codec: 'H264', audio: '[eng]', edition: '{edition-Extended}' };
+  const ALL_PARTS = ['source', 'resolution', 'hdr', 'codec', 'audio', 'edition'];
+  let parts = Array.isArray(mr.parts) ? mr.parts.filter(p => ALL_PARTS.includes(p)) : ALL_PARTS.slice();
+  const partsOrder = () => [...parts, ...ALL_PARTS.filter(p => !parts.includes(p))];
+  const renderParts = () => {
+    $('#mrParts').innerHTML = partsOrder().map((p, i, arr) => { const on = parts.includes(p); return `<span class="chip ${on ? '' : 'off'}" data-part="${p}" title="${on ? 'Click to leave out' : 'Click to include'}">${on && i > 0 && parts.includes(arr[i - 1]) ? `<i class="mv" data-dir="-1" title="Move left">◂</i>` : ''}${PART_LABEL[p]}${on && i < parts.length - 1 ? `<i class="mv" data-dir="1" title="Move right">▸</i>` : ''}</span>`; }).join('');
+    const tail = parts.map(p => PART_SAMPLE[p]).join(' ');
+    $('#mrPreview').textContent = `Movie (2019)${tail ? ' - ' + tail : ''}.mkv`;
+  };
+  renderParts();
+  const savePartsAndRebuild = async () => { await L.settings.set({ movieRename: { ...mr, parts } }); toast(parts.length === ALL_PARTS.length ? 'All name parts on' : `Names now: Title (Year)${parts.length ? ' - ' + parts.map(p => PART_LABEL[p]).join(' ') : ''}`); views.movienames(); };
+  const togglePart = (p) => { if (parts.includes(p)) parts = parts.filter(x => x !== p); else parts.push(p); renderParts(); savePartsAndRebuild(); };
+  $('#mrParts').addEventListener('click', e => {
+    const mv = e.target.closest('.mv'); const chip = e.target.closest('.chip');
+    if (!chip || !chip.dataset.part) return;
+    if (mv) { const p = chip.dataset.part, i = parts.indexOf(p), j = i + Number(mv.dataset.dir); if (i < 0 || j < 0 || j >= parts.length) return; [parts[i], parts[j]] = [parts[j], parts[i]]; renderParts(); savePartsAndRebuild(); return; }
+    togglePart(chip.dataset.part);
+  });
+  $('#mtable').addEventListener('click', e => { const seg = e.target.closest('.seg[data-part]'); if (seg && ALL_PARTS.includes(seg.dataset.part)) togglePart(seg.dataset.part); });
+  $('#mrSave').onclick = async () => { await L.settings.set({ movieRename: { layout: $('#mrLayout').value, batchLimit: Number($('#mrLimit').value) || 200, enabled: $('#mrEnabled').checked, truth: $('#mrTruth').value, parts } }); toast('Batch settings saved'); views.movienames(); };
 
   const showResult = (r, live) => {
     const okN = r.results.filter(x => x.ok).length;
@@ -1269,10 +1296,10 @@ views.security = async () => {
           : `<p class="muted">Adds a code from Google Authenticator, Aegis, Bitwarden, 1Password or any TOTP app. Even a leaked password then cannot sign in.</p><div id="totpBox"><button class="primary" id="totpStart">Set up 2FA</button></div>`}
         <h3 style="margin-top:16px">HTTPS ${st.https ? '<span class="right ok">on</span>' : '<span class="right muted">off</span>'}</h3>
         ${st.https
-          ? `<p class="muted">Traffic between browsers and this server is encrypted with a self-signed certificate on port ${st.port}. Each device warns once until the certificate is installed on it.</p><div class="inline"><a href="tls/cert.pem" download="medialedger-cert.pem"><button>Download certificate</button></a></div>`
+          ? `<p class="muted">Traffic between browsers and this server is encrypted with a self-signed certificate on port ${st.port}. Each device warns once until the certificate is installed on it.</p><div class="inline"><a href="tls/medialedger-cert.crt" download="medialedger-cert.crt"><button>Download certificate</button></a></div>`
           : `<p class="muted">Encrypts the traffic between browsers and this server with a self-signed certificate made here, for every name and address the server answers to. The service restarts, sign-in sessions are kept${st.tlsPort !== st.port ? `, and the site moves to port ${st.tlsPort} with a redirect left on ${st.port}` : ''}.</p><div class="inline"><button class="primary" id="tlsOn" ${st.opensslAvailable ? '' : 'disabled title="openssl is not installed on the server"'}>Turn on HTTPS</button></div>`}
         <details style="margin-top:8px"><summary class="muted tiny" style="cursor:pointer">Removing the browser warning: install the certificate once per device</summary><div class="tiny" style="margin-top:6px;line-height:1.6">
-          <b>Windows</b>: download it, double-click → Install Certificate → Local Machine → Place all certificates in the following store → <i>Trusted Root Certification Authorities</i>. Restart the browser.<br>
+          <b>Windows</b>: download it, double-click the .crt → Install Certificate → Local Machine → Place all certificates in the following store → <i>Trusted Root Certification Authorities</i>. Restart the browser.<br>
           <b>Android</b>: download it, then Settings → Security → Encryption &amp; credentials → Install a certificate → <i>CA certificate</i> → pick the file. Chrome trusts it at once.<br>
           <b>iPhone / iPad</b>: open the download in Safari, allow the profile, then Settings → General → VPN &amp; Device Management → install it, and finally Settings → General → About → Certificate Trust Settings → switch it on.<br>
           <b>macOS</b>: double-click → Keychain Access → find it under System → Get Info → Trust → Always Trust.<br>

@@ -12,6 +12,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [1.3.1] - 2026-09-15
+
+### Added
+
+- **Editable name pattern** for the movie naming engine: Batch settings →
+  *Name parts* shows Source, Resolution, HDR/SDR, Codec, [Audio] and {edition}
+  as chips; click one to leave it out of every name, use the arrows to reorder,
+  and the list rebuilds. Every proposed name in the list is made of clickable
+  words that do the same, so clicking `Source` in any row drops it everywhere.
+  Stored as `movieRename.parts`; the `no_source` flag only appears while Source
+  is in use.
+
+### Fixed
+
+- **Installer asked for a new web password on every rerun** since 1.1: it
+  looked for the pre-accounts `passwordHash` key. It now checks for an admin
+  account and leaves the password alone.
+- The certificate download is named `.crt` instead of `.pem`, so Windows opens
+  its certificate installer on double-click instead of asking for an app.
+### Changed
+
+### Fixed
+
 ## [1.3.0] - 2026-09-15
 
 ### Added

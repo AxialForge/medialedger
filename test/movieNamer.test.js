@@ -55,4 +55,16 @@ assert.strictEqual(plan[2].ok, true); assert.strictEqual(plan[2].name, 'Pacific 
 const same = planMovieNames([{ ...base, id: 9, file_name: 'Done (2020) - Web 1080p SDR H264.mp4', movie_title: 'Done', movie_year: 2020 }]);
 assert.strictEqual(same[0].unchanged, true);
 
+// Name parts: optional and ordered; Source off removes the placeholder and its flag.
+{
+  const base = { file_name: 'Avatar.2009.mkv', library_type: 'movie', movie_title: 'Avatar', movie_year: 2009, probe_ok: true, resolution: '4K', hdr: 'HDR10', video_codec: 'hevc', audio_langs: 'eng', rel_path: 'Avatar.2009.mkv' };
+  assert.strictEqual(proposeMovieName(base).name, 'Avatar (2009) - Source 4K HDR HEVC.mkv');
+  assert.ok(proposeMovieName(base).flags.includes('no_source'));
+  const noSrc = proposeMovieName({ ...base, parts: ['resolution', 'hdr', 'codec', 'audio', 'edition'] });
+  assert.strictEqual(noSrc.name, 'Avatar (2009) - 4K HDR HEVC.mkv'); assert.ok(!noSrc.flags.includes('no_source'));
+  assert.strictEqual(proposeMovieName({ ...base, parts: ['codec', 'resolution'] }).name, 'Avatar (2009) - HEVC 4K.mkv');
+  assert.strictEqual(proposeMovieName({ ...base, parts: [] }).name, 'Avatar (2009).mkv');
+  assert.strictEqual(proposeMovieName({ ...base, parts: ['bogus', 'resolution', 'resolution'] }).name, 'Avatar (2009) - 4K.mkv');
+  assert.deepStrictEqual(proposeMovieName(base).segments.map(x => x.part), ['title', 'year', 'source', 'resolution', 'hdr', 'codec', 'ext']);
+}
 console.log('movie namer tests passed');

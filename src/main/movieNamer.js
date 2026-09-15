@@ -79,7 +79,14 @@ function editionToken(editionTag, originalName) {
  * @param {object} f  a row from the files table (parsed + probed + override-merged)
  * @returns {{ ok: boolean, blocked: string|null, name: string|null, tokens: object, flags: string[] }}
  */
+// Which parts follow "Title (Year) -", in order. Settings → Movie names lets the user switch parts off or reorder them.
+const DEFAULT_PARTS = ['source', 'resolution', 'hdr', 'codec', 'audio', 'edition'];
+const ALL_PARTS = new Set(DEFAULT_PARTS);
+const normalizeParts = (parts) => Array.isArray(parts) ? parts.filter((p, i, a) => ALL_PARTS.has(p) && a.indexOf(p) === i) : DEFAULT_PARTS.slice();
+
 function proposeMovieName(f) {
+  const parts_ = normalizeParts(f.parts);
+  const want = (p) => parts_.includes(p);
   const flags = [];
   const tokens = {};
   const ext = (f.file_name || '').match(/\.[^.]+$/)?.[0]?.toLowerCase() || '';
@@ -102,7 +109,7 @@ function proposeMovieName(f) {
   // A manual fix can state the source outright (Web / Rip); it beats any marker in the name.
   const src = /^(web|rip)$/i.test(f.source_override || '') ? { source: f.source_override[0].toUpperCase() + f.source_override.slice(1).toLowerCase(), from: 'manual fix' } : detectSource(f.file_name, f.edition_tag);
   tokens.source = src.source;
-  if (!src.from) flags.push('no_source');
+  if (!src.from && want('source')) flags.push('no_source');
 
   if (!f.probe_ok) {
     return { ok: false, blocked: f.probed_at ? 'probe failed' : 'not probed yet', name: null, tokens, flags };
@@ -127,11 +134,13 @@ function proposeMovieName(f) {
 
   tokens.edition = editionToken(f.edition_tag, f.file_name);
 
-  const parts = [tokens.source, tokens.resolution, tokens.hdr, tokens.codec];
-  if (tokens.audio) parts.push(tokens.audio);
-  if (tokens.edition) parts.push(tokens.edition);
-  const name = `${tokens.title} (${tokens.year}) - ${parts.join(' ')}${ext}`;
-  return { ok: true, blocked: null, name, tokens, flags };
+  // Segments let the UI show which part of the name came from where (and toggle parts by clicking them).
+  const segments = [{ part: 'title', text: tokens.title }, { part: 'year', text: ` (${tokens.year})` }];
+  const tail = parts_.filter(p => tokens[p]).map(p => ({ part: p, text: tokens[p] }));
+  tail.forEach((t, i) => { t.text = (i === 0 ? ' - ' : ' ') + t.text; segments.push(t); });
+  segments.push({ part: 'ext', text: ext });
+  const name = segments.map(x => x.text).join('');
+  return { ok: true, blocked: null, name, tokens, flags, segments };
 }
 
 // Plan a whole set: adds collision blocking (same folder + same proposed name, case-insensitive).
@@ -147,4 +156,4 @@ function planMovieNames(rows) {
   return out;
 }
 
-module.exports = { proposeMovieName, planMovieNames, cleanTitle, detectSource, claimedResolution, codecToken, audioToken, editionToken };
+module.exports = { DEFAULT_PARTS, normalizeParts, proposeMovieName, planMovieNames, cleanTitle, detectSource, claimedResolution, codecToken, audioToken, editionToken };

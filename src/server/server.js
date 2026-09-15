@@ -240,10 +240,10 @@ async function handle(req, res) {
       return json(res, 200, { ok: true, result: result === undefined ? null : result });
     }
 
-    // The public half of the self-signed certificate, for installing on phones and PCs (any signed-in session).
-    if (url.pathname === '/tls/cert.pem') {
+    // The public half of the self-signed certificate, for installing on phones and PCs (any signed-in session). Served as .crt so Windows opens the certificate installer on double-click.
+    if (url.pathname === '/tls/cert.pem' || url.pathname === '/tls/medialedger-cert.crt') {
       if (!tls || !sec.sessionOf(req.headers.cookie)) { res.writeHead(404); return res.end('not found'); }
-      res.writeHead(200, { 'content-type': 'application/x-x509-ca-cert', 'content-disposition': 'attachment; filename="medialedger-cert.pem"', 'cache-control': 'no-store' });
+      res.writeHead(200, { 'content-type': 'application/x-x509-ca-cert', 'content-disposition': 'attachment; filename="medialedger-cert.crt"', 'cache-control': 'no-store' });
       return fs.createReadStream(path.join(tlsDir, 'cert.pem')).pipe(res);
     }
     // Export downloads (admin session): /exports/<folder>/<file.csv> or /exports/<file.zip> from the export directory.
