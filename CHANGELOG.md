@@ -12,6 +12,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [1.4.0] - 2026-09-15
+
+### Added
+
+- **Tags** on every series and movie, three kinds: **genres** from the same
+  TVmaze / AniList lookup that fetches episode counts (AniList's ranked tags
+  such as Isekai too; movies take theirs from Plex), **sub / dub** worked out
+  locally from the probed audio and subtitle languages (Subbed, Dubbed, Dual
+  audio, Mixed), and **your own tags** typed on a title page (`kids`,
+  `Christmas`…, suggestions from earlier tags, × to remove). Shown in a Tags
+  column on the lists, matched by the filter box, exported in the series and
+  movie title CSVs, guests read-only. Series matched before this version get
+  their genres filled in once in the background. Schema v7.
+### Changed
+
+### Fixed
+
 ## [1.3.1] - 2026-09-15
 
 ### Added

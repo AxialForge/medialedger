@@ -1,6 +1,7 @@
 'use strict';
 // CSV export. Writes a timestamped folder plus a "latest" copy so a spreadsheet
 // can always point at the same file name.
+const { titleAudioType, fileAudioType, onlineTags } = require('./tags');
 const fs = require('fs');
 const { writeZip } = require('./zip');
 const path = require('path');
@@ -70,6 +71,7 @@ function adultClause(settings) { return settings && settings.adult && settings.a
 
 function exportEpisodes(db, type, dir, prefix, settings) {
   const ur = new Map(db.all('SELECT title_key, stars, note FROM user_ratings WHERE library_type=?', type).map(r => [r.title_key, r]));
+  const tags = db.tagsFor(type);
   const metas = new Map(db.all('SELECT * FROM series_meta WHERE library_type=?', type).map(m => [m.show_name, m]));
   const thr = (settings && settings.quality && settings.quality.minKbps) || {};
   const rows = db.all('SELECT * FROM files WHERE library_type = ? AND ignored=0' + adultClause(settings) + ' ORDER BY show_name, season, episode, file_name', type);
@@ -104,17 +106,19 @@ function exportEpisodes(db, type, dir, prefix, settings) {
         expected_episodes: r ? r.expectedTotal : '', missing_episodes: r ? r.missingCount : '',
         missing_list: r ? r.missing.map(x => x.missing.length >= x.expected ? `S${x.season}: all ${x.expected}` : `S${x.season}: ${x.missing.length > 15 ? x.missing.slice(0, 15).join(',') + ',… (' + x.missing.length + ')' : x.missing.join(',')}`).join('; ') : '',
         absolute_numbering: r && r.absolute ? 'yes' : '',
-        online_rating: m && m.rating != null ? m.rating : '', my_rating: ur.get(show) ? ur.get(show).stars : '', my_note: ur.get(show) ? ur.get(show).note || '' : '' }; })(),
+        online_rating: m && m.rating != null ? m.rating : '', my_rating: ur.get(show) ? ur.get(show).stars : '', my_note: ur.get(show) ? ur.get(show).note || '' : '',
+        genres: onlineTags(m).join('; '), audio_type: titleAudioType({ files: list.filter(r => r.audio_langs).length, jpn: list.filter(r => fileAudioType(r.audio_langs, r.sub_langs, { anime: type === 'anime' }) && /jpn|\bja\b/i.test(r.audio_langs)).length, eng: list.filter(r => /eng|\ben\b/i.test(r.audio_langs || '')).length }, { anime: type === 'anime' }) || '', tags: (tags.get(show) || []).join('; ') }; })(),
       mixed_resolution: new Set(list.map(r => r.resolution).filter(Boolean)).size > 1 ? 'yes' : 'no',
       low_bitrate_files: list.filter(r => r.resolution && thr[r.resolution] && r.bitrate_kbps != null && r.bitrate_kbps < thr[r.resolution]).length,
     });
   }
-  writeCsv(path.join(dir, `${prefix}_series.csv`), ['show', 'seasons', 'season_list', 'episodes', 'unparsed_files', 'total_duration_h', 'total_size_gb', 'avg_episode_min', 'resolutions', 'video_codecs', 'audio_langs', 'sub_langs', 'captions_pct', 'episode_gaps', 'probe_errors', 'meta_source', 'meta_title', 'meta_status', 'expected_episodes', 'missing_episodes', 'missing_list', 'absolute_numbering', 'online_rating', 'my_rating', 'my_note', 'mixed_resolution', 'low_bitrate_files'], summary);
+  writeCsv(path.join(dir, `${prefix}_series.csv`), ['show', 'seasons', 'season_list', 'episodes', 'unparsed_files', 'total_duration_h', 'total_size_gb', 'avg_episode_min', 'resolutions', 'video_codecs', 'audio_langs', 'sub_langs', 'captions_pct', 'episode_gaps', 'probe_errors', 'meta_source', 'meta_title', 'meta_status', 'expected_episodes', 'missing_episodes', 'missing_list', 'absolute_numbering', 'online_rating', 'my_rating', 'my_note', 'genres', 'audio_type', 'tags', 'mixed_resolution', 'low_bitrate_files'], summary);
   return [`${prefix}_episodes.csv`, `${prefix}_series.csv`];
 }
 
 function exportMovies(db, dir, settings) {
   const ur = new Map(db.all("SELECT title_key, stars, note FROM user_ratings WHERE library_type='movie'").map(r => [r.title_key, r]));
+  const mtags = db.tagsFor('movie');
   const rows = db.all('SELECT * FROM files WHERE library_type = ? AND ignored=0' + adultClause(settings) + ' ORDER BY movie_title, movie_year, file_name', 'movie');
   const groups = new Map();
   for (const r of rows) { if (r.missing) continue; if (!groups.has(r.group_key)) groups.set(r.group_key, []); groups.get(r.group_key).push(r); }
@@ -137,10 +141,11 @@ function exportMovies(db, dir, settings) {
       audio_langs: unionList(list.map(r => r.audio_langs)), sub_langs: unionList(list.map(r => r.sub_langs)),
       has_captions: list.some(r => r.has_captions === 1) ? 'yes' : 'no', files: list.map(r => r.file_name).join(' | '),
       my_rating: ur.get(list[0].group_key) ? ur.get(list[0].group_key).stars : '', my_note: ur.get(list[0].group_key) ? ur.get(list[0].group_key).note || '' : '',
+      genres: onlineTags({ genres: list.map(r => r.plex_genres).find(Boolean) }).join('; '), audio_type: titleAudioType({ files: list.filter(r => r.audio_langs).length, jpn: list.filter(r => /jpn|\bja\b/i.test(r.audio_langs || '')).length, eng: list.filter(r => /eng|\ben\b/i.test(r.audio_langs || '')).length }) || '', tags: (mtags.get(list[0].group_key) || []).join('; '),
     });
   }
   titles.sort((a, b) => a.title.localeCompare(b.title) || (a.year || 0) - (b.year || 0));
-  writeCsv(path.join(dir, 'movies_titles.csv'), ['title', 'year', 'file_count', 'is_multiple', 'versions', 'best_resolution', 'total_size_gb', 'duration_min', 'audio_langs', 'sub_langs', 'has_captions', 'my_rating', 'my_note', 'files'], titles);
+  writeCsv(path.join(dir, 'movies_titles.csv'), ['title', 'year', 'file_count', 'is_multiple', 'versions', 'best_resolution', 'total_size_gb', 'duration_min', 'audio_langs', 'sub_langs', 'has_captions', 'my_rating', 'my_note', 'genres', 'audio_type', 'tags', 'files'], titles);
   writeCsv(path.join(dir, 'movies_multiples.csv'), ['title', 'year', 'file_count', 'versions', 'best_resolution', 'total_size_gb', 'files'], titles.filter(t => t.file_count > 1));
   return ['movies.csv', 'movies_titles.csv', 'movies_multiples.csv'];
 }

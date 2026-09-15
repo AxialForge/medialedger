@@ -20,6 +20,15 @@ html[data-theme="crimson"] { --bg: #0f0a0b; --panel: #1a1013; --panel2: #24161a;
 .chip.fixed { cursor: default; border-style: dashed; }
 .chip .mv { font-style: normal; color: var(--muted); padding: 0 2px; } .chip .mv:hover { color: var(--accent); }
 .seg-part { cursor: pointer; border-bottom: 1px dotted var(--muted); } .seg-part:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.tagcell .badge { margin: 1px 3px 1px 0; }
+.badge.tag-genre { color: var(--muted); border-color: var(--line); }
+.badge.tag-mine { color: var(--accent); border-color: var(--accent); }
+.badge.tag-audio { color: var(--text); background: var(--panel3); }
+.badge.tag-sub { color: var(--anime); } .badge.tag-dub { color: var(--movie); } .badge.tag-dual { color: var(--accent2); } .badge.tag-mixed { color: var(--warn); }
+.tagstrip { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 6px 0 10px; }
+.tagstrip .mine { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.tagstrip .tag-x { font-style: normal; cursor: pointer; color: var(--muted); } .tagstrip .tag-x:hover { color: var(--bad); }
+.tagstrip .tag-add { width: 110px; padding: 2px 8px; font-size: 12px; border-radius: 12px; }
 .qrbox { display: inline-block; background: #fff; padding: 8px; border-radius: 8px; line-height: 0; }
 .qrbox svg { display: block; }
 * { box-sizing: border-box; }

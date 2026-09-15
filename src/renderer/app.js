@@ -293,6 +293,36 @@ document.addEventListener('click', async e => {
   box.title = next ? next + ' / 5' : 'not rated';
 });
 
+// ---------- tags ----------------------------------------------------------
+const AUDIO_LABEL = { dual: 'Dual audio', sub: 'Subbed', dub: 'Dubbed', raw: 'Raw', mixed: 'Mixed sub/dub' };
+const audioBadge = (t) => t ? `<span class="badge tag-audio tag-${t}" title="from the audio and subtitle languages ffprobe found">${AUDIO_LABEL[t] || t}</span>` : '';
+// Compact cell for list tables: genres (grey), sub/dub, then your own tags (accent).
+function tagCell(r) { return `${(r.genres || []).slice(0, 4).map(g => `<span class="badge tag-genre">${esc(g)}</span>`).join('')}${(r.genres || []).length > 4 ? `<span class="muted tiny" title="${esc(r.genres.slice(4).join(', '))}">+${r.genres.length - 4}</span>` : ''}${audioBadge(r.audio_type)}${(r.tags || []).map(t => `<span class="badge tag-mine">${esc(t)}</span>`).join('')}`; }
+const tagText = (r) => [...(r.genres || []), r.audio_type ? AUDIO_LABEL[r.audio_type] + ' ' + r.audio_type : '', ...(r.tags || [])].join(' ');
+// Editable strip for a title page: online genres, sub/dub, and your tags with × and an add box.
+function tagStrip(type, key, { genres = [], audio = null, tags = [] } = {}) {
+  const canEdit = me.role !== 'guest';
+  return `<div class="tagstrip" data-type="${esc(type)}" data-key="${esc(key)}">
+    ${genres.map(g => `<span class="badge tag-genre" title="genre from the online match / Plex">${esc(g)}</span>`).join('')}${audioBadge(audio)}
+    <span class="mine">${tags.map(t => `<span class="badge tag-mine">${esc(t)}${canEdit ? ` <i class="tag-x" data-tag="${esc(t)}" title="Remove tag">×</i>` : ''}</span>`).join('')}</span>
+    ${canEdit ? `<input type="text" class="tag-add" placeholder="+ tag" list="tagSuggest" maxlength="40" title="Your own tag: kids, Christmas, watch with… Enter to add">` : ''}
+    ${!genres.length && !audio && !tags.length && !canEdit ? '<span class="muted tiny">no tags</span>' : ''}
+  </div>`;
+}
+document.addEventListener('click', async e => {
+  const x = e.target.closest('.tag-x'); if (!x) return;
+  const strip = x.closest('.tagstrip');
+  try { const tags = await L.tags.remove(strip.dataset.type, strip.dataset.key, x.dataset.tag); $('.mine', strip).innerHTML = tags.map(t => `<span class="badge tag-mine">${esc(t)} <i class="tag-x" data-tag="${esc(t)}" title="Remove tag">×</i></span>`).join(''); } catch (err) { toast(err.message, true); }
+});
+document.addEventListener('keydown', async e => {
+  const inp = e.target.closest && e.target.closest('.tag-add'); if (!inp || e.key !== 'Enter') return;
+  const strip = inp.closest('.tagstrip'); const v = inp.value.trim(); if (!v) return;
+  try { const tags = await L.tags.add(strip.dataset.type, strip.dataset.key, v); inp.value = ''; $('.mine', strip).innerHTML = tags.map(t => `<span class="badge tag-mine">${esc(t)} <i class="tag-x" data-tag="${esc(t)}" title="Remove tag">×</i></span>`).join(''); refreshTagSuggestions(); } catch (err) { toast(err.message, true); }
+});
+async function refreshTagSuggestions() {
+  try { const all = await L.tags.all(); let dl = $('#tagSuggest'); if (!dl) { dl = el('<datalist id="tagSuggest"></datalist>'); document.body.append(dl); } dl.innerHTML = all.map(t => `<option value="${esc(t.tag)}">`).join(''); } catch { /* guest or offline */ }
+}
+
 // ---------- views -----------------------------------------------------------
 const views = {};
 
@@ -363,6 +393,7 @@ async function seriesView(type) {
   const rows = await L.data.series(type);
   const cols = [
     { key: 'show_name', label: 'Series', cls: 'wrap' },
+    { key: 'tags', label: 'Tags', cls: 'wrap tagcell', sortVal: r => (r.tags || []).length * 100 + (r.genres || []).length, render: tagCell },
     { key: 'seasons', label: 'Seasons', num: true, render: r => r.min_season === r.max_season ? `${r.seasons}` : `${r.seasons} <span class="muted tiny">S${r.min_season}–S${r.max_season}</span>` },
     { key: 'episodes', label: 'Episodes', num: true },
     { key: 'seconds', label: 'Runtime', num: true, render: r => fmtHours(r.seconds) },
@@ -378,10 +409,10 @@ async function seriesView(type) {
     { key: 'missing_count', label: 'Missing', num: true, sortVal: r => r.expected ? r.missing_count : -1, render: r => r.expected ? (r.missing_count ? `<span class="badge bad">${r.missing_count}</span> <span class="muted tiny">of ${r.expected}</span>` : '<span class="badge ok">complete</span>') : (r.meta_source === 'none' ? '<span class="badge" title="no match found">no match</span>' : '<span class="muted">—</span>') },
     { key: 'unparsed', label: 'Issues', num: true, render: r => (r.unparsed ? `<span class="badge warn">${r.unparsed} unparsed</span>` : '') + (r.probed < r.episodes ? `<span class="badge">${r.episodes - r.probed} unprobed</span>` : '') },
   ];
-  const table = makeTable(rows, cols, { search: r => r.show_name, defaultSort: { key: 'show_name' }, onRow: r => { location.hash = `#${type}/${encodeURIComponent(r.show_name)}`; } });
+  const table = makeTable(rows, cols, { search: r => `${r.show_name} ${tagText(r)}`, defaultSort: { key: 'show_name' }, onRow: r => { location.hash = `#${type}/${encodeURIComponent(r.show_name)}`; } });
   const eps = rows.reduce((a, r) => a + r.episodes, 0), bytes = rows.reduce((a, r) => a + (r.bytes || 0), 0), secs = rows.reduce((a, r) => a + (r.seconds || 0), 0);
   view.innerHTML = `<h1>${typeName(type)}</h1><div class="tiles compact"><div class="tile ${type}"><div class="label">Series</div><div class="value">${rows.length}</div></div>${tile('', 'Episodes', eps.toLocaleString())}${tile('', 'Size', fmtBytes(bytes))}${tile('', 'Runtime', fmtHours(secs))}${tile('', 'Full captions', rows.filter(r => r.probed && r.captioned === r.episodes).length + ' series')}${tile('', 'With issues', rows.filter(r => r.unparsed).length + ' series')}</div>`;
-  view.append(searchToolbar(table, rows.length), table.node);
+  view.append(searchToolbar(table, rows.length, '<span class="muted tiny">Filter also matches genres, sub/dub and your tags</span>'), table.node);
 }
 views.tv = () => seriesView('tv');
 views.anime = () => seriesView('anime');
@@ -431,6 +462,7 @@ async function episodesView(type, show) {
   const table = makeTable(rows, cols, { search: r => `${r.file_name} ${r.episode_title || ''} ${sxe(r)}`, defaultSort: { key: 'season' }, onRow: r => L.showItem(r.abs_path) });
   view.innerHTML = `<div class="detail-head"><span class="back" id="back">← ${typeName(type)}</span><h1>${esc(show)}</h1><span class="muted">${live.length} episodes · ${fmtBytes(bytes)} · ${fmtHours(secs)}</span>${miss && miss.expected ? (miss.missing_count ? `<span class="badge bad">${miss.missing_count} missing of ${miss.expected}</span>` : '<span class="badge ok">complete</span>') : ''}<span class="grow"></span>${matchBtn(type, show)}</div>`;
   $('#back').onclick = () => { location.hash = '#' + type; };
+  view.insertAdjacentHTML('beforeend', tagStrip(type, show, { genres: data.genres || [], audio: live.length ? (rows.some(r => /jpn|\bja\b/i.test(r.audio_langs || '')) ? (live.every(r => /jpn|\bja\b/i.test(r.audio_langs || '') && /eng|\ben\b/i.test(r.audio_langs || '')) ? 'dual' : live.every(r => /jpn|\bja\b/i.test(r.audio_langs || '')) ? 'sub' : 'mixed') : (type === 'anime' && live.some(r => /eng|\ben\b/i.test(r.audio_langs || '')) ? 'dub' : null)) : null, tags: data.tags || [] })); refreshTagSuggestions();
   if (miss && miss.expected) view.insertAdjacentHTML('beforeend', missingGrid(miss));
   view.append(searchToolbar(table, rows.length, '<span class="muted tiny">Click a row to reveal the file in Explorer · Fix… corrects the parsed details</span>'), table.node);
 }
@@ -440,6 +472,7 @@ views.movies = async () => {
   const cols = [
     { key: 'title', label: 'Title', cls: 'wrap', render: r => `${esc(r.title)}${r.files > 1 ? ` <span class="badge warn">×${r.files}</span>` : ''}` },
     { key: 'year', label: 'Year', num: true },
+    { key: 'tags', label: 'Tags', cls: 'wrap tagcell', sortVal: r => (r.tags || []).length * 100 + (r.genres || []).length, render: tagCell },
     { key: 'files', label: 'Files', num: true },
     { key: 'resolutions', label: 'Versions', render: r => (r.resolutions || '').split(',').filter(Boolean).map(x => `<span class="badge">${esc(x)}</span>`).join('') + (r.editions ? ` <span class="muted tiny">${esc(r.editions)}</span>` : '') },
     { key: 'seconds', label: 'Length', num: true, render: r => fmtDur(r.seconds) },
@@ -450,7 +483,7 @@ views.movies = async () => {
     { key: 'bytes', label: 'Size', num: true, render: r => fmtBytes(r.bytes) },
   ];
   let onlyMulti = false;
-  const build = () => makeTable(onlyMulti ? rows.filter(r => r.files > 1) : rows, cols, { search: r => `${r.title} ${r.year || ''}`, defaultSort: { key: 'title' }, onRow: r => { location.hash = '#movies/' + encodeURIComponent(r.group_key); } });
+  const build = () => makeTable(onlyMulti ? rows.filter(r => r.files > 1) : rows, cols, { search: r => `${r.title} ${r.year || ''} ${tagText(r)}`, defaultSort: { key: 'title' }, onRow: r => { location.hash = '#movies/' + encodeURIComponent(r.group_key); } });
   let table = build();
   const multi = rows.filter(r => r.files > 1);
   view.innerHTML = `<h1>Movies</h1><div class="tiles compact"><div class="tile movie"><div class="label">Titles</div><div class="value">${rows.length}</div></div>${tile('', 'Files', rows.reduce((a, r) => a + r.files, 0))}${tile('', 'Size', fmtBytes(rows.reduce((a, r) => a + (r.bytes || 0), 0)))}${tile(multi.length ? 'warnt' : '', 'Multiples', multi.length + ' titles', fmtBytes(multi.reduce((a, r) => a + (r.bytes || 0), 0)))}${tile('', 'With captions', rows.filter(r => r.has_captions === 1).length)}</div>`;
@@ -480,7 +513,10 @@ async function movieFilesView(groupKey) {
   const table = makeTable(rows, cols, { onRow: r => L.showItem(r.abs_path) });
   view.innerHTML = `<div class="detail-head"><span class="back" id="back">← Movies</span><h1>${esc(r0.movie_title || groupKey)}${r0.movie_year ? ` <span class="muted">(${r0.movie_year})</span>` : ''}</h1><span class="muted">${rows.length} file(s)</span></div>`;
   $('#back').onclick = () => { location.hash = '#movies'; };
-  view.append(table.node);
+  const mg = (() => { try { const g = JSON.parse(rows.map(r => r.plex_genres).find(Boolean) || '[]'); return Array.isArray(g) ? g : []; } catch { return []; } })();
+  const live = rows.filter(r => !r.missing); const jp = r => /jpn|\bja\b/i.test(r.audio_langs || ''), en = r => /eng|\ben\b/i.test(r.audio_langs || '');
+  const audio = live.some(jp) ? (live.every(r => jp(r) && en(r)) ? 'dual' : live.every(jp) ? 'sub' : 'mixed') : null;
+  L.tags.get('movie', groupKey).then(tags => { view.insertAdjacentHTML('beforeend', tagStrip('movie', groupKey, { genres: mg, audio, tags })); view.append(table.node); refreshTagSuggestions(); });
 }
 
 views.changes = async () => {

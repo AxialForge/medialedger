@@ -12,6 +12,7 @@
 // createService() returns `handlers`, a Map of channel name → function. The
 // Electron shell registers each with ipcMain.handle; the web shell mounts each
 // as an HTTP route. Same names, same arguments, same results.
+const { titleAudioType, onlineTags, normalizeTag } = require('./tags');
 const path = require('path');
 const fs = require('fs');
 const { Settings } = require('./settings');
@@ -111,7 +112,9 @@ function createService({ userData, log, send, host }) {
         if (shows && !shows.includes(s)) continue;
         const m = have.get(s);
         if (m && m.locked) continue;
-        if (onlyNew && m && m.fetched_at && !(m.status && /running|releasing|airing/i.test(m.status) && m.fetched_at < staleBefore)) continue;
+        // A matched series without genres yet (looked up before 1.4) is fetched once more to fill them in.
+        const needsGenres = m && (m.source === 'tvmaze' || m.source === 'anilist') && m.genres == null;
+        if (onlyNew && m && m.fetched_at && !needsGenres && !(m.status && /running|releasing|airing/i.test(m.status) && m.fetched_at < staleBefore)) continue;
         todo.push({ type: t, show: s });
       }
     }
@@ -122,7 +125,7 @@ function createService({ userData, log, send, host }) {
       for (const { type: t, show } of todo) {
         try {
           const r = await metadata.lookupSeries(t, show);
-          if (r.found) { found++; db.saveSeriesMeta({ library_type: t, show_name: show, source: r.source, source_id: r.source_id, matched_title: r.matched_title, status: r.status, seasons: r.seasons, total_episodes: r.total_episodes, url: r.url, rating: r.rating ?? null, rating_votes: r.rating_votes ?? null, fetched_at: new Date().toISOString(), locked: 0 }); }
+          if (r.found) { found++; db.saveSeriesMeta({ library_type: t, show_name: show, source: r.source, source_id: r.source_id, matched_title: r.matched_title, status: r.status, seasons: r.seasons, total_episodes: r.total_episodes, url: r.url, rating: r.rating ?? null, rating_votes: r.rating_votes ?? null, genres: r.genres || [], online_tags: r.online_tags || [], fetched_at: new Date().toISOString(), locked: 0 }); }
           else { missed++; db.saveSeriesMeta({ library_type: t, show_name: show, source: 'none', fetched_at: new Date().toISOString(), locked: 0, note: r.candidates ? 'no confident match' : 'not found' }); }
         } catch (e) { failed++; log(`metadata ${t} "${show}": ${e.message}`); if (/HTTP 429/.test(e.message)) await new Promise(r => setTimeout(r, 10000)); }
         metaJob.done++; metaJob.message = `Looking up ${t === 'anime' ? 'AniList' : 'TVmaze'}: ${show}`;
@@ -273,7 +276,7 @@ function createService({ userData, log, send, host }) {
   h('meta:setMatch', async (type, show, source, id) => {
     const r = await metadata.fetchById(source, id);
     if (!r.found) throw new Error('That entry could not be loaded');
-    return db.saveSeriesMeta({ library_type: type, show_name: show, source: r.source, source_id: r.source_id, matched_title: r.matched_title, status: r.status, seasons: r.seasons, total_episodes: r.total_episodes, url: r.url, rating: r.rating ?? null, rating_votes: r.rating_votes ?? null, fetched_at: new Date().toISOString(), locked: 1 });
+    return db.saveSeriesMeta({ library_type: type, show_name: show, source: r.source, source_id: r.source_id, matched_title: r.matched_title, status: r.status, seasons: r.seasons, total_episodes: r.total_episodes, url: r.url, rating: r.rating ?? null, rating_votes: r.rating_votes ?? null, genres: r.genres || [], online_tags: r.online_tags || [], fetched_at: new Date().toISOString(), locked: 1 });
   });
   h('meta:setManual', (type, show, seasons, note) => db.saveSeriesMeta({ library_type: type, show_name: show, source: 'manual', seasons, total_episodes: Object.entries(seasons).filter(([s]) => s !== '0').reduce((a, [, n]) => a + Number(n || 0), 0), fetched_at: new Date().toISOString(), locked: 1, note }));
   h('meta:setNone', (type, show) => db.saveSeriesMeta({ library_type: type, show_name: show, source: 'none', fetched_at: new Date().toISOString(), locked: 1, note: 'no expected counts' }));
@@ -307,6 +310,9 @@ function createService({ userData, log, send, host }) {
 
   // ---- quality ------------------------------------------------------------------------
   h('data:quality', () => qualityReport());
+
+  // Per-title language counts for the sub/dub tag (see tags.js). LIKE is enough: ffprobe writes ISO codes separated by commas.
+  const AUDIO_COUNTS = `SUM(CASE WHEN probe_ok=1 AND audio_langs IS NOT NULL AND audio_langs<>'' THEN 1 ELSE 0 END) probed_audio, SUM(CASE WHEN audio_langs LIKE '%jpn%' OR audio_langs LIKE '%ja%' THEN 1 ELSE 0 END) jpn_files, SUM(CASE WHEN audio_langs LIKE '%eng%' OR audio_langs LIKE '%en,%' OR audio_langs='en' THEN 1 ELSE 0 END) eng_files, SUM(CASE WHEN (audio_langs LIKE '%jpn%' OR audio_langs LIKE '%ja%') AND (audio_langs LIKE '%eng%' OR audio_langs LIKE '%en,%' OR audio_langs='en') THEN 1 ELSE 0 END) dual_files`;
 
   // ---- movie naming engine ---------------------------------------------------------------
   function moviePlan() {
@@ -454,20 +460,29 @@ function createService({ userData, log, send, host }) {
       SUM(size) bytes, SUM(duration_s) seconds, SUM(CASE WHEN probe_ok=1 THEN 1 ELSE 0 END) probed,
       SUM(CASE WHEN has_captions=1 THEN 1 ELSE 0 END) captioned, SUM(CASE WHEN parse_ok=0 THEN 1 ELSE 0 END) unparsed,
       GROUP_CONCAT(DISTINCT resolution) resolutions, GROUP_CONCAT(DISTINCT video_codec) codecs, GROUP_CONCAT(DISTINCT audio_langs) audio_langs, GROUP_CONCAT(DISTINCT sub_langs) sub_langs,
-      MAX(last_seen) last_seen, SUM(CASE WHEN plex_view_count>0 THEN 1 ELSE 0 END) watched, MAX(plex_show_key) plex_show_key, SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) plex_linked
+      MAX(last_seen) last_seen, SUM(CASE WHEN plex_view_count>0 THEN 1 ELSE 0 END) watched, MAX(plex_show_key) plex_show_key, SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) plex_linked,
+      ${AUDIO_COUNTS}
     FROM files WHERE library_type=? AND missing=0 AND ignored=0${AF()} GROUP BY show_name ORDER BY show_name COLLATE NOCASE`, type);
-    const plexShows = new Map(db.all('SELECT rating_key, user_rating FROM plex_shows').map(s => [s.rating_key, s]));
+    const plexShows = new Map(db.all('SELECT rating_key, user_rating, genres FROM plex_shows').map(s => [s.rating_key, s]));
+    const tagMap = db.tagsFor(type);
     const miss = new Map(missingSummary(type).map(m => [m.show_name, m]));
     const metas = db.allSeriesMeta(type);
     const ur = new Map(db.userRatings(type).map(u => [u.title_key, u]));
-    return rows.map(r => { const m = miss.get(r.show_name); const sm = metas.get(r.show_name); const u = ur.get(r.show_name); const ps = r.plex_show_key ? plexShows.get(r.plex_show_key) : null; return { ...r, expected: m ? m.expected : 0, missing_count: m ? m.missing_count : 0, meta_source: m ? m.source : null, meta_status: m ? m.status : null, online_rating: sm ? sm.rating : null, my_rating: u ? u.stars : null, plex_user: ps ? ps.user_rating : null }; });
+    return rows.map(r => { const m = miss.get(r.show_name); const sm = metas.get(r.show_name); const u = ur.get(r.show_name); const ps = r.plex_show_key ? plexShows.get(r.plex_show_key) : null; return { ...r, expected: m ? m.expected : 0, missing_count: m ? m.missing_count : 0, meta_source: m ? m.source : null, meta_status: m ? m.status : null, online_rating: sm ? sm.rating : null, my_rating: u ? u.stars : null, plex_user: ps ? ps.user_rating : null, genres: onlineTags(sm).length ? onlineTags(sm) : onlineTags({ genres: ps && ps.genres }), audio_type: titleAudioType({ files: r.probed_audio, jpn: r.jpn_files, eng: r.eng_files, dual: r.dual_files }, { anime: type === 'anime' }), tags: tagMap.get(r.show_name) || [] }; });
   });
-  h('data:episodes', (type, show) => ({ files: db.all(`SELECT * FROM files WHERE library_type=? AND show_name=? AND ignored=0${AF()} ORDER BY missing, season, episode, file_name`, type, show), missing: missingSummary(type).find(m => m.show_name === show) || null }));
-  h('data:movies', () => db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, SUM(size) bytes, MAX(duration_s) seconds,
+  h('data:episodes', (type, show) => ({ tags: db.tagsOf(type, show), genres: onlineTags(db.getSeriesMeta(type, show)), files: db.all(`SELECT * FROM files WHERE library_type=? AND show_name=? AND ignored=0${AF()} ORDER BY missing, season, episode, file_name`, type, show), missing: missingSummary(type).find(m => m.show_name === show) || null }));
+  h('data:movies', () => { const movieTags = db.tagsFor('movie'); return db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, SUM(size) bytes, MAX(duration_s) seconds,
       GROUP_CONCAT(DISTINCT resolution) resolutions, GROUP_CONCAT(DISTINCT video_codec) codecs, GROUP_CONCAT(DISTINCT audio_langs) audio_langs, GROUP_CONCAT(DISTINCT sub_langs) sub_langs,
-      MAX(has_captions) has_captions, SUM(CASE WHEN probe_ok=1 THEN 1 ELSE 0 END) probed, GROUP_CONCAT(edition_tag, ' | ') editions
-    FROM files WHERE library_type='movie' AND missing=0 AND ignored=0${AF()} GROUP BY group_key ORDER BY title COLLATE NOCASE, year`));
+      MAX(has_captions) has_captions, SUM(CASE WHEN probe_ok=1 THEN 1 ELSE 0 END) probed, GROUP_CONCAT(edition_tag, ' | ') editions, MAX(plex_genres) plex_genres,
+      ${AUDIO_COUNTS}
+    FROM files WHERE library_type='movie' AND missing=0 AND ignored=0${AF()} GROUP BY group_key ORDER BY title COLLATE NOCASE, year`).map(r => ({ ...r, genres: onlineTags({ genres: r.plex_genres }), audio_type: titleAudioType({ files: r.probed_audio, jpn: r.jpn_files, eng: r.eng_files, dual: r.dual_files }), tags: movieTags.get(r.group_key) || [] })); });
   h('data:movieFiles', (groupKey) => db.all(`SELECT * FROM files WHERE library_type='movie' AND group_key=?${AF()} ORDER BY missing, file_name`, groupKey));
+  // ---- tags: your own words per title; genres come with the online match / Plex, sub/dub from the probe ----
+  h('tags:list', (type) => Object.fromEntries(db.tagsFor(type)));
+  h('tags:all', () => db.allTags());
+  h('tags:get', (type, key) => db.tagsOf(type, key));
+  h('tags:add', (type, key, tag) => { const t = normalizeTag(tag); if (!t) throw new Error('Empty tag'); return db.addTag(type, key, t); });
+  h('tags:remove', (type, key, tag) => db.removeTag(type, key, tag));
 
   h('data:changes', (scanId, limit) => scanId ? db.changesForScan(scanId, limit || 5000) : db.recentChanges(limit || 500));
   h('data:changeStats', () => ({

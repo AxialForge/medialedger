@@ -279,6 +279,25 @@ const MIGRATIONS = [
       );
     `,
   },
+  {
+    version: 7, name: 'genres, online tags and custom title tags',
+    sql: `
+      ALTER TABLE series_meta ADD COLUMN genres TEXT;       -- JSON array from TVmaze / AniList
+      ALTER TABLE series_meta ADD COLUMN online_tags TEXT;  -- JSON array: AniList tags (Isekai, Slice of Life …)
+      ALTER TABLE plex_shows ADD COLUMN genres TEXT;        -- JSON array from Plex
+      ALTER TABLE files ADD COLUMN plex_genres TEXT;        -- JSON array from Plex, movies only
+      -- Your own tags per title (series by show name, movies by group key), like user_ratings.
+      CREATE TABLE IF NOT EXISTS title_tags (
+        id            INTEGER PRIMARY KEY,
+        library_type  TEXT NOT NULL,
+        title_key     TEXT NOT NULL,
+        tag           TEXT NOT NULL,
+        created       TEXT,
+        UNIQUE(library_type, title_key, tag)
+      );
+      CREATE INDEX IF NOT EXISTS idx_title_tags ON title_tags(library_type, title_key);
+    `,
+  },
 ];
 
 class Db {
@@ -400,13 +419,19 @@ class Db {
   getSeriesMeta(type, show) { return this.get('SELECT * FROM series_meta WHERE library_type=? AND show_name=?', type, show); }
   allSeriesMeta(type) { return new Map(this.all('SELECT * FROM series_meta WHERE library_type=?', type).map(m => [m.show_name, m])); }
   saveSeriesMeta(m) {
-    const cols = ['library_type', 'show_name', 'source', 'source_id', 'matched_title', 'status', 'seasons', 'total_episodes', 'url', 'fetched_at', 'locked', 'note', 'rating', 'rating_votes'];
-    const vals = cols.map(c => c === 'seasons' && m[c] && typeof m[c] !== 'string' ? JSON.stringify(m[c]) : (m[c] ?? null));
+    const cols = ['library_type', 'show_name', 'source', 'source_id', 'matched_title', 'status', 'seasons', 'total_episodes', 'url', 'fetched_at', 'locked', 'note', 'rating', 'rating_votes', 'genres', 'online_tags'];
+    const vals = cols.map(c => ['seasons', 'genres', 'online_tags'].includes(c) && m[c] && typeof m[c] !== 'string' ? JSON.stringify(m[c]) : (m[c] ?? null));
     this.run(`INSERT INTO series_meta (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})
       ON CONFLICT(library_type, show_name) DO UPDATE SET ${cols.filter(c => c !== 'library_type' && c !== 'show_name').map(c => `${c}=excluded.${c}`).join(',')}`, ...vals);
     return this.getSeriesMeta(m.library_type, m.show_name);
   }
   deleteSeriesMeta(type, show) { return this.run('DELETE FROM series_meta WHERE library_type=? AND show_name=?', type, show).changes; }
+  // ---- custom title tags ----------------------------------------------------
+  tagsFor(type) { const m = new Map(); for (const r of this.all('SELECT title_key, tag FROM title_tags WHERE library_type=? ORDER BY tag COLLATE NOCASE', type)) { if (!m.has(r.title_key)) m.set(r.title_key, []); m.get(r.title_key).push(r.tag); } return m; }
+  tagsOf(type, key) { return this.all('SELECT tag FROM title_tags WHERE library_type=? AND title_key=? ORDER BY tag COLLATE NOCASE', type, key).map(r => r.tag); }
+  allTags() { return this.all('SELECT tag, COUNT(*) n FROM title_tags GROUP BY tag ORDER BY n DESC, tag COLLATE NOCASE').map(r => ({ tag: r.tag, n: r.n })); }
+  addTag(type, key, tag) { this.run('INSERT OR IGNORE INTO title_tags (library_type, title_key, tag, created) VALUES (?,?,?,?)', type, key, tag, new Date().toISOString()); return this.tagsOf(type, key); }
+  removeTag(type, key, tag) { this.run('DELETE FROM title_tags WHERE library_type=? AND title_key=? AND tag=? COLLATE NOCASE', type, key, tag); return this.tagsOf(type, key); }
   // ---- user ratings ---------------------------------------------------------
   setUserRating(type, key, title, stars, note) {
     this.run(`INSERT INTO user_ratings (library_type, title_key, title, stars, note, updated) VALUES (?,?,?,?,?,?)

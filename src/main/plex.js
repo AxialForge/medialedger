@@ -94,6 +94,7 @@ function flattenVideo(v, section) {
     file: part ? part.file : null, section: section.title, sectionKey: section.key,
     showTitle: v.grandparentTitle || null, showKey: v.grandparentRatingKey ? String(v.grandparentRatingKey) : null, seasonIndex: pick(v, 'parentIndex'), index: pick(v, 'index'),
     contentRating: v.contentRating || null, originallyAvailableAt: v.originallyAvailableAt || null,
+    genres: Array.isArray(v.Genre) ? v.Genre.map(g => g.tag).filter(Boolean) : [],
   };
 }
 
@@ -105,7 +106,7 @@ async function fetchSection(cfg, section, onProgress = () => {}) {
     out.videos = (mc.Metadata || []).map(v => flattenVideo(v, section));
   } else if (section.type === 'show') {
     const shows = await api(cfg, `/library/sections/${section.key}/all?includeGuids=1`, 120000);
-    out.shows = (shows.Metadata || []).map(s => ({ ratingKey: String(s.ratingKey), title: s.title, year: pick(s, 'year'), guids: ids(s.Guid), userRating: pick(s, 'userRating'), audienceRating: pick(s, 'audienceRating'), rating: pick(s, 'rating'), leafCount: pick(s, 'leafCount'), viewedLeafCount: pick(s, 'viewedLeafCount'), childCount: pick(s, 'childCount'), contentRating: s.contentRating || null, section: section.title }));
+    out.shows = (shows.Metadata || []).map(s => ({ ratingKey: String(s.ratingKey), title: s.title, year: pick(s, 'year'), guids: ids(s.Guid), userRating: pick(s, 'userRating'), audienceRating: pick(s, 'audienceRating'), rating: pick(s, 'rating'), leafCount: pick(s, 'leafCount'), viewedLeafCount: pick(s, 'viewedLeafCount'), childCount: pick(s, 'childCount'), contentRating: s.contentRating || null, section: section.title, genres: Array.isArray(s.Genre) ? s.Genre.map(g => g.tag).filter(Boolean) : [] }));
     // Episodes in pages of 500 so a 12k-episode section doesn't need one giant response.
     let start = 0; const size = 500;
     for (;;) {
@@ -154,13 +155,13 @@ async function syncLibrary(db, cfg, opts = {}) {
 
     onProgress({ phase: 'store', section: sec.title, message: `Storing ${matched.length.toLocaleString()} matches for ${sec.title}…` });
     db.transaction(() => {
-      const upd = db.prep(`UPDATE files SET plex_rating_key=?, plex_title=?, plex_year=?, plex_show_key=?, plex_guids=?, plex_user_rating=?, plex_audience_rating=?, plex_view_count=?, plex_last_viewed=?, plex_view_offset_ms=?, plex_section=?, plex_synced_at=? WHERE id=?`);
+      const upd = db.prep(`UPDATE files SET plex_rating_key=?, plex_title=?, plex_year=?, plex_show_key=?, plex_guids=?, plex_user_rating=?, plex_audience_rating=?, plex_view_count=?, plex_last_viewed=?, plex_view_offset_ms=?, plex_section=?, plex_synced_at=?, plex_genres=? WHERE id=?`);
       for (const { item: it, file: f } of matched) {
-        upd.run(it.ratingKey, it.showTitle || it.title, it.year, it.showKey, JSON.stringify(it.guids), it.userRating, it.audienceRating, it.viewCount, it.lastViewedAt ? new Date(it.lastViewedAt * 1000).toISOString() : null, it.viewOffset, it.section, now, f.id);
+        upd.run(it.ratingKey, it.showTitle || it.title, it.year, it.showKey, JSON.stringify(it.guids), it.userRating, it.audienceRating, it.viewCount, it.lastViewedAt ? new Date(it.lastViewedAt * 1000).toISOString() : null, it.viewOffset, it.section, now, it.type === 'movie' && it.genres && it.genres.length ? JSON.stringify(it.genres) : null, f.id);
       }
-      const ups = db.prep(`INSERT INTO plex_shows (rating_key, section, title, year, guids, user_rating, audience_rating, rating, leaf_count, viewed_leaf_count, content_rating, synced_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-        ON CONFLICT(rating_key) DO UPDATE SET section=excluded.section, title=excluded.title, year=excluded.year, guids=excluded.guids, user_rating=excluded.user_rating, audience_rating=excluded.audience_rating, rating=excluded.rating, leaf_count=excluded.leaf_count, viewed_leaf_count=excluded.viewed_leaf_count, content_rating=excluded.content_rating, synced_at=excluded.synced_at`);
-      for (const s of shows) ups.run(s.ratingKey, s.section, s.title, s.year, JSON.stringify(s.guids), s.userRating, s.audienceRating, s.rating, s.leafCount, s.viewedLeafCount, s.contentRating, now);
+      const ups = db.prep(`INSERT INTO plex_shows (rating_key, section, title, year, guids, user_rating, audience_rating, rating, leaf_count, viewed_leaf_count, content_rating, synced_at, genres) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(rating_key) DO UPDATE SET section=excluded.section, title=excluded.title, year=excluded.year, guids=excluded.guids, user_rating=excluded.user_rating, audience_rating=excluded.audience_rating, rating=excluded.rating, leaf_count=excluded.leaf_count, viewed_leaf_count=excluded.viewed_leaf_count, content_rating=excluded.content_rating, synced_at=excluded.synced_at, genres=excluded.genres`);
+      for (const s of shows) ups.run(s.ratingKey, s.section, s.title, s.year, JSON.stringify(s.guids), s.userRating, s.audienceRating, s.rating, s.leafCount, s.viewedLeafCount, s.contentRating, now, s.genres && s.genres.length ? JSON.stringify(s.genres) : null);
       stats.shows += shows.length;
     });
     log(`plex: ${sec.title}: ${videos.length} items, ${matched.length} matched, ${unmatched.length} unmatched`);

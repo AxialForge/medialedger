@@ -61,15 +61,15 @@ async function fetchTvmazeById(id, showObj) {
     seasons[s] = Math.max(seasons[s] || 0, e.number || 0);
   }
   const total = Object.entries(seasons).filter(([s]) => s !== '0').reduce((a, [, n]) => a + n, 0);
-  return { source: 'tvmaze', found: true, source_id: String(show.id), matched_title: show.name, status: show.status, seasons, total_episodes: total, url: show.url, rating: show.rating && show.rating.average != null ? Number(show.rating.average) : null, rating_votes: null };
+  return { source: 'tvmaze', found: true, source_id: String(show.id), matched_title: show.name, status: show.status, seasons, total_episodes: total, url: show.url, rating: show.rating && show.rating.average != null ? Number(show.rating.average) : null, rating_votes: null, genres: Array.isArray(show.genres) ? show.genres : [], online_tags: [show.language && show.language !== 'English' ? show.language : null, show.type && show.type !== 'Scripted' ? show.type : null].filter(Boolean) };
 }
 
 // ---- AniList ---------------------------------------------------------------------
 const ANILIST_SEARCH = `query ($search: String) { Page(perPage: 8) { media(search: $search, type: ANIME, sort: SEARCH_MATCH) {
-  id title { romaji english } format episodes status seasonYear siteUrl averageScore popularity nextAiringEpisode { episode }
+  id title { romaji english } format episodes status seasonYear siteUrl averageScore popularity nextAiringEpisode { episode } genres tags { name rank isMediaSpoiler }
   relations { edges { relationType node { id title { romaji english } format episodes status seasonYear siteUrl } } } } } }`;
 const ANILIST_BY_ID = `query ($id: Int) { Media(id: $id, type: ANIME) {
-  id title { romaji english } format episodes status seasonYear siteUrl averageScore popularity nextAiringEpisode { episode }
+  id title { romaji english } format episodes status seasonYear siteUrl averageScore popularity nextAiringEpisode { episode } genres tags { name rank isMediaSpoiler }
   relations { edges { relationType node { id title { romaji english } format episodes status seasonYear siteUrl } } } } }`;
 
 async function anilist(query, variables) {
@@ -128,7 +128,9 @@ async function fetchAnilistById(id, mediaObj) {
   if (!m) { const d = await anilist(ANILIST_BY_ID, { id: Number(id) }); m = d && d.Media; }
   if (!m) return { source: 'anilist', found: false };
   const { seasons, total, first, last } = await buildAnilistSeasons(m);
-  return { source: 'anilist', found: true, source_id: String(first.id), matched_title: aniTitle(first), status: last.status, seasons, total_episodes: total, url: first.siteUrl, rating: first.averageScore != null ? Math.round(first.averageScore) / 10 : null, rating_votes: first.popularity || null };
+  // AniList tags are crowd-ranked 0–100; keep the confident, non-spoiler ones (Isekai, Slice of Life, Time Skip …).
+  const tags = (m.tags || first.tags || []).filter(t => t && !t.isMediaSpoiler && (t.rank == null || t.rank >= 60)).sort((a, b) => (b.rank || 0) - (a.rank || 0)).slice(0, 8).map(t => t.name);
+  return { source: 'anilist', found: true, source_id: String(first.id), matched_title: aniTitle(first), status: last.status, seasons, total_episodes: total, url: first.siteUrl, rating: first.averageScore != null ? Math.round(first.averageScore) / 10 : null, rating_votes: first.popularity || null, genres: Array.isArray(m.genres) ? m.genres : (first.genres || []), online_tags: tags };
 }
 
 // ---- public -------------------------------------------------------------------
