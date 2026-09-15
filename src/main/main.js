@@ -105,6 +105,8 @@ function createWindow() {
   async function captureScreenshots(dir) {
     fs.mkdirSync(dir, { recursive: true });
     const sleep = ms => new Promise(r => setTimeout(r, ms));
+    // An occluded window stops painting and capturePage() returns stale frames; keep it painting and in front for the run.
+    win.webContents.setBackgroundThrottling(false); win.setAlwaysOnTop(true);
     const shots = [
       ['dashboard', '#dashboard'], ['tv', '#tv'], ['anime', '#anime'], ['movies', '#movies'],
       ['episodes', '#anime/' + encodeURIComponent('One Piece')], ['movie-versions', '#movies/' + encodeURIComponent('pacificrim|2013')],
@@ -113,14 +115,20 @@ function createWindow() {
     ];
     await new Promise(r => win.webContents.once('did-finish-load', r));
     await sleep(1500);
+    // `--size=WxH` renders at another viewport (e.g. 375x812 for the phone layout).
+    const size = (process.argv.find(a => a.startsWith('--size=')) || '').slice('--size='.length);
+    if (/^\d+x\d+$/.test(size)) { const [w, hh] = size.split('x').map(Number); win.setMinimumSize(200, 200); win.setContentSize(w, hh); await sleep(800); }
     if (urlArg) {
       // Web build: capture the sign-in dialog, sign in with MEDIALEDGER_SHOT_PASSWORD, then the web-only screens.
       await sleep(1500);
       const img0 = await win.webContents.capturePage(); if (!img0.isEmpty()) { fs.writeFileSync(path.join(dir, 'web-login.png'), img0.toPNG()); log('screenshot web-login'); }
       await win.webContents.executeJavaScript(`(() => { const f = document.querySelector('.webauth form'); if (!f) return false; f.elements.password.value = ${JSON.stringify(process.env.MEDIALEDGER_SHOT_PASSWORD || '')}; f.querySelector('button[type=submit]').click(); return true; })()`);
       await sleep(2500);
-      for (const [name, hash] of [['web-security', '#security'], ['web-system', '#system'], ['web-about', '#about'], ['web-dashboard', '#dashboard']]) {
-        await win.webContents.executeJavaScript(`location.hash = ${JSON.stringify(hash)}`); await sleep(2500);
+      for (const [name, hash] of [['web-security', '#security'], ['web-system', '#system'], ['web-about', '#about'], ['web-dashboard', '#dashboard'], ['web-tv', '#tv'], ['web-movienames', '#movienames'], ['web-settings', '#settings']]) {
+        await win.webContents.executeJavaScript(`(() => { document.querySelector('#view').textContent = 'Loading…'; if (location.hash === ${JSON.stringify(hash)}) window.dispatchEvent(new HashChangeEvent('hashchange')); else location.hash = ${JSON.stringify(hash)}; })()`);
+        for (let i = 0; i < 100; i++) { if (await win.webContents.executeJavaScript(`location.hash === ${JSON.stringify(hash)} && !document.querySelector('#view')?.textContent.startsWith('Loading')`)) break; await sleep(100); }
+        // A resized window may not repaint on its own; force a frame and take the second capture (the first can be the previous page).
+        await win.webContents.executeJavaScript('new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))'); await sleep(500);
         const im = await win.webContents.capturePage(); if (!im.isEmpty()) { fs.writeFileSync(path.join(dir, `${name}.png`), im.toPNG()); log('screenshot ' + name); }
       }
       return;

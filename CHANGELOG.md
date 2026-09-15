@@ -12,6 +12,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [1.0.4] - 2026-09-14
+
+### Fixed
+
+- Phone layout: table headers and rows stayed aligned only by luck in 1.0.3; wide tables now scroll as one unit. Key-value tables (System, About) stack cleanly instead of scrolling sideways. Green status dots on the Security tab were invisible (undefined colour variable).
+
+### Changed
+
+- Screenshot mode accepts `--size=WxH` (phone captures), waits for each web page to finish rendering, and keeps the window painting while occluded so captures are never stale.
+
 ## [1.0.3] - 2026-09-14
 
 ### Added
