@@ -4,6 +4,8 @@
 #   sudo bash install.sh              install or upgrade to the latest release
 #   sudo bash install.sh --branch=main  track main instead of the latest release
 #   sudo bash install.sh --https        also create a self-signed certificate (serves TLS)
+#   sudo bash install.sh --port=80 --domain=medialedger.home
+#                                       serve on the default web port under your own internal name (see docs/RASPBERRY-PI.md, Custom domain)
 #   sudo bash install.sh --update-only  used by medialedger-update
 #
 # What it does, idempotently:
@@ -24,8 +26,10 @@ SHARE="//192.168.1.204/Apocrypha_Media_Pool"
 CREDS="/etc/medialedger-cifs.cred"
 PORT="${MEDIALEDGER_PORT:-8080}"
 BRANCH=""
-UPDATE_ONLY=0; HTTPS=0
-for a in "$@"; do case "$a" in --branch=*) BRANCH="${a#--branch=}";; --share=*) SHARE="${a#--share=}";; --port=*) PORT="${a#--port=}";; --update-only) UPDATE_ONLY=1;; --https) HTTPS=1;; esac; done
+UPDATE_ONLY=0; HTTPS=0; DOMAIN=""
+for a in "$@"; do case "$a" in --branch=*) BRANCH="${a#--branch=}";; --share=*) SHARE="${a#--share=}";; --port=*) PORT="${a#--port=}";; --domain=*) DOMAIN="${a#--domain=}";; --update-only) UPDATE_ONLY=1;; --https) HTTPS=1;; esac; done
+[[ -n "$DOMAIN" ]] && echo "$DOMAIN" > /etc/medialedger-domain 2>/dev/null || true
+[[ -z "$DOMAIN" && -f /etc/medialedger-domain ]] && DOMAIN="$(cat /etc/medialedger-domain)"
 
 [[ $EUID -eq 0 ]] || { echo "Run with sudo."; exit 1; }
 say() { printf '\n\033[1;36m==> %s\033[0m\n' "$*"; }
@@ -113,6 +117,8 @@ Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
 Environment=NODE_OPTIONS=--disable-warning=ExperimentalWarning
+# Lets the unprivileged service listen on port 80/443 when installed with --port=80 (no root, no capabilities beyond this one).
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
 ProtectSystem=full
 ProtectHome=true
@@ -159,7 +165,8 @@ systemctl enable -q --now medialedger-mount.timer
 if [[ $HTTPS -eq 1 && ! -f "$DATA_DIR/tls/cert.pem" ]]; then
   say "Self-signed certificate"
   install -d -o "$SVC_USER" -g "$SVC_USER" -m 0700 "$DATA_DIR/tls"
-  openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=$(hostname).local" -addext "subjectAltName=DNS:$(hostname).local,IP:$(hostname -I | awk '{print $1}')" -keyout "$DATA_DIR/tls/key.pem" -out "$DATA_DIR/tls/cert.pem" 2>/dev/null
+  SAN="DNS:$(hostname).local,IP:$(hostname -I | awk '{print $1}')"; [[ -n "$DOMAIN" ]] && SAN="DNS:$DOMAIN,$SAN"
+  openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=${DOMAIN:-$(hostname).local}" -addext "subjectAltName=$SAN" -keyout "$DATA_DIR/tls/key.pem" -out "$DATA_DIR/tls/cert.pem" 2>/dev/null
   chown "$SVC_USER:$SVC_USER" "$DATA_DIR/tls/"*.pem; chmod 600 "$DATA_DIR/tls/"*.pem
 fi
 
@@ -173,5 +180,7 @@ sleep 2
 systemctl --no-pager --lines=3 status medialedger || true
 IP="$(hostname -I | awk '{print $1}')"
 PROTO=http; [[ -f "$DATA_DIR/tls/cert.pem" ]] && PROTO=https
-say "Done. Open $PROTO://$(hostname).local:$PORT  or  $PROTO://$IP:$PORT"
+PORTSFX=":$PORT"; { [[ $PROTO == http && $PORT == 80 ]] || [[ $PROTO == https && $PORT == 443 ]]; } && PORTSFX=""
+say "Done. Open ${DOMAIN:+$PROTO://$DOMAIN$PORTSFX  or  }$PROTO://$(hostname).local$PORTSFX  or  $PROTO://$IP$PORTSFX"
+[[ -n "$DOMAIN" ]] && echo "Remember: $DOMAIN must point at $IP in your router's local DNS (UniFi: Settings → Routing → DNS → Create Entry, A record)."
 echo "Logs: journalctl -u medialedger -f     Update: sudo medialedger-update     Password: sudo medialedger --set-password"

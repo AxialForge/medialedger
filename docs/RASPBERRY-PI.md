@@ -66,6 +66,7 @@ sudo medialedger --set-password
 | `sudo rm /etc/medialedger-cifs.cred` + rerun installer | change share credentials |
 | `sudo bash install.sh` | rerun: repairs service, mount and commands, keeps data |
 | `sudo bash install.sh --https` | add a self-signed certificate and serve HTTPS |
+| `sudo bash install.sh --port=80 --domain=medialedger.home` | serve on the default port under your own internal name (router DNS record needed, section 7a) |
 | `vcgencmd measure_temp` | chip temperature from the shell |
 
 Everything below is the long form.
@@ -266,6 +267,59 @@ sudo mkdir -p /var/lib/medialedger/tls && sudo openssl req -x509 -newkey rsa:204
 The server switches to `https://medialedger.local:8080` on restart. Browsers
 warn once about the self-signed certificate; accept it for this host. The
 Security tab shows HTTPS as active and cookies gain the `Secure` flag.
+
+## 7a. Custom internal domain (medialedger.home)
+
+Out of the box the Pi answers at `http://medialedger.local:8080`. `.local`
+names come from mDNS, which every Windows, Mac, iPhone and Android device
+resolves without any setup, so that already is a working internal domain. Two
+things make it feel like a real site: dropping the `:8080` and choosing your
+own name.
+
+**Pick a name.** Use a top-level label that no public registry owns and that
+your router will resolve locally. Good choices: `medialedger.home`,
+`medialedger.lan`, or the officially reserved `medialedger.home.arpa`. Avoid
+`.local` for this (that suffix is reserved for mDNS and breaks if a DNS server
+also answers it) and avoid real public suffixes like `.com` unless you own the
+domain.
+
+**1. Tell your router the name.** The Pi's address is fixed once you reserve
+it. On a UniFi network (UniFi Network 8 or newer):
+
+1. Network app → Settings → Networks → your LAN → *DHCP* → make the Pi's
+   lease fixed (Client Devices → medialedger → Settings → Fixed IP Address).
+2. Settings → Routing → **DNS** → *Create Entry*: Type **A**, Domain Name
+   `medialedger.home`, IP `192.168.1.203`. Save.
+3. On a client: `nslookup medialedger.home` should answer with the Pi's
+   address within a minute. Devices with a hard-coded public DNS (8.8.8.8)
+   will not see it; they must use the router for DNS.
+
+On other routers the feature is called *Local DNS*, *DNS records*, *Static
+hostnames* or *Host overrides* (pfSense/OPNsense). Pi-hole and AdGuard Home
+have a *Local DNS records* page. With none of those, a line in each device's
+hosts file (`192.168.1.203 medialedger.home`) does the same for that device.
+
+**2. Serve on the default port.** Rerun the installer with the port and the
+domain. The service keeps running as the unprivileged `medialedger` user; the
+unit grants only the one capability needed to bind port 80:
+
+```bash
+sudo bash install.sh --port=80 --domain=medialedger.home
+```
+
+Now `http://medialedger.home` opens the app. The `--domain` is remembered in
+`/etc/medialedger-domain` for later reruns.
+
+**3. Optional: HTTPS on the name.** Add `--https` (once) and the self-signed
+certificate is issued for `medialedger.home`, `medialedger.local` and the IP,
+served on the port you chose; use `--port=443` for `https://medialedger.home`
+with no port. Browsers warn once per device about the self-signed issuer;
+accept it for this host. A public certificate (Let's Encrypt) needs a domain
+you own and is not needed on a LAN.
+
+Security note: none of this exposes the Pi outside your LAN. The LAN-only rule
+still refuses non-private addresses, and a name in your router is invisible to
+the internet.
 
 ## 7b. Plex webhook
 

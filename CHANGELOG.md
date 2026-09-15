@@ -12,6 +12,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [1.2.1] - 2026-09-14
+
+### Added
+
+- **Custom internal domain.** `install.sh --port=80 --domain=medialedger.home`
+  serves the Pi on the default web port under your own LAN name; the systemd
+  unit grants the unprivileged service only `CAP_NET_BIND_SERVICE`, the
+  self-signed certificate (with `--https`) is issued for that name, and the
+  domain is remembered for later reruns. The Pi guide (section 7a) explains
+  the router side: UniFi Settings → Routing → DNS → A record, or the
+  equivalent on other routers, Pi-hole or a hosts file, and which name suffix
+  to pick.
+
 ## [1.2.0] - 2026-09-14
 
 ### Added

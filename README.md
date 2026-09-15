@@ -146,6 +146,7 @@ temperature, throttling, CPU, memory, disks and network.
 | Command | Does |
 |---|---|
 | `sudo medialedger-update` | pull the latest release and restart |
+| `sudo bash install.sh --port=80 --domain=medialedger.home` | your own internal name without a port (add an A record on the router) |
 | `sudo medialedger --set-password` | change the web password (signs everyone out) |
 | `journalctl -u medialedger -f` | follow the log |
 
