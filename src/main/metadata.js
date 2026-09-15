@@ -55,21 +55,25 @@ async function fetchTvmazeById(id, showObj) {
   if (!show) return { source: 'tvmaze', found: false };
   const eps = await getJson(`${TVMAZE}/shows/${id}/episodes?specials=1`) || [];
   const seasons = {};
+  const today = new Date().toISOString().slice(0, 10);
+  // Episodes that have not aired yet are not "missing": they are listed as the next airing instead.
+  const future = eps.filter(e => e.airdate && e.airdate > today).sort((a, b) => a.airdate.localeCompare(b.airdate));
   for (const e of eps) {
+    if (e.airdate && e.airdate > today) continue;
     const s = e.type === 'regular' ? e.season : 0; // specials/insignificant → season 0
     if (e.type !== 'regular') { seasons[0] = (seasons[0] || 0) + 1; continue; }
     seasons[s] = Math.max(seasons[s] || 0, e.number || 0);
   }
   const total = Object.entries(seasons).filter(([s]) => s !== '0').reduce((a, [, n]) => a + n, 0);
-  return { source: 'tvmaze', found: true, source_id: String(show.id), matched_title: show.name, status: show.status, seasons, total_episodes: total, url: show.url, rating: show.rating && show.rating.average != null ? Number(show.rating.average) : null, rating_votes: null, genres: Array.isArray(show.genres) ? show.genres : [], online_tags: [show.language && show.language !== 'English' ? show.language : null, show.type && show.type !== 'Scripted' ? show.type : null].filter(Boolean) };
+  return { source: 'tvmaze', found: true, source_id: String(show.id), matched_title: show.name, status: show.status, seasons, total_episodes: total, url: show.url, rating: show.rating && show.rating.average != null ? Number(show.rating.average) : null, rating_votes: null, genres: Array.isArray(show.genres) ? show.genres : [], online_tags: [show.language && show.language !== 'English' ? show.language : null, show.type && show.type !== 'Scripted' ? show.type : null].filter(Boolean), next_airing: future[0] ? future[0].airdate : null, next_episode: future[0] ? (future[0].type === 'regular' ? `S${String(future[0].season).padStart(2, '0')}E${String(future[0].number || 0).padStart(2, '0')}` : 'special') : null };
 }
 
 // ---- AniList ---------------------------------------------------------------------
 const ANILIST_SEARCH = `query ($search: String) { Page(perPage: 8) { media(search: $search, type: ANIME, sort: SEARCH_MATCH) {
-  id title { romaji english } format episodes status seasonYear siteUrl averageScore popularity nextAiringEpisode { episode } genres tags { name rank isMediaSpoiler }
+  id title { romaji english } format episodes status seasonYear siteUrl averageScore popularity nextAiringEpisode { episode airingAt } genres tags { name rank isMediaSpoiler }
   relations { edges { relationType node { id title { romaji english } format episodes status seasonYear siteUrl } } } } } }`;
 const ANILIST_BY_ID = `query ($id: Int) { Media(id: $id, type: ANIME) {
-  id title { romaji english } format episodes status seasonYear siteUrl averageScore popularity nextAiringEpisode { episode } genres tags { name rank isMediaSpoiler }
+  id title { romaji english } format episodes status seasonYear siteUrl averageScore popularity nextAiringEpisode { episode airingAt } genres tags { name rank isMediaSpoiler }
   relations { edges { relationType node { id title { romaji english } format episodes status seasonYear siteUrl } } } } }`;
 
 async function anilist(query, variables) {
@@ -130,7 +134,7 @@ async function fetchAnilistById(id, mediaObj) {
   const { seasons, total, first, last } = await buildAnilistSeasons(m);
   // AniList tags are crowd-ranked 0–100; keep the confident, non-spoiler ones (Isekai, Slice of Life, Time Skip …).
   const tags = (m.tags || first.tags || []).filter(t => t && !t.isMediaSpoiler && (t.rank == null || t.rank >= 60)).sort((a, b) => (b.rank || 0) - (a.rank || 0)).slice(0, 8).map(t => t.name);
-  return { source: 'anilist', found: true, source_id: String(first.id), matched_title: aniTitle(first), status: last.status, seasons, total_episodes: total, url: first.siteUrl, rating: first.averageScore != null ? Math.round(first.averageScore) / 10 : null, rating_votes: first.popularity || null, genres: Array.isArray(m.genres) ? m.genres : (first.genres || []), online_tags: tags };
+  return { source: 'anilist', found: true, source_id: String(first.id), matched_title: aniTitle(first), status: last.status, seasons, total_episodes: total, url: first.siteUrl, rating: first.averageScore != null ? Math.round(first.averageScore) / 10 : null, rating_votes: first.popularity || null, genres: Array.isArray(m.genres) ? m.genres : (first.genres || []), online_tags: tags, next_airing: last.nextAiringEpisode && last.nextAiringEpisode.airingAt ? new Date(last.nextAiringEpisode.airingAt * 1000).toISOString().slice(0, 10) : null, next_episode: last.nextAiringEpisode ? `E${last.nextAiringEpisode.episode}` : null };
 }
 
 // ---- public -------------------------------------------------------------------

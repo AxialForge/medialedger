@@ -51,10 +51,10 @@ const TOC_ENTRIES = [
   '4. Dashboard', '4.1 Top tiles', '4.2 Charts', '4.3 Panels', '4.4 Storage forecast',
   '5. TV Shows and Anime', '5.1 Episode detail', '5.2 Tags: genres, sub/dub and your own',
   '6. Movies', '7. Web videos', '8. Adult library',
-  '9. Missing episodes', '9.1 The Match dialog',
+  '9. Missing episodes', '9.1 The Match dialog', '9.2 Airing next',
   '10. Issues', '10.1 Problems', '10.2 The Fix dialog', '10.3 Duplicates',
-  '11. Quality', '12. Ratings', '12.1 Watch tonight',
-  '13. Media requests',
+  '11. Quality', '11.1 Upgrade candidates', '12. Ratings', '12.1 Watch tonight',
+  '13. Media requests', '13.1 The phone page and notifications',
   '14. Change log',
   '15. Movie names (the naming engine)', '15.1 The pattern', '15.2 Ready, flagged, blocked', '15.3 Batch settings', '15.4 Running a batch', '15.5 Undo', '15.6 Bulk source, collisions, placeholders',
   '16. Rename TV / anime', '17. CSV export', '17.1 Choosing what to export', '17.2 The files', '18. Settings reference', '18.1 Appearance',
@@ -242,6 +242,8 @@ add(H1('9. Missing episodes'), ...img('missing', 'Series ranked by how many epis
     ['Which', 'The missing episodes per season. Whole missing seasons collapse into ranges.'],
     ['absolute numbering', 'A badge shown when a season on disk is numbered far beyond its expected length (for example One Piece folders numbered 62–77). That season is skipped rather than reported as missing.'],
   ], [2200, 7160]),
+  H2('9.2 Airing next'),
+  P('Two panels above the table use the same online match. **Airing next** lists every series whose match reports an upcoming episode, soonest first, with the date and the episode label and whether your copy is otherwise up to date; the next seven days are highlighted. Episodes that have not aired yet are never counted as missing. **Finished airing, still incomplete** lists series the source marks as ended while you still lack episodes: those gaps will not fill themselves. Both feed the daily summary (13.1) and the Home Assistant status.'),
   H2('9.1 The Match dialog'),
   P('Press **Match…** on any series (here, on the series page, or in the lists) when a series was matched to the wrong entry, was not found, or you know the counts yourself. The dialog shows the current match, lets you search either TVmaze or AniList regardless of library type, and lists candidates with year, format and episode count; click one to use it. Below that you can type counts per season by hand, declare that the series has no expected counts, or return a locked series to automatic.'),
   note('AniList numbers anime by cour, so a split season shows up as separate "Part 2" entries. MediaLedger merges those into the same season automatically. If a series still lines up better with broadcast seasons, switch its source to TVmaze in the Match dialog.'),
@@ -281,6 +283,9 @@ add(H1('11. Quality'), ...img('quality', 'The Quality report.'),
   ]),
 );
 
+  H2('11.1 Upgrade candidates'),
+  P('The **Upgrades** page ranks every title by how much it deserves a better copy: how low the current copy is (resolution, low-bitrate files) against how much it matters (Plex plays, your stars, the online rating). Each row shows the score and plain-English reasons; titles that are already 4K or HDR, and low copies nobody has played or rated, sit at the bottom. The scoring function is a few lines in `src/main/upgrades.js`, meant to be tuned to taste.'),
+
 // ---------------- 12 Ratings ----------------
 add(H1('12. Ratings'), ...img('ratings', 'Online averages beside your own stars.'),
   table(['Column', 'Meaning'], [
@@ -301,6 +306,10 @@ add(H1('13. Media requests'), ...img('requests', 'The Requests tab as an admin s
   P('Requests is a wish list for the library. Anyone who can open the app may ask for a title: enter the name, the year if you know it, the kind (Movie, TV show, Anime, Other) and a note that helps whoever fulfils it, such as the edition, dub or sub, or where it streams. Guests on the web server also type their name, since they are not signed in.'),
   P('Every request has a status: **Pending** when filed, then **Approved**, **Added** or **Declined**. Only an admin changes the status, and only an admin sees the extra column with the status dropdown, the ✎ button for a note back to the requester, and ✕ to delete the request. The tiles at the top count pending, added and all requests; on the web server the sidebar shows the pending count to admins so new requests are noticed.'),
   note('Requests do not download anything and do not talk to Plex. They are a shared list between the people who use the library and the person who maintains it.'),
+  H2('13.1 The phone page and notifications'),
+  P('`http://<pi>/request` is a phone-sized version of the form with nothing else on it; the guest QR code on the Security tab points there, so a visitor scans, types a title and is done. Guests give their name once and the phone remembers it.'),
+  P('Settings → **Notifications** tells you when something happens without opening the app. A **webhook URL** receives a small JSON body per event (Home Assistant webhook trigger, ntfy, Discord…); **e-mail** goes through any ordinary mailbox with a dependency-free SMTP client (for Gmail use an app password). Events: a new request, a **daily summary** at the time you choose (files and free space, pending requests, missing episodes, what airs this week, series that finished airing but are incomplete), and a failed nightly backup. **Send a test** saves the settings and sends one of each.'),
+  P('**Home Assistant status** is a read-only JSON summary at a URL with its own key (New key rotates it). Add it as a RESTful sensor and pick values with a template such as `{{ value_json.pending_requests }}`; fields include files, bytes, free space, months left, pending requests, missing episodes, airing this week, the next airing episode, whether a scan is running and the last scan result.'),
 );
 
 // ---------------- 14 Change log ----------------

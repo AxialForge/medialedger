@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+  <title>Request something · MediaLedger</title>
+  <link rel="icon" href="favicon.ico" sizes="32x32">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="theme-color" content="#0f1115">
+  <link rel="stylesheet" href="styles.css">
+  <script src="theme.js"></script>
+  <style>
+    .req { max-width: 520px; margin: 0 auto; padding: 18px 16px 40px; }
+    .req h1 { font-size: 22px; margin: 6px 0 2px; }
+    .req .lead { margin: 0 0 16px; }
+    .req label.f { display: block; margin: 12px 0 4px; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+    .req input, .req select, .req textarea { width: 100%; font-size: 16px; padding: 12px; }
+    .req textarea { min-height: 80px; resize: vertical; }
+    .req button.primary { width: 100%; font-size: 17px; padding: 14px; margin-top: 16px; }
+    .req .done { border: 1px solid var(--accent2); border-radius: 10px; padding: 16px; margin-top: 16px; }
+    .req .msg { margin-top: 12px; }
+    .req .brand { justify-content: center; font-size: 18px; margin-bottom: 8px; }
+    .req .foot { text-align: center; margin-top: 24px; }
+  </style>
+</head>
+<body>
+  <div class="req">
+    <div class="brand"><span class="logo">▣</span> MediaLedger</div>
+    <h1>Ask for something</h1>
+    <p class="lead muted">A movie or show you would like added to the library. Whoever runs it sees the list and marks what happens.</p>
+    <form id="f">
+      <label class="f" for="title">Title</label><input id="title" type="text" autocomplete="off" required maxlength="200" placeholder="What is it called?">
+      <label class="f" for="kind">Kind</label><select id="kind"><option value="movie">Movie</option><option value="tv">TV show</option><option value="anime">Anime</option><option value="other">Other</option></select>
+      <label class="f" for="year">Year <span class="muted">(if you know it)</span></label><input id="year" type="number" inputmode="numeric" min="1880" max="2100" placeholder="2024">
+      <label class="f" for="note">Anything that helps</label><textarea id="note" maxlength="1000" placeholder="Which edition, dub or sub, where it streams…"></textarea>
+      <div id="whoRow" hidden><label class="f" for="who">Your name</label><input id="who" type="text" maxlength="60" placeholder="So they know who asked"></div>
+      <button class="primary" type="submit" id="go">Send request</button>
+      <div class="msg bad" id="err" hidden></div>
+    </form>
+    <div class="done" id="done" hidden><b>Sent.</b> <span id="doneText"></span><div class="inline" style="margin-top:10px"><button class="small" id="again">Request another</button></div></div>
+    <p class="foot muted tiny"><a href="./">Open the full site</a></p>
+  </div>
+  <script src="request.js"></script>
+</body>
+</html>

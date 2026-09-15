@@ -46,7 +46,13 @@ const DEFAULTS = {
   ignorePatterns: ['*.crdownload', '*.part', '*.!qb', 'Thumbs.db', 'desktop.ini', '.DS_Store'],
   export: { sets: ['tv', 'anime', 'movies', 'web', 'changes'], zip: false, zipMin: 4 }, // which CSV sets an export writes; zip them when at least zipMin files were written
   csvOutputDir: '',           // empty = <userData>/exports
-  backup: { enabled: false, dir: '', time: '03:30', keep: 7 }, // nightly copy of the database to a folder (the NAS), newest `keep` kept
+  backup: { enabled: false, dir: '', time: '03:30', keep: 7 },
+  notify: {                   // see notify.js: a JSON webhook (Home Assistant, ntfy, Discord…) and/or plain e-mail
+    webhookUrl: '',
+    email: { enabled: false, host: '', port: 587, secure: false, user: '', pass: '', from: '', to: '' },
+    events: { request: true, dailySummary: true, backupFailed: true, airing: true },
+    dailyTime: '08:00',       // when the daily summary goes out
+  }, // nightly copy of the database to a folder (the NAS), newest `keep` kept
   autoExportAfterScan: true,
   schedule: {
     inAppEnabled: false,

@@ -61,11 +61,11 @@ svc.init();
 
 // ---- roles ---------------------------------------------------------------------------------
 // What a guest (no account) may call: read-only library statistics, plus filing a media request.
-const GUEST = new Set(['app:info', 'security:me', 'data:dashboard', 'data:series', 'data:episodes', 'data:movies', 'data:movieFiles', 'data:search', 'web:channels', 'web:videos', 'ratings:list', 'meta:get', 'scan:status', 'scan:list', 'update:status', 'adult:status', 'requests:list', 'requests:add', 'roots:last', 'tags:list', 'tags:all', 'tags:get', 'data:tonight', 'data:storage']);
+const GUEST = new Set(['app:info', 'security:me', 'data:dashboard', 'data:series', 'data:episodes', 'data:movies', 'data:movieFiles', 'data:search', 'web:channels', 'web:videos', 'ratings:list', 'meta:get', 'scan:status', 'scan:list', 'update:status', 'adult:status', 'requests:list', 'requests:add', 'roots:last', 'tags:list', 'tags:all', 'tags:get', 'data:tonight', 'data:storage', 'data:airing']);
 // A standard user: everything a guest may, plus the review pages, own ratings, the adult switch for their own session.
-const STANDARD = new Set([...GUEST, 'data:problems', 'data:duplicates', 'data:missing', 'data:quality', 'data:changes', 'data:changeStats', 'movie:plan', 'movie:batches', 'movie:batchItems', 'rename:proposals', 'rename:history', 'export:list', 'override:list', 'override:suggest', 'meta:status', 'plex:status', 'watch:status', 'schedule:nextInApp', 'db:stats', 'settings:get', 'adult:toggle', 'ratings:setUser', 'security:changePassword', 'tags:add', 'tags:remove']);
+const STANDARD = new Set([...GUEST, 'data:problems', 'data:duplicates', 'data:missing', 'data:quality', 'data:changes', 'data:changeStats', 'movie:plan', 'movie:batches', 'movie:batchItems', 'rename:proposals', 'rename:history', 'export:list', 'override:list', 'override:suggest', 'meta:status', 'plex:status', 'watch:status', 'schedule:nextInApp', 'db:stats', 'settings:get', 'adult:toggle', 'ratings:setUser', 'security:changePassword', 'tags:add', 'tags:remove', 'data:upgrades']);
 // Admins: every channel. Actions that write to the share or throw data away also need a fresh password (re-auth).
-const SENSITIVE = new Set(['security:tlsEnable', 'plex:webhookSet', 'movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']);
+const SENSITIVE = new Set(['security:tlsEnable', 'status:rotate', 'plex:webhookSet', 'movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']);
 const isSensitive = (ch, args) => ch === 'movie:run' ? !!(args[1] && args[1].live) : SENSITIVE.has(ch);
 const allowed = (role, ch) => role === 'admin' || (role === 'standard' ? STANDARD.has(ch) : GUEST.has(ch));
 // Settings hold secrets (Plex token, GitHub token); a standard user sees them blanked.
@@ -142,9 +142,11 @@ const webHandlers = new Map([
 const webhookEvents = []; // last 50 events received
 let webhookScanTimer = null;
 const webhookUrl = (req) => { const w = sec.webhook(); if (!w.key) return null; const host = req && req.headers.host ? req.headers.host : `${os.hostname()}.local:${port}`; return `${tls ? 'https' : 'http'}://${host}/api/plex/webhook?key=${w.key}`; };
+webHandlers.set('status:info', (ctx) => { const key = sec.statusKey(false, ctx.ip, ctx.session && ctx.session.user); const host = ctx.req && ctx.req.headers.host ? ctx.req.headers.host : `${os.hostname()}.local:${servePort}`; return { available: true, url: `${tls ? 'https' : 'http'}://${host}/api/status?key=${key}` }; });
+webHandlers.set('status:rotate', (ctx) => { sec.statusKey(true, ctx.ip, ctx.session.user); return webHandlers.get('status:info')(ctx); });
 webHandlers.set('plex:webhookInfo', (ctx) => ({ available: true, enabled: sec.webhook().enabled, url: webhookUrl(ctx.req), events: webhookEvents.slice().reverse() }));
 webHandlers.set('plex:webhookSet', (ctx, opts) => { sec.webhookSet(opts || {}, ctx.ip, ctx.session.user); return { enabled: sec.webhook().enabled, url: webhookUrl(ctx.req) }; });
-const CTX_HANDLERS = new Set([...webHandlers.keys()].filter(k => k.startsWith('security:') || ['settings:get', 'adult:status', 'adult:toggle', 'requests:add', 'plex:webhookInfo', 'plex:webhookSet'].includes(k)));
+const CTX_HANDLERS = new Set([...webHandlers.keys()].filter(k => k.startsWith('security:') || ['settings:get', 'adult:status', 'adult:toggle', 'requests:add', 'plex:webhookInfo', 'plex:webhookSet', 'status:info', 'status:rotate'].includes(k)));
 const handlers = new Map([...svc.handlers, ...webHandlers]);
 
 const hasOpenssl = () => { try { return require('child_process').spawnSync('openssl', ['version'], { encoding: 'utf8', timeout: 5000 }).status === 0; } catch { return false; } };
@@ -202,6 +204,13 @@ async function handle(req, res) {
   try {
     if (!sec.isAllowedIp(ip)) { sec.audit('refused_non_lan', ip, url.pathname); res.writeHead(403); return res.end('LAN only'); }
     if (url.pathname === '/api/plex/webhook') return handlePlexWebhook(req, res, url, ip);
+    // Read-only status JSON for Home Assistant: GET /api/status?key=<status key>. No session, LAN-only still applies.
+    if (url.pathname === '/api/status') {
+      if (!sec.statusOk(url.searchParams.get('key') || '')) { sec.audit('status_refused', ip, 'bad key'); return json(res, 401, { ok: false, error: 'bad key' }); }
+      return json(res, 200, handlers.get('data:status')());
+    }
+    // The phone-sized request page.
+    if (url.pathname === '/request' || url.pathname === '/request/') { url.pathname = '/request.html'; }
     if (url.pathname.startsWith('/api/')) {
       const ch = decodeURIComponent(url.pathname.slice(5));
       const origin = req.headers.origin;

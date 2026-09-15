@@ -13,6 +13,9 @@
 // Electron shell registers each with ipcMain.handle; the web shell mounts each
 // as an HTTP route. Same names, same arguments, same results.
 const { titleAudioType, onlineTags, normalizeTag } = require('./tags');
+const os = require('os');
+const { createNotifier } = require('./notify');
+const { upgradeScore, upgradeReasons, RES_RANK } = require('./upgrades');
 const path = require('path');
 const fs = require('fs');
 const { Settings } = require('./settings');
@@ -114,7 +117,8 @@ function createService({ userData, log, send, host }) {
         if (m && m.locked) continue;
         // A matched series without genres yet (looked up before 1.4) is fetched once more to fill them in.
         const needsGenres = m && (m.source === 'tvmaze' || m.source === 'anilist') && m.genres == null;
-        if (onlyNew && m && m.fetched_at && !needsGenres && !(m.status && /running|releasing|airing/i.test(m.status) && m.fetched_at < staleBefore)) continue;
+        const aired = m && m.next_airing && m.next_airing < new Date().toISOString().slice(0, 10); // the expected episode is out: fetch the next one
+        if (onlyNew && m && m.fetched_at && !needsGenres && !aired && !(m.status && /running|releasing|airing/i.test(m.status) && m.fetched_at < staleBefore)) continue;
         todo.push({ type: t, show: s });
       }
     }
@@ -125,7 +129,7 @@ function createService({ userData, log, send, host }) {
       for (const { type: t, show } of todo) {
         try {
           const r = await metadata.lookupSeries(t, show);
-          if (r.found) { found++; db.saveSeriesMeta({ library_type: t, show_name: show, source: r.source, source_id: r.source_id, matched_title: r.matched_title, status: r.status, seasons: r.seasons, total_episodes: r.total_episodes, url: r.url, rating: r.rating ?? null, rating_votes: r.rating_votes ?? null, genres: r.genres || [], online_tags: r.online_tags || [], fetched_at: new Date().toISOString(), locked: 0 }); }
+          if (r.found) { found++; db.saveSeriesMeta({ library_type: t, show_name: show, source: r.source, source_id: r.source_id, matched_title: r.matched_title, status: r.status, seasons: r.seasons, total_episodes: r.total_episodes, url: r.url, rating: r.rating ?? null, rating_votes: r.rating_votes ?? null, genres: r.genres || [], online_tags: r.online_tags || [], next_airing: r.next_airing || null, next_episode: r.next_episode || null, fetched_at: new Date().toISOString(), locked: 0 }); }
           else { missed++; db.saveSeriesMeta({ library_type: t, show_name: show, source: 'none', fetched_at: new Date().toISOString(), locked: 0, note: r.candidates ? 'no confident match' : 'not found' }); }
         } catch (e) { failed++; log(`metadata ${t} "${show}": ${e.message}`); if (/HTTP 429/.test(e.message)) await new Promise(r => setTimeout(r, 10000)); }
         metaJob.done++; metaJob.message = `Looking up ${t === 'anime' ? 'AniList' : 'TVmaze'}: ${show}`;
@@ -276,7 +280,7 @@ function createService({ userData, log, send, host }) {
   h('meta:setMatch', async (type, show, source, id) => {
     const r = await metadata.fetchById(source, id);
     if (!r.found) throw new Error('That entry could not be loaded');
-    return db.saveSeriesMeta({ library_type: type, show_name: show, source: r.source, source_id: r.source_id, matched_title: r.matched_title, status: r.status, seasons: r.seasons, total_episodes: r.total_episodes, url: r.url, rating: r.rating ?? null, rating_votes: r.rating_votes ?? null, genres: r.genres || [], online_tags: r.online_tags || [], fetched_at: new Date().toISOString(), locked: 1 });
+    return db.saveSeriesMeta({ library_type: type, show_name: show, source: r.source, source_id: r.source_id, matched_title: r.matched_title, status: r.status, seasons: r.seasons, total_episodes: r.total_episodes, url: r.url, rating: r.rating ?? null, rating_votes: r.rating_votes ?? null, genres: r.genres || [], online_tags: r.online_tags || [], next_airing: r.next_airing || null, next_episode: r.next_episode || null, fetched_at: new Date().toISOString(), locked: 1 });
   });
   h('meta:setManual', (type, show, seasons, note) => db.saveSeriesMeta({ library_type: type, show_name: show, source: 'manual', seasons, total_episodes: Object.entries(seasons).filter(([s]) => s !== '0').reduce((a, [, n]) => a + Number(n || 0), 0), fetched_at: new Date().toISOString(), locked: 1, note }));
   h('meta:setNone', (type, show) => db.saveSeriesMeta({ library_type: type, show_name: show, source: 'none', fetched_at: new Date().toISOString(), locked: 1, note: 'no expected counts' }));
@@ -360,7 +364,9 @@ function createService({ userData, log, send, host }) {
     if (title.length < 2) throw new Error('Give the title');
     const kind = KINDS.includes((r || {}).kind) ? r.kind : 'other';
     const year = Number((r || {}).year) >= 1880 && Number((r || {}).year) <= 2100 ? Number(r.year) : null;
-    return db.addRequest({ title, kind, year, note: String((r || {}).note || '').trim().slice(0, 1000) || null, requested_by: String((r || {}).requested_by || 'desktop').slice(0, 60) });
+    const row = db.addRequest({ title, kind, year, note: String((r || {}).note || '').trim().slice(0, 1000) || null, requested_by: String((r || {}).requested_by || 'desktop').slice(0, 60) });
+    notifier.send('request', `New request: ${title}${year ? ` (${year})` : ''}`, `${row.requested_by || 'someone'} asked for ${kind === 'other' ? '' : kind + ' '}${title}${year ? ` (${year})` : ''}${row.note ? `\n${row.note}` : ''}\nPending requests: ${db.pendingRequests()}`, { kind, year, requested_by: row.requested_by }).catch(() => {});
+    return row;
   });
   h('requests:update', (id, patch) => { const st = (patch || {}).status; if (st && !['pending', 'approved', 'added', 'rejected'].includes(st)) throw new Error('Bad status'); return db.updateRequest(Number(id), { status: st, admin_note: (patch || {}).admin_note !== undefined ? String(patch.admin_note || '').slice(0, 1000) : undefined }); });
   h('requests:delete', (id) => db.deleteRequest(Number(id)));
@@ -535,12 +541,80 @@ function createService({ userData, log, send, host }) {
     const today = now.toISOString().slice(0, 10);
     if (lastBackupDay === today || (b.lastRun || '').slice(0, 10) === today) { lastBackupDay = today; return; }
     if (now.getHours() < hh || (now.getHours() === hh && now.getMinutes() < mm)) return;
-    if (scanner.status().running) return; // wait for a quiet moment
+    if (!!scanner.running) return; // wait for a quiet moment
     lastBackupDay = today;
-    try { backupTo(b.dir, b.keep); } catch (e) { log('backup failed: ' + e.message); settings.set({ backup: { ...b, lastError: e.message } }); }
+    try { backupTo(b.dir, b.keep); } catch (e) { log('backup failed: ' + e.message); settings.set({ backup: { ...b, lastError: e.message } }); notifier.send('backupFailed', 'Nightly backup failed', `${e.message}\nFolder: ${b.dir}`).catch(() => {}); }
   };
   const backupTimer = setInterval(backupTick, 60000); if (backupTimer.unref) backupTimer.unref();
   h('db:backupTo', (dir, keep) => backupTo(dir || (settings.get().backup || {}).dir, keep || (settings.get().backup || {}).keep, 'manual'));
+
+  // ---- airing: what the online match says comes next, and series that finished but are still incomplete ----
+  function airingReport() {
+    const today = new Date().toISOString().slice(0, 10), week = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+    const miss = new Map([...missingSummary('tv'), ...missingSummary('anime')].map(m => [m.library_type + '|' + m.show_name, m]));
+    const upcoming = db.all("SELECT library_type, show_name, matched_title, status, url, next_airing, next_episode FROM series_meta WHERE next_airing IS NOT NULL AND next_airing >= ? ORDER BY next_airing, show_name", today)
+      .map(r => { const m = miss.get(r.library_type + '|' + r.show_name); return { ...r, missing_count: m ? m.missing_count : 0, expected: m ? m.expected : 0, this_week: r.next_airing <= week }; });
+    const finished = [...miss.values()].filter(m => m.expected > 0 && m.missing_count > 0 && /ended|finished|cancelled/i.test(m.status || '')).map(m => ({ library_type: m.library_type, show_name: m.show_name, status: m.status, missing_count: m.missing_count, expected: m.expected }));
+    return { today, upcoming, thisWeek: upcoming.filter(u => u.this_week).length, finished };
+  }
+  h('data:airing', () => airingReport());
+
+  // ---- upgrades: which titles deserve a better copy (ranked in upgrades.js) ----
+  h('data:upgrades', () => {
+    const thr = settings.get().quality.minKbps || {};
+    const lowSql = Object.entries(thr).map(([res, k]) => `(resolution='${res.replace(/'/g, '')}' AND bitrate_kbps IS NOT NULL AND bitrate_kbps < ${Number(k) || 0})`).join(' OR ') || '0';
+    const out = [];
+    for (const type of ['tv', 'anime']) {
+      const metas = db.allSeriesMeta(type), ur = new Map(db.userRatings(type).map(u => [u.title_key, u]));
+      for (const r of db.all(`SELECT show_name, COUNT(*) files, SUM(size) bytes, GROUP_CONCAT(DISTINCT resolution) resolutions, SUM(COALESCE(plex_view_count,0)) plays, SUM(CASE WHEN plex_view_count>0 THEN 1 ELSE 0 END) watched, SUM(CASE WHEN ${lowSql} THEN 1 ELSE 0 END) low_bitrate, MAX(CASE WHEN hdr LIKE '%HDR%' OR hdr LIKE '%Dolby%' THEN 1 ELSE 0 END) hdr FROM files WHERE library_type=? AND missing=0 AND ignored=0 AND probe_ok=1${AF()} GROUP BY show_name`, type)) {
+        const sm = metas.get(r.show_name), u = ur.get(r.show_name);
+        const best = (r.resolutions || '').split(',').filter(Boolean).sort((a, b) => (RES_RANK[b] ?? -1) - (RES_RANK[a] ?? -1))[0] || null;
+        const t = { kind: 'series', type, key: r.show_name, title: r.show_name, best, files: r.files, gb: (r.bytes || 0) / 1e9, plays: r.plays || 0, watched_pct: r.files ? Math.round(100 * r.watched / r.files) : 0, my_rating: u ? u.stars : null, online_rating: sm ? sm.rating : null, low_bitrate: r.low_bitrate || 0, hdr: !!r.hdr };
+        out.push({ ...t, score: upgradeScore(t), reasons: upgradeReasons(t) });
+      }
+    }
+    const mur = new Map(db.userRatings('movie').map(u => [u.title_key, u]));
+    for (const r of db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, SUM(size) bytes, GROUP_CONCAT(DISTINCT resolution) resolutions, SUM(COALESCE(plex_view_count,0)) plays, MAX(plex_audience_rating) audience, SUM(CASE WHEN ${lowSql} THEN 1 ELSE 0 END) low_bitrate, MAX(CASE WHEN hdr LIKE '%HDR%' OR hdr LIKE '%Dolby%' THEN 1 ELSE 0 END) hdr FROM files WHERE library_type='movie' AND missing=0 AND ignored=0 AND probe_ok=1${AF()} GROUP BY group_key`)) {
+      const u = mur.get(r.group_key);
+      const best = (r.resolutions || '').split(',').filter(Boolean).sort((a, b) => (RES_RANK[b] ?? -1) - (RES_RANK[a] ?? -1))[0] || null;
+      const t = { kind: 'movie', type: 'movie', key: r.group_key, title: r.title, year: r.year, best, files: r.files, gb: (r.bytes || 0) / 1e9, plays: r.plays || 0, watched_pct: r.plays > 0 ? 100 : 0, my_rating: u ? u.stars : null, online_rating: r.audience != null ? r.audience : null, low_bitrate: r.low_bitrate || 0, hdr: !!r.hdr };
+      out.push({ ...t, score: upgradeScore(t), reasons: upgradeReasons(t) });
+    }
+    return out.sort((a, b) => b.score - a.score || b.plays - a.plays);
+  });
+
+  // ---- status: one small JSON for Home Assistant / dashboards (served by the web shell at /api/status?key=…) ----
+  h('data:status', () => {
+    const c = db.get(`SELECT COUNT(*) files, SUM(size) bytes FROM files WHERE missing=0 AND ignored=0 AND adult=0`);
+    const last = db.get('SELECT started, finished, status, added, removed, files_seen FROM scans ORDER BY id DESC LIMIT 1');
+    const air = airingReport();
+    const st = handlers.get('data:storage')();
+    return { app: 'MediaLedger', files: c.files || 0, bytes: c.bytes || 0, free_bytes: st.free, months_left: st.monthsLeft != null ? Math.round(st.monthsLeft * 10) / 10 : null, pending_requests: db.pendingRequests(), missing_episodes: [...missingSummary('tv'), ...missingSummary('anime')].reduce((a, m) => a + m.missing_count, 0), airing_this_week: air.thisWeek, next_airing: air.upcoming[0] ? { show: air.upcoming[0].show_name, date: air.upcoming[0].next_airing, episode: air.upcoming[0].next_episode } : null, scanning: !!scanner.running, last_scan: last ? { finished: last.finished, status: last.status, added: last.added, removed: last.removed } : null, at: new Date().toISOString() };
+  });
+
+  // ---- notifications ----
+  const notifier = createNotifier(() => settings.get().notify, log);
+  h('notify:test', async () => { const r = await notifier.send('test', 'MediaLedger test', `This is a test from ${os.hostname()}. If you can read it, notifications work.`); if (r.skipped) throw new Error(r.skipped); if (!r.webhook && !r.email) throw new Error('Nothing configured: set a webhook URL or e-mail first, then Save settings'); const bad = [r.webhook, r.email].find(x => x && !x.ok); if (bad) throw new Error(bad.error || `HTTP ${bad.status}`); return r; });
+  let lastSummaryDay = null;
+  const summaryTick = () => {
+    const n = settings.get().notify || {};
+    if (!(n.webhookUrl || (n.email && n.email.enabled)) || (n.events && n.events.dailySummary === false)) return;
+    const now = new Date(); const [hh, mm] = String(n.dailyTime || '08:00').split(':').map(Number);
+    const today = now.toISOString().slice(0, 10);
+    if (lastSummaryDay === today || (n.lastSummary || '').slice(0, 10) === today) { lastSummaryDay = today; return; }
+    if (now.getHours() < hh || (now.getHours() === hh && now.getMinutes() < mm)) return;
+    lastSummaryDay = today;
+    try {
+      const st = handlers.get('data:status')(); const air = airingReport();
+      const lines = [`Files: ${st.files.toLocaleString()} (${(st.bytes / 1e12).toFixed(2)} TB)`, `Free on the share: ${(st.free_bytes / 1e12).toFixed(2)} TB${st.months_left != null ? ` (about ${st.months_left} months at the current rate)` : ''}`, `Pending requests: ${st.pending_requests}`, `Missing episodes: ${st.missing_episodes}`];
+      if (st.last_scan) lines.push(`Last scan: ${st.last_scan.status}, +${st.last_scan.added} / -${st.last_scan.removed}`);
+      if (air.upcoming.length) lines.push('', 'Airing this week:', ...air.upcoming.filter(u => u.this_week).slice(0, 15).map(u => `  ${u.next_airing}  ${u.show_name} ${u.next_episode || ''}`));
+      if (air.finished.length) lines.push('', `Finished airing but incomplete: ${air.finished.slice(0, 10).map(f => `${f.show_name} (${f.missing_count} missing)`).join(', ')}${air.finished.length > 10 ? '…' : ''}`);
+      notifier.send('dailySummary', `Daily summary: ${st.pending_requests} request${st.pending_requests === 1 ? '' : 's'}, ${air.thisWeek} airing this week`, lines.join('\n'), { pending_requests: st.pending_requests, airing_this_week: air.thisWeek, free_bytes: st.free_bytes }).catch(() => {});
+      settings.set({ notify: { ...n, lastSummary: new Date().toISOString() } });
+    } catch (e) { log('daily summary failed: ' + e.message); }
+  };
+  const summaryTimer = setInterval(summaryTick, 60000); if (summaryTimer.unref) summaryTimer.unref();
 
   // ---- tags: your own words per title; genres come with the online match / Plex, sub/dub from the probe ----
   h('tags:list', (type) => Object.fromEntries(db.tagsFor(type)));

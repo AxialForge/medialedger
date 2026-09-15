@@ -12,6 +12,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [1.6.0] - 2026-09-15
+
+### Added
+
+- **Upgrades** page: every title ranked by how much it deserves a better copy,
+  with plain-English reasons; the scoring function is `src/main/upgrades.js`.
+- **Airing next** on the Missing page: the next episode date from TVmaze /
+  AniList per series, this week highlighted, plus *Finished airing, still
+  incomplete*. Unaired episodes no longer count as missing. Series are
+  re-checked once their expected episode has aired. Schema v8.
+- **Notifications** (Settings): a JSON webhook (Home Assistant, ntfy,
+  Discord…) and/or e-mail through a dependency-free SMTP client, for new
+  requests, a daily summary and failed backups, with *Send a test*.
+- **Home Assistant status**: `GET /api/status?key=…` on the web server returns
+  a small JSON summary for a RESTful sensor; key shown and rotated in Settings.
+- **Phone request page** at `/request`; the guest QR code now points there.
+### Changed
+
+### Fixed
+
 ## [1.5.0] - 2026-09-15
 
 ### Added

@@ -51,7 +51,7 @@ const normUser = (u) => String(u || '').trim().toLowerCase();
 function createSecurity({ dataDir, log = () => {} }) {
   const webFile = path.join(dataDir, 'web.json');
   const auditFile = path.join(dataDir, 'security.log');
-  const DEFAULTS = { users: {}, guestEnabled: false, lanOnly: true, idleMinutes: 0, totp: { enabled: false, secret: null, pending: null }, sessions: {}, webhook: { enabled: false, key: null } };
+  const DEFAULTS = { users: {}, guestEnabled: false, lanOnly: true, idleMinutes: 0, totp: { enabled: false, secret: null, pending: null }, sessions: {}, webhook: { enabled: false, key: null }, statusKey: null };
   let state = { ...DEFAULTS };
   try {
     state = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(webFile, 'utf8')) };
@@ -198,6 +198,9 @@ function createSecurity({ dataDir, log = () => {} }) {
     if (typeof enabled === 'boolean') state.webhook.enabled = enabled;
     save(); audit('webhook_changed', ip, `enabled=${state.webhook.enabled}${rotate ? ' key rotated' : ''}`, by); return state.webhook;
   }
+  // Read-only status JSON for Home Assistant and friends: its own key, so the Plex key never leaves Plex.
+  function statusKey(rotate, ip, by) { if (rotate || !state.statusKey) { state.statusKey = crypto.randomBytes(18).toString('base64url'); save(); audit('status_key', ip, rotate ? 'rotated' : 'created', by); } return state.statusKey; }
+  const statusOk = (key) => !!state.statusKey && !!key && key.length === state.statusKey.length && crypto.timingSafeEqual(Buffer.from(key), Buffer.from(state.statusKey));
   const webhookOk = (key) => state.webhook.enabled && !!state.webhook.key && !!key && key.length === state.webhook.key.length && crypto.timingSafeEqual(Buffer.from(key), Buffer.from(state.webhook.key));
 
   // ---- status for the Security tab ----
@@ -221,7 +224,7 @@ function createSecurity({ dataDir, log = () => {} }) {
   return {
     get state() { return state; }, audit, isBanned, isAllowedIp, login, logout, sessionOf, setSessionFlag, cookieFor, clearCookie,
     setPassword, hasPassword: hasUsers, changePassword, needsReauth, reauth, totpSetup, totpEnable, totpDisable, setOptions, status, revoke, revokeOthers,
-    listUsers, addUser, setRole, resetPassword, deleteUser, userOf, guestEnabled: () => state.guestEnabled,
+    listUsers, addUser, setRole, resetPassword, deleteUser, userOf, guestEnabled: () => state.guestEnabled, statusKey, statusOk,
     webhookSet, webhookOk, webhook: () => state.webhook,
   };
 }

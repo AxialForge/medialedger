@@ -298,6 +298,13 @@ const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS idx_title_tags ON title_tags(library_type, title_key);
     `,
   },
+  {
+    version: 8, name: 'next airing episode',
+    sql: `
+      ALTER TABLE series_meta ADD COLUMN next_airing TEXT;   -- YYYY-MM-DD of the next episode to air, from TVmaze / AniList
+      ALTER TABLE series_meta ADD COLUMN next_episode TEXT;  -- its label, e.g. S03E05 or E12
+    `,
+  },
 ];
 
 class Db {
@@ -419,7 +426,7 @@ class Db {
   getSeriesMeta(type, show) { return this.get('SELECT * FROM series_meta WHERE library_type=? AND show_name=?', type, show); }
   allSeriesMeta(type) { return new Map(this.all('SELECT * FROM series_meta WHERE library_type=?', type).map(m => [m.show_name, m])); }
   saveSeriesMeta(m) {
-    const cols = ['library_type', 'show_name', 'source', 'source_id', 'matched_title', 'status', 'seasons', 'total_episodes', 'url', 'fetched_at', 'locked', 'note', 'rating', 'rating_votes', 'genres', 'online_tags'];
+    const cols = ['library_type', 'show_name', 'source', 'source_id', 'matched_title', 'status', 'seasons', 'total_episodes', 'url', 'fetched_at', 'locked', 'note', 'rating', 'rating_votes', 'genres', 'online_tags', 'next_airing', 'next_episode'];
     const vals = cols.map(c => ['seasons', 'genres', 'online_tags'].includes(c) && m[c] && typeof m[c] !== 'string' ? JSON.stringify(m[c]) : (m[c] ?? null));
     this.run(`INSERT INTO series_meta (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})
       ON CONFLICT(library_type, show_name) DO UPDATE SET ${cols.filter(c => c !== 'library_type' && c !== 'show_name').map(c => `${c}=excluded.${c}`).join(',')}`, ...vals);
@@ -471,6 +478,7 @@ class Db {
   addExport(rec) { this.run('INSERT INTO exports (ts, scan_id, dir, files, rows, trigger) VALUES (?,?,?,?,?,?)', new Date().toISOString(), rec.scan_id ?? null, rec.dir, JSON.stringify(rec.zip ? [...rec.files, { zip: rec.zip }] : rec.files), rec.rows ?? null, rec.trigger || 'manual'); }
   listExports(limit = 50) { return this.all('SELECT * FROM exports ORDER BY id DESC LIMIT ?', limit); }
   // ---- media requests ----
+  pendingRequests() { return this.get("SELECT COUNT(*) n FROM requests WHERE status='pending'").n; }
   listRequests(limit = 500) { return this.all('SELECT * FROM requests ORDER BY CASE status WHEN \'pending\' THEN 0 WHEN \'approved\' THEN 1 ELSE 2 END, id DESC LIMIT ?', limit); }
   addRequest(r) { const now = new Date().toISOString(); const info = this.run('INSERT INTO requests (created, title, kind, year, note, requested_by, status, updated) VALUES (?,?,?,?,?,?,?,?)', now, r.title, r.kind, r.year ?? null, r.note || null, r.requested_by || null, 'pending', now); return this.get('SELECT * FROM requests WHERE id=?', info.lastInsertRowid); }
   updateRequest(id, patch) { const cur = this.get('SELECT * FROM requests WHERE id=?', id); if (!cur) return null; this.run('UPDATE requests SET status=?, admin_note=?, updated=? WHERE id=?', patch.status || cur.status, patch.admin_note !== undefined ? patch.admin_note : cur.admin_note, new Date().toISOString(), id); return this.get('SELECT * FROM requests WHERE id=?', id); }

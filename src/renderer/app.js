@@ -451,6 +451,27 @@ async function seriesView(type) {
 }
 views.tv = () => seriesView('tv');
 
+// ---- Upgrades: titles worth replacing with a better copy, ranked by upgrades.js ----
+views.upgrades = async () => {
+  const all = await L.upgrades();
+  const cands = all.filter(r => r.score > 0), rest = all.filter(r => r.score <= 0);
+  view.innerHTML = `<h1>Upgrade candidates</h1>
+    <p class="lead">Which titles deserve a better copy, and which are not worth the disk. The score weighs how low the current copy is (resolution, bitrate) against how much it matters (Plex plays, your stars, the online rating). Ranking lives in <span class="mono">src/main/upgrades.js</span>.</p>
+    <div class="tiles compact">${tile(cands.length ? 'warnt' : 'okt', 'Worth upgrading', cands.length)}${tile('', 'Not worth it', rest.filter(r => !r.plays && !r.my_rating && (r.best === '720p' || r.best === '480p' || r.best === 'SD' || r.best === '576p')).length, 'low copy, never played, unrated')}${tile('', 'Already 4K or HDR', all.filter(r => r.best === '4K' || r.hdr).length)}${tile('', 'Titles scored', all.length)}</div>
+    <div id="uTable"></div>`;
+  const cols = [
+    { key: 'title', label: 'Title', cls: 'wrap', render: r => `<span class="badge ${r.type}">${r.kind === 'movie' ? 'Movie' : typeName(r.type)}</span> ${esc(r.title)}${r.year ? ` <span class="muted">(${r.year})</span>` : ''}` },
+    { key: 'score', label: 'Score', num: true, render: r => r.score > 0 ? `<b>${Number(r.score).toFixed(1)}</b>` : '<span class="muted">0</span>' },
+    { key: 'reasons', label: 'Why', cls: 'wrap', render: r => r.reasons.map(x => `<span class="badge ${/low|never/.test(x) ? 'warn' : ''}">${esc(x)}</span>`).join(' ') },
+    { key: 'best', label: 'Best copy', render: r => r.best ? `<span class="badge">${esc(r.best)}</span>${r.hdr ? ' <span class="badge ok">HDR</span>' : ''}` : '' },
+    { key: 'plays', label: 'Plays', num: true }, { key: 'my_rating', label: 'Mine', sortVal: r => r.my_rating || 0, render: r => starsHtml(r.my_rating, r.type, r.key, r.title) },
+    { key: 'online_rating', label: 'Rating', num: true, render: r => r.online_rating != null ? Number(r.online_rating).toFixed(1) : '<span class="muted">—</span>' },
+    { key: 'gb', label: 'Size', num: true, render: r => fmtBytes(r.gb * 1e9) },
+  ];
+  const t = makeTable(all, cols, { search: r => `${r.title} ${r.reasons.join(' ')}`, defaultSort: { key: 'score', asc: false }, onRow: r => { location.hash = r.kind === 'movie' ? '#movies/' + encodeURIComponent(r.key) : `#${r.type}/${encodeURIComponent(r.key)}`; } });
+  $('#uTable').append(searchToolbar(t, all.length), t.node);
+};
+
 // ---- Watch tonight: one list across series and movies, filtered by what you have not seen, how long you have, and your tags ----
 views.tonight = async () => {
   const all = await L.tonight();
@@ -739,6 +760,12 @@ views.missing = async () => {
     { key: 'id', label: '', render: r => matchBtn(r.library_type, r.show_name) },
   ];
   const t = makeTable(rows, cols, { search: r => `${r.show_name} ${r.matched_title || ''} ${r.source || ''}`, defaultSort: { key: 'missing_count', asc: false } });
+  L.airing().then(a => {
+    const day = (d) => { const diff = Math.round((Date.parse(d) - Date.parse(a.today)) / 86400000); return diff === 0 ? 'today' : diff === 1 ? 'tomorrow' : diff < 7 ? new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long' }) : d; };
+    const box = el(`<div class="grid2" style="margin:12px 0"><div class="card"><h3>Airing next <span class="muted tiny">from TVmaze / AniList; the "missing" count leaves out episodes that have not aired</span></h3>${a.upcoming.length ? `<table>${a.upcoming.slice(0, 25).map(u => `<tr class="${u.this_week ? '' : 'muted'}"><td class="nowrap"><b>${day(u.next_airing)}</b><span class="sub">${esc(u.next_airing)}</span></td><td class="wrap"><a href="#${u.library_type}/${encodeURIComponent(u.show_name)}">${esc(u.show_name)}</a> <span class="muted tiny">${esc(u.next_episode || '')}</span></td><td class="num">${u.missing_count ? `<span class="badge bad">${u.missing_count} missing</span>` : '<span class="badge ok">up to date</span>'}</td></tr>`).join('')}</table>${a.upcoming.length > 25 ? `<p class="muted tiny">…and ${a.upcoming.length - 25} more</p>` : ''}` : '<p class="muted">Nothing scheduled. Series show up here once their match reports a next episode.</p>'}</div>
+      <div class="card"><h3>Finished airing, still incomplete</h3>${a.finished.length ? `<table>${a.finished.slice(0, 25).map(f => `<tr><td class="wrap"><a href="#${f.library_type}/${encodeURIComponent(f.show_name)}">${esc(f.show_name)}</a> <span class="muted tiny">${esc(f.status || '')}</span></td><td class="num"><span class="badge bad">${f.missing_count} of ${f.expected}</span></td></tr>`).join('')}</table>` : '<p class="muted">Every ended series you have is complete.</p>'}</div></div>`);
+    view.insertBefore(box, view.querySelector('.toolbar'));
+  }).catch(() => {});
   view.append(searchToolbar(t, rows.length), t.node);
   t.node.addEventListener('click', e => { const a = e.target.closest('a.ext'); if (a) { e.preventDefault(); e.stopPropagation(); L.openExternal(a.dataset.url); } });
   $('#refreshNew').onclick = async () => { toast('Looking up series in the background…'); L.meta.refresh({ onlyNew: true }); };
@@ -1172,6 +1199,12 @@ views.settings = async () => {
       <div class="field"><label>Automatic updates</label><input type="checkbox" id="updOn" ${s.updates.enabled ? 'checked' : ''}><div class="hint">Installed builds check GitHub Releases on launch and every 6 hours, download silently and apply on the next restart. Your database and settings are untouched by updates.</div></div>
       <div class="field"><label>GitHub token</label><input type="password" id="ghToken" value="${esc(s.githubToken)}" placeholder="not needed – the repository is public"><div class="hint">Leave empty. Only needed if the AxialForge/medialedger repository is ever made private again (fine-grained token, Contents: read). Takes effect on the next Check for updates.</div></div>
 
+      <h2>Notifications</h2>
+      <div class="field"><label>Webhook URL</label><input type="text" id="nfHook" value="${esc((s.notify && s.notify.webhookUrl) || '')}" placeholder="https://homeassistant.local:8123/api/webhook/medialedger"><div class="hint">MediaLedger POSTs a small JSON body (<span class="mono">event, title, message, …</span>) here for every event below. Works with a Home Assistant webhook trigger, ntfy (<span class="mono">https://ntfy.sh/your-topic</span>), Discord or anything that accepts a POST.</div></div>
+      <div class="field"><label>E-mail</label><div class="inline" style="flex-wrap:wrap;gap:6px"><label class="inline"><input type="checkbox" id="nfMailOn" ${s.notify && s.notify.email && s.notify.email.enabled ? 'checked' : ''}> on</label><input type="text" id="nfHost" placeholder="smtp.gmail.com" value="${esc((s.notify && s.notify.email && s.notify.email.host) || '')}" style="width:170px"><input type="number" id="nfPort" placeholder="587" value="${(s.notify && s.notify.email && s.notify.email.port) || 587}" style="width:80px"><label class="inline"><input type="checkbox" id="nfSecure" ${s.notify && s.notify.email && s.notify.email.secure ? 'checked' : ''}> TLS on 465</label><input type="text" id="nfUser" placeholder="user" value="${esc((s.notify && s.notify.email && s.notify.email.user) || '')}" style="width:160px" autocomplete="off"><input type="password" id="nfPass" placeholder="password / app password" value="${esc((s.notify && s.notify.email && s.notify.email.pass) || '')}" style="width:160px" autocomplete="new-password"><input type="text" id="nfTo" placeholder="to@example.com" value="${esc((s.notify && s.notify.email && s.notify.email.to) || '')}" style="width:180px"></div><div class="hint">Any ordinary mailbox. Gmail: host smtp.gmail.com, port 587, your address as user and an <b>app password</b> (Google account → Security → App passwords). The password stays in settings.json on this machine.</div></div>
+      <div class="field"><label>Send for</label><div class="inline" style="flex-wrap:wrap;gap:10px">${[['request', 'new media request'], ['dailySummary', 'daily summary'], ['backupFailed', 'backup failed'], ['airing', 'episodes airing (in the summary)']].map(([k, l]) => `<label class="inline"><input type="checkbox" class="nfEv" data-ev="${k}" ${!s.notify || !s.notify.events || s.notify.events[k] !== false ? 'checked' : ''}> ${l}</label>`).join('')} <label class="inline">summary at <input type="time" id="nfTime" value="${esc((s.notify && s.notify.dailyTime) || '08:00')}"></label><button class="small" id="nfTest">Send a test</button><span class="muted tiny" id="nfMsg"></span></div></div>
+      <div class="field"><label>Home Assistant status</label><div id="statusBox" class="muted small">Loading…</div><div class="hint">A read-only JSON summary (files, free space, pending requests, missing episodes, what airs this week, last scan) at a URL with its own key. In Home Assistant add a <b>RESTful sensor</b> with that URL and pick values with <span class="mono">value_template</span>, e.g. <span class="mono">{{ value_json.pending_requests }}</span>.</div></div>
+
       <h2>Plex</h2>
       <div class="field"><label>Plex URL</label><input type="text" id="plexUrl" value="${esc(s.plex.baseUrl)}"><div class="hint">Your Plex Media Server on the LAN, e.g. <span class="mono">http://192.168.1.204:32400</span> if Plex runs on the NAS.</div></div>
       <div class="field"><label>Plex token</label><div class="inline"><input type="password" id="plexToken" style="flex:1" value="${esc(s.plex.token)}" autocomplete="off"><button class="small" id="plexTest">Test</button></div><div class="hint" id="plexMsg">In Plex Web: any item → ⋯ → Get Info → View XML; copy the value after <span class="mono">X-Plex-Token=</span> in that page's address. Stored only in settings.json on this PC.</div></div>
@@ -1220,6 +1253,9 @@ views.settings = async () => {
   $('#openLog').onclick = () => L.openPath(info.logFile);
   $('#openBackups').onclick = () => L.openPath(info.dbFile + '.backups');
   $('#backupNow').onclick = async () => { const p = await L.db.backup(); toast('Backup written: ' + p); };
+  $('#nfTest').onclick = async () => { $('#nfMsg').textContent = 'Saving and sending…'; try { await L.settings.set({ notify: collect().notify }); await L.notifyTest(); $('#nfMsg').textContent = 'Sent. Check the webhook target / mailbox.'; } catch (e) { $('#nfMsg').textContent = ''; toast(e.message, true); } };
+  const refreshStatusBox = async () => { const box = $('#statusBox'); if (!box) return; let st; try { st = await L.status.info(); } catch (e) { box.textContent = e.message; return; } if (!st.available) { box.textContent = 'The status URL is served by the web server (the Pi); the desktop app has none.'; return; } box.innerHTML = `<span class="mono" style="user-select:all;word-break:break-all">${esc(st.url)}</span> <button class="small" id="stRotate">New key</button>`; $('#stRotate').onclick = async () => { if (confirm('Generate a new key? Update Home Assistant afterwards.')) { await L.status.rotate(); refreshStatusBox(); } }; };
+  refreshStatusBox();
   $('#pickBk').onclick = async () => { const p = await pickFolder($('#bkDir').value); if (p) $('#bkDir').value = p; };
   $('#bkNow').onclick = async () => { try { const p = await L.backupTo($('#bkDir').value.trim(), Number($('#bkKeep').value) || 7); toast('Backup copied to ' + p); } catch (e) { toast(e.message, true); } };
   $('#dlFf').onclick = () => downloadFfmpeg($('#dlMsg'), $('#dlProg'), $('#dlBar'), () => views.settings());
@@ -1236,6 +1272,7 @@ views.settings = async () => {
       videoExtensions: list($('#vext').value), subtitleExtensions: list($('#sext').value), ignorePatterns: $('#ignore').value.split(',').map(x => x.trim()).filter(Boolean),
       csvOutputDir: $('#csvDir').value.trim(), autoExportAfterScan: $('#autoExport').checked,
       backup: { ...(s.backup || {}), enabled: $('#bkOn').checked, dir: $('#bkDir').value.trim(), time: $('#bkTime').value || '03:30', keep: Number($('#bkKeep').value) || 7 },
+      notify: { ...(s.notify || {}), webhookUrl: $('#nfHook').value.trim(), email: { enabled: $('#nfMailOn').checked, host: $('#nfHost').value.trim(), port: Number($('#nfPort').value) || 587, secure: $('#nfSecure').checked, user: $('#nfUser').value.trim(), pass: $('#nfPass').value, from: $('#nfUser').value.trim(), to: $('#nfTo').value.trim() }, events: Object.fromEntries([...document.querySelectorAll('.nfEv')].map(c => [c.dataset.ev, c.checked])), dailyTime: $('#nfTime').value || '08:00' },
       schedule: { ...s.schedule, inAppEnabled: $('#inApp').checked, inAppIntervalHours: Number($('#inAppHours').value) || 24, taskTime: $('#taskTime').value || '03:00' },
       updates: { enabled: $('#updOn').checked }, githubToken: $('#ghToken').value.trim(),
       metadata: { ...s.metadata, enabled: $('#metaOn').checked, refreshDays: Number($('#metaDays').value) || 14 },
@@ -1366,6 +1403,7 @@ views.requests = async () => {
   view.innerHTML = `<h1>Media requests</h1>
     <p class="lead">Ask for a movie or show to be added to the library. ${isAdmin ? 'You are an admin: set a status and leave a note on each request.' : 'The admin sees new requests and marks them approved, added or declined.'}</p>
     <div class="tiles compact">${tile(pending ? 'warnt' : 'okt', 'Pending', pending)}${tile('', 'Added', list.filter(r => r.status === 'added').length)}${tile('', 'All requests', list.length)}</div>
+    ${L.isWeb ? `<p class="muted tiny">Phone-sized version of this form: <a href="request" target="_blank"><span class="mono">${esc(location.origin)}/request</span></a>. The guest QR code on the Security tab points there.</p>` : ''}
     <div class="card" style="margin-top:12px"><h3>New request</h3>
       <div class="inline"><input type="text" id="rqTitle" placeholder="Title" style="flex:2;min-width:180px"><input type="number" id="rqYear" placeholder="Year" style="width:90px"><select id="rqKind">${Object.entries(KIND).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>${me.guest ? '<input type="text" id="rqBy" placeholder="Your name" style="width:140px">' : ''}</div>
       <div class="inline" style="margin-top:8px"><input type="text" id="rqNote" placeholder="Anything that helps: which edition, dub or sub, where it streams…" style="flex:1"><button class="primary" id="rqAdd">Request</button></div>
@@ -1409,7 +1447,7 @@ views.security = async () => {
         <div class="field"><label>LAN only</label><input type="checkbox" id="optLan" ${st.lanOnly ? 'checked' : ''}><div class="hint">Refuse connections from outside private address ranges. Leave on unless you know why.</div></div>
         <div class="field"><label>Idle sign-out</label><div class="inline"><input type="number" id="optIdle" min="0" max="10080" value="${st.idleMinutes}" style="width:90px"> <span class="muted">minutes (0 = off)</span><button class="small" id="optIdleSave">Save</button></div></div>
         <div class="field"><label>Guest access</label><input type="checkbox" id="optGuest" ${st.guestEnabled ? 'checked' : ''}><div class="hint">Anyone on the LAN can open the page without signing in and see library statistics and lists, and file media requests. Guests never see adult content, issues, settings or any control.</div></div>
-        ${st.guestEnabled ? `<div class="field"><label>Guest link</label><div class="inline" style="align-items:flex-start;gap:14px"><div class="qrbox">${qrSvg(location.origin + '/', { size: 132, label: 'Guest link' })}</div><div class="muted tiny">Anyone on your Wi-Fi can scan this to open <span class="mono">${esc(location.origin)}</span> as a guest. Screenshot it or print this page and put it by the TV.</div></div></div>` : ''}
+        ${st.guestEnabled ? `<div class="field"><label>Guest link</label><div class="inline" style="align-items:flex-start;gap:14px"><div class="qrbox">${qrSvg(location.origin + '/request', { size: 132, label: 'Guest request link' })}</div><div class="muted tiny">Anyone on your Wi-Fi can scan this to open the request form at <span class="mono">${esc(location.origin)}/request</span> as a guest. Screenshot it or print this page and put it by the TV.</div></div></div>` : ''}
         <div class="inline"><button id="optSave">Save options</button></div>
         <h3 style="margin-top:16px">Users</h3>
         <table><thead><tr><th>User</th><th>Role</th><th>Last sign-in</th><th>Sessions</th><th></th></tr></thead><tbody>${st.users.map(u => `<tr><td><b>${esc(u.username)}</b>${st.me && u.username === st.me.username ? ' <span class="badge ok">you</span>' : ''}</td><td><select class="small uRole" data-u="${esc(u.username)}"><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option><option value="standard" ${u.role === 'standard' ? 'selected' : ''}>standard</option></select></td><td class="muted">${u.lastLogin ? ago(u.lastLogin) : 'never'}</td><td>${u.sessions}</td><td class="nowrap"><button class="small uReset" data-u="${esc(u.username)}">Reset password</button> <button class="small uDel" data-u="${esc(u.username)}">✕</button></td></tr>`).join('')}</tbody></table>
