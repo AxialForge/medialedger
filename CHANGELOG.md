@@ -12,6 +12,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [1.2.2] - 2026-09-14
+
+### Changed
+
+- **User manual regenerated for 1.1 to 1.2.1**: new chapters for Issues
+  (Problems, Fix dialog, Duplicates in one place) and Media requests, the
+  CSV export chapter covers set selection, zip and browser downloads, Plex
+  gains a webhook section, Security opens with accounts and roles (admin,
+  standard, guest) and the Users control, and the Pi chapter covers the
+  `admin` sign-in, `--port=80 --domain=` and the router-side DNS record.
+  PDF refreshed. Screenshot mode now captures the Issues and Requests pages.
+
+### Fixed
+
+- The Problems view's *Duplicate episodes* tile showed "undefined" since the
+  0.7.0 core split: the core returns a count while the page expected rows.
+  The tile now shows the count and points at the Duplicates button; the
+  redundant duplicate table under Problems is gone.
+
 ## [1.2.1] - 2026-09-14
 
 ### Added
