@@ -12,6 +12,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [1.0.3] - 2026-09-14
+
+### Added
+
+- **Phone layout for the web build.** Below 820 px wide the sidebar becomes a slide-in menu behind a top bar with a Scan button, tiles and panels stack, forms go single-column, wide tables scroll sideways inside their card, and buttons grow to finger size. Nothing changes at desktop width, so the Windows app and the PC browser view are untouched. Also adds the missing viewport meta tag, without which phones rendered the page zoomed out.
+
 ## [1.0.2] - 2026-09-14
 
 ### Added

@@ -1243,6 +1243,12 @@ async function route() {
   } catch (e) { view.innerHTML = `<div class="empty">Error: ${esc(e.message)}</div>`; }
 }
 window.addEventListener('hashchange', route);
+// Phone layout: the sidebar slides in from the top bar's ☰ and closes on navigation or a tap outside.
+const closeNav = () => document.body.classList.remove('nav-open');
+$('#navToggle').onclick = () => document.body.classList.toggle('nav-open');
+$('#navShade').onclick = closeNav;
+document.querySelectorAll('.sidebar a').forEach(a => a.addEventListener('click', closeNav));
+$('#topScan').onclick = () => $('#btnScan').hidden ? $('#btnCancel').click() : $('#btnScan').click();
 L.appInfo().then(async i => {
   $('#versionLine').textContent = `v${i.version}${i.packaged ? '' : ' (dev)'}`;
   updateState = i.updateStatus || updateState; paintUpdatePill();
