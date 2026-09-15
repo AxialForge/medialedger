@@ -12,6 +12,32 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [1.1.0] - 2026-09-14
+
+### Added
+
+- **User accounts with roles** on the web server. Sign-in is now username +
+  password. **admin** can do everything; **standard** sees every library and
+  review page, rates titles, files requests and may show adult content for
+  their own session, but gets no settings, system, security, scans, fixes or
+  renames; **guest** (optional, no sign-in) sees library statistics and lists
+  and can file requests, never adult content. The 1.0 password becomes the
+  `admin` account automatically. Security tab → Users: add, change role, reset
+  password, delete; Guest access switch under Options. Two-factor codes apply
+  to admin sign-ins. Standard users see the Plex and GitHub tokens blanked.
+  Every refusal is enforced by the server and written to the audit log.
+- **Media requests** tab: anyone may ask for a title (kind, year, note); admins
+  set Pending / Approved / Added / Declined and leave a note. Pending count on
+  the sidebar for admins.
+- **Issues** tab merges Problems and Duplicates behind two buttons; the old
+  `#problems` and `#duplicates` links still work.
+- Account line in the sidebar with Sign in / Sign out.
+
+### Changed
+
+- Adult visibility is per session on the web server instead of one switch for
+  everyone.
+
 ## [1.0.4] - 2026-09-14
 
 ### Fixed

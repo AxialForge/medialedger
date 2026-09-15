@@ -228,6 +228,21 @@ tighten it further from the **Security** tab.
   `ProtectSystem=full`, `ProtectHome` and a private `/tmp`. It can write only
   to its data folder and the share.
 
+**Accounts and roles**
+
+Sign-in is username + password. The installer's `--set-password` creates or
+resets the account named `admin`. From Security → Users an admin adds more:
+
+| Role | Can | Cannot |
+|---|---|---|
+| admin | everything | |
+| standard | see every library and review page, rate titles, file requests, show adult content for their own session, change their own password | settings, system, security, scans, fixes, renames, exports |
+| guest (no account) | library statistics and lists, file a request | anything else; adult content is never shown |
+
+Guest access is off by default; turn it on under Security → Options when you
+want people on the LAN to browse without an account. Two-factor codes apply to
+admin sign-ins only.
+
 **Optional, from the Security tab**
 
 - **Two-factor codes** (TOTP). Press *Set up 2FA*, add the secret to Google

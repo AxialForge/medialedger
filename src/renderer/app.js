@@ -126,12 +126,26 @@ async function refreshBadges() {
     const m = $('#missingCount'); m.textContent = d.missingEpisodes.episodes.toLocaleString(); m.hidden = !d.missingEpisodes.episodes;
     const du = $('#dupCount'); du.textContent = d.duplicates; du.hidden = !d.duplicates;
     $('#navRename').style.opacity = s.renaming.enabled ? '' : '.45';
-    try { const a = await L.adult.status(); $('#adultSwitch').hidden = !a.rootConfigured; $('#navAdult').hidden = !(a.rootConfigured && a.showAdult); $('#showAdult').checked = a.showAdult; const ac = $('#adultCount'); ac.textContent = a.count.toLocaleString(); ac.hidden = !a.count; } catch { /* ignore */ }
+    try { const a = await L.adult.status(); $('#adultSwitch').hidden = !a.rootConfigured || a.canToggle === false; $('#navAdult').hidden = !(a.rootConfigured && a.showAdult); $('#showAdult').checked = a.showAdult; const ac = $('#adultCount'); ac.textContent = a.count.toLocaleString(); ac.hidden = !a.count; } catch { /* ignore */ }
     try { const { plan } = await L.movie.plan(); const n = plan.filter(p => p.ok && !p.unchanged).length; const mp = $('#movieNameCount'); mp.textContent = n.toLocaleString(); mp.hidden = !n; } catch { /* ignore */ }
+    try { if (me.role === 'admin') { const rq = await L.requests.list(); const n = rq.filter(r => r.status === 'pending').length; const rp = $('#reqCount'); rp.textContent = n; rp.hidden = !n; } } catch { /* ignore */ }
     const w = $('#watchLine'); w.hidden = !d.watch.enabled; w.textContent = d.watch.enabled ? `Watching ${d.watch.roots.length} root(s)${d.watch.pending ? ` · ${d.watch.pending} change(s) pending` : ''}` : '';
   } catch { /* ignore */ }
 }
 L.plex.onProgress(p => { const box = $('#metaProgress'); box.hidden = !p.running && !p.message; $('#metaBar').className = p.running ? 'indeterminate' : ''; $('#metaMsg').textContent = p.message || ''; if (!p.running) { setTimeout(() => { box.hidden = true; }, 8000); if (['ratings', 'settings', 'tv', 'anime', 'movies'].includes(currentView)) route(); } });
+// Who am I? Drives which navigation entries and controls are shown; the server enforces the same rules.
+let me = { role: 'admin', guest: false, username: null, available: false, guestEnabled: false };
+async function loadMe() {
+  try { me = await L.security.me(); } catch { /* desktop or pre-login */ }
+  document.body.classList.remove('role-admin', 'role-standard', 'role-guest');
+  document.body.classList.add('role-' + (me.role || 'admin'));
+  const line = $('#accountLine');
+  if (!L.isWeb) { line.hidden = true; return; }
+  line.hidden = false;
+  line.innerHTML = me.guest ? `Viewing as guest · <a href="#" id="signInLink">Sign in</a>` : `Signed in as <b>${esc(me.username || '')}</b> (${me.role}) · <a href="#" id="signOutLink">Sign out</a>`;
+  if ($('#signInLink')) $('#signInLink').onclick = e => { e.preventDefault(); L.signIn(); };
+  if ($('#signOutLink')) $('#signOutLink').onclick = e => { e.preventDefault(); L.logout(); };
+}
 const paintRoots = (st) => { const pill = $('#rootsPill'); const n = (st && st.problems || []).length; pill.hidden = !n; pill.textContent = n; pill.title = n ? st.problems.map(p => `${p.label}: ${p.detail}`).join('\n') : ''; };
 L.roots.onStatus(st => { paintRoots(st); if (st.problems.length) toast(`Library root not reachable: ${st.problems.map(p => p.label).join(', ')}`, true); else toast('All library roots are reachable again'); if (currentView === 'settings') route(); });
 L.roots.last().then(paintRoots).catch(() => {});
@@ -1101,8 +1115,44 @@ views.system = async () => {
   sysTimer = setInterval(() => { if (currentView === 'system') views.system(); else clearInterval(sysTimer); }, s.sampleMs);
 };
 
+// ---- Issues: problems and duplicates on one page ------------------------------------
+views.issues = async (which = 'problems') => {
+  if (which === 'duplicates') await views.duplicates(); else await views.problems();
+  const bar = el(`<div class="toolbar" style="margin:-6px 0 12px"><button class="${which === 'problems' ? 'primary' : ''}" id="issTabP">Problems</button><button class="${which === 'duplicates' ? 'primary' : ''}" id="issTabD">Duplicates</button><span class="muted tiny">Problems: names, probe errors, missing files, fixes. Duplicates: episodes that exist as several files.</span></div>`);
+  const h1 = view.querySelector('h1'); h1.textContent = 'Issues'; h1.after(bar);
+  $('#issTabP').onclick = () => { location.hash = '#issues/problems'; };
+  $('#issTabD').onclick = () => { location.hash = '#issues/duplicates'; };
+  document.querySelectorAll('.sidebar a').forEach(a => a.classList.toggle('active', a.dataset.view === 'issues'));
+};
+
+// ---- Requests: ask for media to be added ---------------------------------------------
+views.requests = async () => {
+  const list = await L.requests.list();
+  const isAdmin = me.role === 'admin';
+  const KIND = { movie: 'Movie', tv: 'TV show', anime: 'Anime', other: 'Other' };
+  const STATUS = { pending: ['warn', 'Pending'], approved: ['', 'Approved'], added: ['ok', 'Added'], rejected: ['bad', 'Declined'] };
+  const pending = list.filter(r => r.status === 'pending').length;
+  view.innerHTML = `<h1>Media requests</h1>
+    <p class="lead">Ask for a movie or show to be added to the library. ${isAdmin ? 'You are an admin: set a status and leave a note on each request.' : 'The admin sees new requests and marks them approved, added or declined.'}</p>
+    <div class="tiles compact">${tile(pending ? 'warnt' : 'okt', 'Pending', pending)}${tile('', 'Added', list.filter(r => r.status === 'added').length)}${tile('', 'All requests', list.length)}</div>
+    <div class="card" style="margin-top:12px"><h3>New request</h3>
+      <div class="inline"><input type="text" id="rqTitle" placeholder="Title" style="flex:2;min-width:180px"><input type="number" id="rqYear" placeholder="Year" style="width:90px"><select id="rqKind">${Object.entries(KIND).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>${me.guest ? '<input type="text" id="rqBy" placeholder="Your name" style="width:140px">' : ''}</div>
+      <div class="inline" style="margin-top:8px"><input type="text" id="rqNote" placeholder="Anything that helps: which edition, dub or sub, where it streams…" style="flex:1"><button class="primary" id="rqAdd">Request</button></div>
+    </div>
+    <div class="card" style="margin-top:12px"><table><thead><tr><th>Title</th><th>Kind</th><th>Requested by</th><th>When</th><th>Status</th><th>Note</th>${isAdmin ? '<th></th>' : ''}</tr></thead><tbody>
+      ${list.map(r => `<tr><td><b>${esc(r.title)}</b>${r.year ? ` <span class="muted">(${r.year})</span>` : ''}${r.note ? `<div class="muted tiny wrap">${esc(r.note)}</div>` : ''}</td><td>${KIND[r.kind] || r.kind}</td><td>${esc(r.requested_by || '')}</td><td class="muted">${fmtDate(r.created)}</td><td><span class="badge ${STATUS[r.status][0]}">${STATUS[r.status][1]}</span></td><td class="muted tiny wrap">${esc(r.admin_note || '')}</td>${isAdmin ? `<td class="nowrap"><select class="small rqStatus" data-id="${r.id}">${Object.keys(STATUS).map(s => `<option value="${s}" ${s === r.status ? 'selected' : ''}>${STATUS[s][1]}</option>`).join('')}</select> <button class="small rqNote" data-id="${r.id}" title="Admin note">✎</button> <button class="small rqDel" data-id="${r.id}">✕</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="7" class="muted">No requests yet.</td></tr>`}
+    </tbody></table></div>`;
+  $('#rqAdd').onclick = async () => {
+    try { await L.requests.add({ title: $('#rqTitle').value, year: $('#rqYear').value, kind: $('#rqKind').value, note: $('#rqNote').value, requested_by: $('#rqBy') ? $('#rqBy').value : undefined }); toast('Request filed'); views.requests(); refreshBadges(); } catch (e) { toast(e.message, true); }
+  };
+  document.querySelectorAll('.rqStatus').forEach(sel => { sel.onchange = async () => { await L.requests.update(sel.dataset.id, { status: sel.value }); views.requests(); refreshBadges(); }; });
+  document.querySelectorAll('.rqNote').forEach(b => { b.onclick = async () => { const cur = list.find(r => String(r.id) === b.dataset.id); const n = prompt('Note for the requester', cur.admin_note || ''); if (n !== null) { await L.requests.update(b.dataset.id, { admin_note: n }); views.requests(); } }; });
+  document.querySelectorAll('.rqDel').forEach(b => { b.onclick = async () => { if (confirm('Delete this request?')) { await L.requests.delete(b.dataset.id); views.requests(); refreshBadges(); } }; });
+};
+
 // ---- Security: web-server access controls -------------------------------------------
 views.security = async () => {
+  if (me.role !== 'admin' && L.isWeb) { view.innerHTML = '<h1>Security</h1><div class="card"><p>Only admins manage security. You can change your own password here.</p><div class="field"><label>Current</label><input type="password" id="pwCur"></div><div class="field"><label>New (8+ chars)</label><input type="password" id="pwNew"></div><div class="inline"><button class="primary" id="pwChange">Change password</button></div></div>'; $('#pwChange').onclick = async () => { try { await L.security.changePassword($('#pwCur').value, $('#pwNew').value); toast('Password changed'); } catch (e) { toast(e.message, true); } }; return; }
   const st = await L.security.status();
   const pill = $('#secPill');
   if (!st.available) {
@@ -1127,14 +1177,19 @@ views.security = async () => {
         <h3 style="margin-top:16px">Options</h3>
         <div class="field"><label>LAN only</label><input type="checkbox" id="optLan" ${st.lanOnly ? 'checked' : ''}><div class="hint">Refuse connections from outside private address ranges. Leave on unless you know why.</div></div>
         <div class="field"><label>Idle sign-out</label><div class="inline"><input type="number" id="optIdle" min="0" max="10080" value="${st.idleMinutes}" style="width:90px"> <span class="muted">minutes (0 = off)</span></div></div>
+        <div class="field"><label>Guest access</label><input type="checkbox" id="optGuest" ${st.guestEnabled ? 'checked' : ''}><div class="hint">Anyone on the LAN can open the page without signing in and see library statistics and lists, and file media requests. Guests never see adult content, issues, settings or any control.</div></div>
         <div class="inline"><button id="optSave">Save options</button></div>
+        <h3 style="margin-top:16px">Users</h3>
+        <table><thead><tr><th>User</th><th>Role</th><th>Last sign-in</th><th>Sessions</th><th></th></tr></thead><tbody>${st.users.map(u => `<tr><td><b>${esc(u.username)}</b>${st.me && u.username === st.me.username ? ' <span class="badge ok">you</span>' : ''}</td><td><select class="small uRole" data-u="${esc(u.username)}"><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option><option value="standard" ${u.role === 'standard' ? 'selected' : ''}>standard</option></select></td><td class="muted">${u.lastLogin ? ago(u.lastLogin) : 'never'}</td><td>${u.sessions}</td><td class="nowrap"><button class="small uReset" data-u="${esc(u.username)}">Reset password</button> <button class="small uDel" data-u="${esc(u.username)}">✕</button></td></tr>`).join('')}</tbody></table>
+        <div class="inline" style="margin-top:8px"><input type="text" id="nuName" placeholder="username" style="width:130px" autocomplete="off"><input type="password" id="nuPw" placeholder="password (8+)" style="width:150px" autocomplete="new-password"><select id="nuRole"><option value="standard">standard</option><option value="admin">admin</option></select><button class="primary" id="nuAdd">Add user</button></div>
+        <p class="muted tiny" style="margin:6px 0 0"><b>admin</b>: everything. <b>standard</b>: sees every library and review page, can rate titles, file requests and show adult content for their own session; no settings, system, security, scans, fixes or renames.</p>
       </div>
       <div class="card"><h3>Two-factor codes ${st.totpEnabled ? '<span class="right ok">on</span>' : '<span class="right muted">off</span>'}</h3>
         ${st.totpEnabled
           ? `<p>Sign-in requires your password and a 6-digit code from your authenticator app.</p><div class="field"><label>Password</label><input type="password" id="totpPw"></div><div class="inline"><button class="danger" id="totpOff">Turn off 2FA</button></div>`
           : `<p class="muted">Adds a code from Google Authenticator, Aegis, Bitwarden, 1Password or any TOTP app. Even a leaked password then cannot sign in.</p><div id="totpBox"><button class="primary" id="totpStart">Set up 2FA</button></div>`}
         <h3 style="margin-top:16px">Sessions</h3>
-        <table><thead><tr><th>Where</th><th>Browser</th><th>Last seen</th><th></th></tr></thead><tbody>${st.sessions.map(s => `<tr><td>${esc(s.ip || '')}${s.current ? ' <span class="badge ok">this</span>' : ''}</td><td class="muted tiny" title="${esc(s.ua)}">${esc((s.ua || '').replace(/^Mozilla\/5\.0 /, '').slice(0, 48))}</td><td>${ago(s.lastSeen)}</td><td>${s.current ? '' : `<button class="small revoke" data-id="${s.id}">Sign out</button>`}</td></tr>`).join('')}</tbody></table>
+        <table><thead><tr><th>User</th><th>Where</th><th>Browser</th><th>Last seen</th><th></th></tr></thead><tbody>${st.sessions.map(s => `<tr><td>${esc(s.user || '')} <span class="muted tiny">${esc(s.role || '')}</span></td><td>${esc(s.ip || '')}${s.current ? ' <span class="badge ok">this</span>' : ''}</td><td class="muted tiny" title="${esc(s.ua)}">${esc((s.ua || '').replace(/^Mozilla\/5\.0 /, '').slice(0, 48))}</td><td>${ago(s.lastSeen)}</td><td>${s.current ? '' : `<button class="small revoke" data-id="${s.id}">Sign out</button>`}</td></tr>`).join('')}</tbody></table>
         <div class="inline" style="margin-top:8px"><button id="revokeOthers" ${st.sessions.length > 1 ? '' : 'disabled'}>Sign out other sessions</button><button id="logoutBtn">Sign out here</button></div>
         ${st.banned.length ? `<p class="muted tiny" style="margin-top:8px">Locked out: ${st.banned.map(b => `${esc(b.ip)} until ${new Date(b.until).toLocaleTimeString()}`).join(', ')}</p>` : ''}
       </div>
@@ -1144,7 +1199,11 @@ views.security = async () => {
     <p class="muted tiny">Lockout after ${st.limits.lockFails} failures in ${st.limits.lockMinutes} min · sensitive actions ask for the password again after ${st.limits.reauthMinutes} min · sessions last ${st.limits.sessionDays} days · full log in ${esc(st.dataDir)}/security.log</p></div>`;
   const act = async (fn, okMsg) => { try { await fn(); if (okMsg) toast(okMsg); views.security(); } catch (e) { toast(e.message, true); } };
   $('#pwChange').onclick = () => { if ($('#pwNew').value !== $('#pwNew2').value) return toast('New passwords differ', true); act(() => L.security.changePassword($('#pwCur').value, $('#pwNew').value), 'Password changed'); };
-  $('#optSave').onclick = () => act(() => L.security.setOptions({ lanOnly: $('#optLan').checked, idleMinutes: Number($('#optIdle').value) }), 'Options saved');
+  $('#optSave').onclick = () => act(() => L.security.setOptions({ lanOnly: $('#optLan').checked, idleMinutes: Number($('#optIdle').value), guestEnabled: $('#optGuest').checked }), 'Options saved');
+  $('#nuAdd').onclick = () => act(() => L.security.addUser($('#nuName').value, $('#nuPw').value, $('#nuRole').value), 'User added');
+  document.querySelectorAll('.uRole').forEach(s => { s.onchange = () => act(() => L.security.setRole(s.dataset.u, s.value), 'Role changed'); });
+  document.querySelectorAll('.uReset').forEach(b => { b.onclick = () => { const pw = prompt(`New password for ${b.dataset.u} (8+ characters). They will be signed out everywhere.`); if (pw) act(() => L.security.resetPassword(b.dataset.u, pw), 'Password reset'); }; });
+  document.querySelectorAll('.uDel').forEach(b => { b.onclick = () => { if (confirm(`Delete user ${b.dataset.u}?`)) act(() => L.security.deleteUser(b.dataset.u), 'User deleted'); }; });
   $('#revokeOthers').onclick = () => act(() => L.security.revokeOthers(), 'Other sessions signed out');
   $('#logoutBtn').onclick = () => L.logout();
   document.querySelectorAll('.revoke').forEach(b => { b.onclick = () => act(() => L.security.revoke(b.dataset.id), 'Session signed out'); });
@@ -1230,7 +1289,9 @@ views.about = async () => {
 let currentView = 'dashboard';
 async function route() {
   const hash = location.hash.slice(1) || 'dashboard';
-  const [name, arg] = hash.split('/');
+  let [name, arg] = hash.split('/');
+  if (name === 'problems') { name = 'issues'; arg = arg || 'problems'; }
+  if (name === 'duplicates') { name = 'issues'; arg = 'duplicates'; }
   currentView = name;
   document.querySelectorAll('.sidebar a').forEach(a => a.classList.toggle('active', a.dataset.view === name));
   view.innerHTML = '<div class="empty">Loading…</div>';
@@ -1238,6 +1299,7 @@ async function route() {
     if ((name === 'tv' || name === 'anime') && arg) await episodesView(name, decodeURIComponent(arg));
     else if (name === 'movies' && arg) await movieFilesView(decodeURIComponent(arg));
     else if (name === 'web' && arg) await webVideosView(decodeURIComponent(arg));
+    else if (name === 'issues') await views.issues(arg);
     else if (views[name]) await views[name]();
     else await views.dashboard();
   } catch (e) { view.innerHTML = `<div class="empty">Error: ${esc(e.message)}</div>`; }
@@ -1249,6 +1311,7 @@ $('#navToggle').onclick = () => document.body.classList.toggle('nav-open');
 $('#navShade').onclick = closeNav;
 document.querySelectorAll('.sidebar a').forEach(a => a.addEventListener('click', closeNav));
 $('#topScan').onclick = () => $('#btnScan').hidden ? $('#btnCancel').click() : $('#btnScan').click();
+loadMe().then(() => { if (currentView) route(); });
 L.appInfo().then(async i => {
   $('#versionLine').textContent = `v${i.version}${i.packaged ? '' : ' (dev)'}`;
   updateState = i.updateStatus || updateState; paintUpdatePill();

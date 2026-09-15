@@ -42,14 +42,15 @@
   function askLogin(needCode) {
     if (loginPromise) return loginPromise;
     const fields = [
+      { label: 'Username', name: 'username', type: 'text', autocomplete: 'username' },
       { label: 'Password', name: 'password', type: 'password', autocomplete: 'current-password' },
       { label: 'Authenticator code', name: 'code', type: 'text', inputmode: 'numeric', autocomplete: 'one-time-code', placeholder: needCode ? '6 digits, required' : 'only if 2FA is on' },
     ];
-    loginPromise = dialog({ title: 'MediaLedger', text: 'Enter the password set on the server.', fields, button: 'Sign in' });
+    loginPromise = dialog({ title: 'MediaLedger', text: 'Sign in with your MediaLedger account.', fields, button: 'Sign in' });
     dialog.current.attempt(async (v) => {
       if (!v.code) delete v.code;
       const r = await fetch('api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(v) });
-      if (r.ok) return null;
+      if (r.ok) { location.reload(); return null; } // roles change what the page shows: start clean
       let b = {}; try { b = await r.json(); } catch { /* ignore */ }
       return b.error || 'Sign-in failed';
     });
@@ -78,6 +79,9 @@
         if (body.reason === 'reauth') { await askReauth(); continue; }
         await askLogin(body.reason === 'totp'); continue;
       }
+      if (r.status === 403) {
+        throw new Error(body.error || 'Not allowed for your account');
+      }
       if (!body.ok) throw new Error(body.error || `Server error ${r.status}`);
       if (listeners.size) ensureEvents(); // open the event stream only once a call has proven the session
       return body.result;
@@ -104,4 +108,5 @@
   window.ledger = build(window.LEDGER_SHAPE);
   window.ledger.isWeb = true;
   window.ledger.logout = async () => { await fetch('api/logout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); location.reload(); };
+  window.ledger.signIn = () => askLogin(false);
 })();

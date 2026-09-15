@@ -342,6 +342,19 @@ function createService({ userData, log, send, host }) {
   const adultCount = () => db.get('SELECT COUNT(*) n FROM files WHERE adult=1 AND missing=0 AND ignored=0').n;
   h('adult:status', () => ({ showAdult, count: adultCount(), rootConfigured: (settings.get().roots || []).some(r => r.type === 'adult' && r.enabled) }));
   h('adult:toggle', (on) => { showAdult = !!on; return { showAdult, count: adultCount() }; });
+
+  // ---- media requests (anyone may file one; the web shell fills requested_by from the account) ----
+  const KINDS = ['movie', 'tv', 'anime', 'other'];
+  h('requests:list', () => db.listRequests());
+  h('requests:add', (r) => {
+    const title = String((r || {}).title || '').trim().slice(0, 200);
+    if (title.length < 2) throw new Error('Give the title');
+    const kind = KINDS.includes((r || {}).kind) ? r.kind : 'other';
+    const year = Number((r || {}).year) >= 1880 && Number((r || {}).year) <= 2100 ? Number(r.year) : null;
+    return db.addRequest({ title, kind, year, note: String((r || {}).note || '').trim().slice(0, 1000) || null, requested_by: String((r || {}).requested_by || 'desktop').slice(0, 60) });
+  });
+  h('requests:update', (id, patch) => { const st = (patch || {}).status; if (st && !['pending', 'approved', 'added', 'rejected'].includes(st)) throw new Error('Bad status'); return db.updateRequest(Number(id), { status: st, admin_note: (patch || {}).admin_note !== undefined ? String(patch.admin_note || '').slice(0, 1000) : undefined }); });
+  h('requests:delete', (id) => db.deleteRequest(Number(id)));
   h('adult:dashboard', () => ({
     byType: db.all(`SELECT library_type, COUNT(*) files, SUM(size) bytes, SUM(duration_s) seconds, SUM(CASE WHEN probe_ok=1 THEN 1 ELSE 0 END) probed, SUM(CASE WHEN has_captions=1 THEN 1 ELSE 0 END) captioned, SUM(CASE WHEN parse_ok=0 THEN 1 ELSE 0 END) unparsed FROM files WHERE adult=1 AND missing=0 AND ignored=0 GROUP BY library_type`),
     series: db.all(`SELECT library_type, show_name, COUNT(*) episodes, COUNT(DISTINCT season) seasons, SUM(size) bytes, SUM(duration_s) seconds, GROUP_CONCAT(DISTINCT resolution) resolutions, SUM(CASE WHEN has_captions=1 THEN 1 ELSE 0 END) captioned, SUM(CASE WHEN parse_ok=0 THEN 1 ELSE 0 END) unparsed FROM files WHERE adult=1 AND missing=0 AND ignored=0 AND library_type IN ('tv','anime') GROUP BY library_type, show_name ORDER BY show_name COLLATE NOCASE`),
@@ -473,7 +486,7 @@ function createService({ userData, log, send, host }) {
   h('data:purgeMissing', () => db.run('DELETE FROM files WHERE missing=1').changes);
 
   return {
-    init, shutdown, handlers, runScan, refreshMetadata, runPlexSync, exportDir, ffprobePath,
+    init, shutdown, handlers, runScan, refreshMetadata, runPlexSync, exportDir, ffprobePath, setShowAdult: (v) => { showAdult = !!v; },
     get settings() { return settings; }, get db() { return db; }, get scanner() { return scanner; },
     get scheduler() { return scheduler; }, get watcher() { return watcher; }, get metaJob() { return metaJob; },
   };

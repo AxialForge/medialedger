@@ -94,7 +94,7 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 | `src/renderer/bridge-shape.js` | The one description of the `window.ledger` tree (leaf = channel, `!` prefix = event). Both bridges build from it; `test/service.test.js` checks it against the handlers |
 | `src/renderer/webbridge.js` | Browser bridge: same tree over `POST /api/<channel>` + `EventSource /api/events`; shows the login form on 401. No-op inside Electron |
 | `src/server/server.js` | Web shell (Pi): node:http(s), static renderer, SSE broadcast as `send`, web versions of the Electron-only handlers plus `security:*`; `SENSITIVE` set = channels that need password re-entry (`isSensitive` inspects `movie:run`'s `live` flag) |
-| `src/server/security.js` | Password (scrypt), sessions, lockout, LAN-only guard, TOTP, re-auth, audit log; state in `<data>/web.json` (0600), events in `security.log`. Pure Node, tested in `test/security.test.js` |
+| `src/server/security.js` | User accounts (`users{name:{hash,role}}`, roles admin/standard), sessions with per-session flags (`showAdult`), lockout, LAN-only guard, guest mode, TOTP for admins, re-auth, audit log; state in `<data>/web.json` (0600). `server.js` holds the `GUEST` / `STANDARD` channel allowlists and `redactSettings`. Tested in `test/security.test.js` |
 | `src/server/totp.js` | RFC 6238 TOTP + base32, tested against the RFC vectors |
 | `src/main/sysmon.js` | Host health sampler (15 s ring buffer, one hour): CPU, memory, disks via `fs.statfsSync`, `/proc/net/dev`, Pi thermal/`vcgencmd`. `healthOf()` holds the thresholds |
 | `tools/pack-server.js` | Builds `dist/medialedger-server*.tar.gz` + `.sha256`; CI attaches them to the release; the installer downloads them |
@@ -206,6 +206,7 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   look at `dashboard.png` before every tag.** Web-only testing is not enough.
 - **GNU tar on Windows treats `C:` as a remote host.** `tar -czf C:\path\out.tgz` fails with "Cannot connect to C". `pack-server.js` runs tar with `cwd` set and a relative output name, then copies the file.
 - **RFC 6238 test vectors are 8 digits.** The 6-digit code is the last six: T=59 → 287082, T=1111111109 → 081804, T=2000000000 → 279037 (not 005924, which is T=1234567890).
+- **Adult visibility is per session on the web, one flag in the core.** `server.js` calls `svc.setShowAdult(session.showAdult)` before every handler; handlers are effectively synchronous DB reads so the flag cannot leak between callers, but a new long-running handler that reads `AF()` after an `await` would need its own copy.
 - **Security handlers take a context first.** `server.js` calls `security:*` as `fn({ session, ip }, ...args)`; every other handler gets the renderer's arguments only. The desktop shell answers `security:status` with `{ available: false }` so the tab explains itself there.
 - **`node:sqlite` prints an ExperimentalWarning** on start. Harmless in the desktop app; the Pi service sets `NODE_OPTIONS=--disable-warning=ExperimentalWarning` because it printed over the password prompt.
 - **npm blocked Electron's postinstall** (`allow-scripts`) on first install;

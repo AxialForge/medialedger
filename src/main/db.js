@@ -262,6 +262,23 @@ const MIGRATIONS = [
       );
     `,
   },
+  {
+    version: 6, name: 'media requests',
+    sql: `
+      CREATE TABLE IF NOT EXISTS requests (
+        id            INTEGER PRIMARY KEY,
+        created       TEXT NOT NULL,
+        title         TEXT NOT NULL,
+        kind          TEXT NOT NULL,
+        year          INTEGER,
+        note          TEXT,
+        requested_by  TEXT,
+        status        TEXT NOT NULL DEFAULT 'pending',
+        admin_note    TEXT,
+        updated       TEXT
+      );
+    `,
+  },
 ];
 
 class Db {
@@ -428,6 +445,11 @@ class Db {
   recentChanges(limit = 200) { return this.all('SELECT c.*, s.started AS scan_started FROM changes c JOIN scans s ON s.id = c.scan_id ORDER BY c.id DESC LIMIT ?', limit); }
   addExport(rec) { this.run('INSERT INTO exports (ts, scan_id, dir, files, rows, trigger) VALUES (?,?,?,?,?,?)', new Date().toISOString(), rec.scan_id ?? null, rec.dir, JSON.stringify(rec.files), rec.rows ?? null, rec.trigger || 'manual'); }
   listExports(limit = 50) { return this.all('SELECT * FROM exports ORDER BY id DESC LIMIT ?', limit); }
+  // ---- media requests ----
+  listRequests(limit = 500) { return this.all('SELECT * FROM requests ORDER BY CASE status WHEN \'pending\' THEN 0 WHEN \'approved\' THEN 1 ELSE 2 END, id DESC LIMIT ?', limit); }
+  addRequest(r) { const now = new Date().toISOString(); const info = this.run('INSERT INTO requests (created, title, kind, year, note, requested_by, status, updated) VALUES (?,?,?,?,?,?,?,?)', now, r.title, r.kind, r.year ?? null, r.note || null, r.requested_by || null, 'pending', now); return this.get('SELECT * FROM requests WHERE id=?', info.lastInsertRowid); }
+  updateRequest(id, patch) { const cur = this.get('SELECT * FROM requests WHERE id=?', id); if (!cur) return null; this.run('UPDATE requests SET status=?, admin_note=?, updated=? WHERE id=?', patch.status || cur.status, patch.admin_note !== undefined ? patch.admin_note : cur.admin_note, new Date().toISOString(), id); return this.get('SELECT * FROM requests WHERE id=?', id); }
+  deleteRequest(id) { return this.run('DELETE FROM requests WHERE id=?', id).changes; }
 }
 
 module.exports = { Db, MIGRATIONS };

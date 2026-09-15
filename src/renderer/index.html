@@ -27,10 +27,10 @@
       <a href="#adult" data-view="adult" id="navAdult" hidden><i>◈</i>Adult <span class="pill" id="adultCount" hidden></span></a>
       <div class="navgroup">Review</div>
       <a href="#missing" data-view="missing"><i>◌</i>Missing <span class="pill" id="missingCount" hidden></span></a>
-      <a href="#duplicates" data-view="duplicates"><i>⧉</i>Duplicates <span class="pill" id="dupCount" hidden></span></a>
+      <a href="#issues" data-view="issues"><i>⚠</i>Issues <span class="pill" id="problemCount" hidden></span><span class="pill" id="dupCount" hidden style="margin-left:4px"></span></a>
       <a href="#quality" data-view="quality"><i>◔</i>Quality</a>
       <a href="#ratings" data-view="ratings"><i>★</i>Ratings</a>
-      <a href="#problems" data-view="problems"><i>⚠</i>Problems <span class="pill" id="problemCount" hidden></span></a>
+      <a href="#requests" data-view="requests"><i>✚</i>Requests <span class="pill" id="reqCount" hidden></span></a>
       <div class="navgroup">Maintenance</div>
       <a href="#changes" data-view="changes"><i>↹</i>Change log</a>
       <a href="#movienames" data-view="movienames"><i>▦</i>Movie names <span class="pill" id="movieNameCount" hidden></span></a>
@@ -42,6 +42,7 @@
       <a href="#settings" data-view="settings"><i>⚙</i>Settings <span class="pill bad" id="rootsPill" hidden title="a library root is not reachable"></span></a>
       <a href="#about" data-view="about"><i>ⓘ</i>About <span class="pill accent" id="updatePill" hidden></span></a>
       <div class="spacer"></div>
+      <div class="tiny muted" id="accountLine" hidden style="padding:6px 10px"></div>
       <label class="inline tiny muted adultswitch" id="adultSwitch" hidden><input type="checkbox" id="showAdult"> Show adult content</label>
       <div class="scanbox">
         <button id="btnScan" class="primary wide">Scan now</button>

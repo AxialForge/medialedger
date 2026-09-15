@@ -1,6 +1,15 @@
 'use strict';
-// Security for the web shell: password, sessions, lockout, LAN-only guard,
-// two-factor codes, re-authentication for dangerous actions, and an audit log.
+// Security for the web shell: user accounts with roles, sessions, lockout,
+// LAN-only guard, two-factor codes for admins, re-authentication for dangerous
+// actions, an optional no-login guest mode, and an audit log.
+//
+// Roles
+//   admin     everything: scans, fixes, renames, settings, security, users
+//   standard  sees every library and review page, may toggle adult visibility
+//             for their own session, rate titles and file media requests;
+//             no settings, security, system, scans, fixes or renames
+//   guest     (no account, no sign-in, only when "guest access" is on)
+//             library statistics and lists, media requests; never adult content
 //
 // State lives in <data>/web.json (mode 0600), deliberately apart from
 // settings.json which the UI can replace wholesale. Events append to
@@ -18,6 +27,8 @@ const LOCK_FAILS = 8;         // failures per IP …
 const LOCK_WINDOW_MS = 15 * 60000; // … within this window …
 const LOCK_MS = 15 * 60000;   // … ban the IP for this long
 const MIN_PASSWORD = 8;
+const ROLES = ['admin', 'standard'];
+const USERNAME_RE = /^[a-z0-9][a-z0-9._-]{1,31}$/;
 
 /** Private / local address? Loopback, RFC 1918, link-local, CGNAT, IPv6 ULA + link-local. */
 function isPrivateIp(ip) {
@@ -35,23 +46,32 @@ function isPrivateIp(ip) {
 
 const hashPassword = (pw, salt = crypto.randomBytes(16).toString('hex')) => salt + ':' + crypto.scryptSync(pw, salt, 32).toString('hex');
 const checkHash = (pw, stored) => { if (!stored) return false; const [salt, hex] = stored.split(':'); const a = Buffer.from(hex, 'hex'), b = crypto.scryptSync(pw, salt, 32); return a.length === b.length && crypto.timingSafeEqual(a, b); };
+const normUser = (u) => String(u || '').trim().toLowerCase();
 
 function createSecurity({ dataDir, log = () => {} }) {
   const webFile = path.join(dataDir, 'web.json');
   const auditFile = path.join(dataDir, 'security.log');
-  const DEFAULTS = { passwordHash: null, lanOnly: true, idleMinutes: 0, totp: { enabled: false, secret: null, pending: null }, sessions: {} };
+  const DEFAULTS = { users: {}, guestEnabled: false, lanOnly: true, idleMinutes: 0, totp: { enabled: false, secret: null, pending: null }, sessions: {} };
   let state = { ...DEFAULTS };
-  try { state = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(webFile, 'utf8')) }; state.totp = { ...DEFAULTS.totp, ...(state.totp || {}) }; state.sessions = state.sessions || {}; for (const [k, v] of Object.entries(state.sessions)) if (!v || !v.lastSeen) delete state.sessions[k]; /* pre-0.8 sessions lack lastSeen */ } catch { /* first run */ }
+  try {
+    state = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(webFile, 'utf8')) };
+    state.totp = { ...DEFAULTS.totp, ...(state.totp || {}) }; state.sessions = state.sessions || {}; state.users = state.users || {};
+    for (const [k, v] of Object.entries(state.sessions)) if (!v || !v.lastSeen || !v.user) delete state.sessions[k]; // pre-1.1 sessions have no user
+  } catch { /* first run */ }
+  // 1.0 → 1.1: the single password becomes the "admin" account.
+  if (state.passwordHash && !Object.keys(state.users).length) { state.users.admin = { hash: state.passwordHash, role: 'admin', created: Date.now() }; }
+  delete state.passwordHash;
   const save = () => { fs.writeFileSync(webFile, JSON.stringify(state, null, 2), { mode: 0o600 }); try { fs.chmodSync(webFile, 0o600); } catch { /* windows */ } };
+  if (Object.keys(state.users).length || fs.existsSync(webFile)) save();
 
   // ---- audit ----
   const recent = [];
   try { for (const l of fs.readFileSync(auditFile, 'utf8').trim().split('\n').slice(-300)) { try { recent.push(JSON.parse(l)); } catch { /* skip */ } } } catch { /* none yet */ }
-  function audit(event, ip, detail = '') {
-    const e = { ts: new Date().toISOString(), event, ip: ip || null, detail };
+  function audit(event, ip, detail = '', user = null) {
+    const e = { ts: new Date().toISOString(), event, ip: ip || null, user: user || null, detail };
     recent.push(e); if (recent.length > 300) recent.shift();
     try { fs.appendFileSync(auditFile, JSON.stringify(e) + '\n', { mode: 0o600 }); } catch { /* ignore */ }
-    log(`security: ${event} ${ip || ''} ${detail}`.trim());
+    log(`security: ${event} ${user ? user + '@' : ''}${ip || ''} ${detail}`.trim());
   }
 
   // ---- lockout ----
@@ -60,12 +80,45 @@ function createSecurity({ dataDir, log = () => {} }) {
   const failed = (ip) => { const now = Date.now(); const l = (fails.get(ip) || []).filter(t => now - t < LOCK_WINDOW_MS); l.push(now); fails.set(ip, l); if (l.length >= LOCK_FAILS) { bans.set(ip, now + LOCK_MS); fails.delete(ip); audit('ip_locked', ip, `${LOCK_FAILS} failures in ${LOCK_WINDOW_MS / 60000} min`); } };
   const isBanned = (ip) => { const u = bans.get(ip); if (u && u > Date.now()) return true; if (u) bans.delete(ip); return false; };
 
+  // ---- users ----
+  const userOf = (name) => state.users[normUser(name)] || null;
+  const adminCount = () => Object.values(state.users).filter(u => u.role === 'admin').length;
+  function listUsers() { return Object.entries(state.users).map(([name, u]) => ({ username: name, role: u.role, created: u.created, lastLogin: u.lastLogin || null, sessions: Object.values(state.sessions).filter(s => s.user === name).length })).sort((a, b) => a.username.localeCompare(b.username)); }
+  function addUser(name, password, role, ip, by) {
+    const u = normUser(name);
+    if (!USERNAME_RE.test(u)) throw new Error('Username: 2–32 characters, letters, digits, dot, dash or underscore');
+    if (state.users[u]) throw new Error('That username already exists');
+    if (!ROLES.includes(role)) throw new Error('Role must be admin or standard');
+    if (!password || password.length < MIN_PASSWORD) throw new Error(`Password must be at least ${MIN_PASSWORD} characters`);
+    state.users[u] = { hash: hashPassword(password), role, created: Date.now() }; save(); audit('user_added', ip, `${u} (${role})`, by); return true;
+  }
+  function setRole(name, role, ip, by) {
+    const u = normUser(name); if (!state.users[u]) throw new Error('No such user');
+    if (!ROLES.includes(role)) throw new Error('Role must be admin or standard');
+    if (state.users[u].role === 'admin' && role !== 'admin' && adminCount() === 1) throw new Error('That is the last admin');
+    state.users[u].role = role; for (const s of Object.values(state.sessions)) if (s.user === u) s.role = role; save(); audit('role_changed', ip, `${u} → ${role}`, by); return true;
+  }
+  function resetPassword(name, password, ip, by) {
+    const u = normUser(name); if (!state.users[u]) throw new Error('No such user');
+    if (!password || password.length < MIN_PASSWORD) throw new Error(`Password must be at least ${MIN_PASSWORD} characters`);
+    state.users[u].hash = hashPassword(password); for (const k of Object.keys(state.sessions)) if (state.sessions[k].user === u) delete state.sessions[k]; save(); audit('password_reset', ip, u, by); return true;
+  }
+  function deleteUser(name, ip, by) {
+    const u = normUser(name); if (!state.users[u]) throw new Error('No such user');
+    if (state.users[u].role === 'admin' && adminCount() === 1) throw new Error('That is the last admin');
+    delete state.users[u]; for (const k of Object.keys(state.sessions)) if (state.sessions[k].user === u) delete state.sessions[k]; save(); audit('user_deleted', ip, u, by); return true;
+  }
+  /** CLI / installer: create or reset the "admin" account. */
+  function setPassword(pw) { if (!pw || pw.length < MIN_PASSWORD) throw new Error(`Password must be at least ${MIN_PASSWORD} characters`); state.users.admin = { ...(state.users.admin || { created: Date.now() }), hash: hashPassword(pw), role: 'admin' }; state.sessions = {}; save(); }
+  const hasUsers = () => Object.keys(state.users).length > 0;
+
   // ---- sessions ----
   const prune = () => { const now = Date.now(); for (const [k, s] of Object.entries(state.sessions)) if (s.expires < now || (state.idleMinutes && s.lastSeen && now - s.lastSeen > state.idleMinutes * 60000)) delete state.sessions[k]; };
-  function newSession(ip, ua) {
+  function newSession(user, ip, ua) {
     prune();
     const id = crypto.randomBytes(32).toString('hex');
-    state.sessions[id] = { created: Date.now(), expires: Date.now() + SESSION_DAYS * 86400000, lastSeen: Date.now(), ip, ua: String(ua || '').slice(0, 160), reauthAt: Date.now() };
+    state.sessions[id] = { user, role: state.users[user].role, created: Date.now(), expires: Date.now() + SESSION_DAYS * 86400000, lastSeen: Date.now(), ip, ua: String(ua || '').slice(0, 160), reauthAt: Date.now(), showAdult: false };
+    state.users[user].lastLogin = Date.now();
     save();
     return id;
   }
@@ -77,72 +130,77 @@ function createSecurity({ dataDir, log = () => {} }) {
     const s = state.sessions[m[1]];
     if (!s) return null;
     const now = Date.now();
-    if (s.expires < now || (state.idleMinutes && now - s.lastSeen > state.idleMinutes * 60000)) { delete state.sessions[m[1]]; save(); return null; }
+    if (s.expires < now || (state.idleMinutes && now - s.lastSeen > state.idleMinutes * 60000) || !state.users[s.user]) { delete state.sessions[m[1]]; save(); return null; }
     if (now - s.lastSeen > 60000) { s.lastSeen = now; save(); } // throttle disk writes
-    return { id: m[1], ...s };
+    return { id: m[1], ...s, role: state.users[s.user].role };
   }
+  function setSessionFlag(id, key, value) { if (state.sessions[id]) { state.sessions[id][key] = value; save(); } }
   const shortId = (id) => id.slice(0, 8);
 
   // ---- login ----
-  function login(ip, ua, { password, code }) {
+  function login(ip, ua, { username, password, code }) {
     if (isBanned(ip)) { audit('login_blocked', ip, 'locked out'); return { ok: false, reason: 'locked' }; }
-    if (!state.passwordHash) return { ok: false, reason: 'nopassword' };
-    if (!checkHash(String(password || ''), state.passwordHash)) { failed(ip); audit('login_failed', ip, 'wrong password'); return { ok: false, reason: 'password' }; }
-    if (state.totp.enabled) {
+    if (!hasUsers()) return { ok: false, reason: 'nopassword' };
+    const u = normUser(username); const user = state.users[u];
+    if (!user || !checkHash(String(password || ''), user.hash)) { failed(ip); audit('login_failed', ip, user ? 'wrong password' : 'unknown user', u || null); return { ok: false, reason: 'password' }; }
+    if (state.totp.enabled && user.role === 'admin') {
       if (!code) return { ok: false, reason: 'totp' }; // password right, now ask for the code
-      if (!totp.verify(state.totp.secret, code)) { failed(ip); audit('login_failed', ip, 'wrong 2FA code'); return { ok: false, reason: 'totp_bad' }; }
+      if (!totp.verify(state.totp.secret, code)) { failed(ip); audit('login_failed', ip, 'wrong 2FA code', u); return { ok: false, reason: 'totp_bad' }; }
     }
     fails.delete(ip);
-    const id = newSession(ip, ua);
-    audit('login', ip, state.totp.enabled ? 'password + 2FA' : 'password');
-    return { ok: true, id };
+    const id = newSession(u, ip, ua);
+    audit('login', ip, `${user.role}${state.totp.enabled && user.role === 'admin' ? ' + 2FA' : ''}`, u);
+    return { ok: true, id, role: user.role, username: u };
   }
-  function logout(id, ip) { delete state.sessions[id]; save(); audit('logout', ip); }
+  function logout(s, ip) { delete state.sessions[s.id]; save(); audit('logout', ip, '', s.user); }
 
-  // ---- password ----
-  function setPassword(pw) { if (!pw || pw.length < MIN_PASSWORD) throw new Error(`Password must be at least ${MIN_PASSWORD} characters`); state.passwordHash = hashPassword(pw); state.sessions = {}; save(); }
-  function changePassword(current, next, keepId, ip) {
-    if (!checkHash(String(current || ''), state.passwordHash)) { failed(ip); audit('password_change_failed', ip); throw new Error('Current password is wrong'); }
+  // ---- own password ----
+  function changePassword(s, current, next, ip) {
+    const user = state.users[s.user];
+    if (!checkHash(String(current || ''), user.hash)) { failed(ip); audit('password_change_failed', ip, '', s.user); throw new Error('Current password is wrong'); }
     if (!next || next.length < MIN_PASSWORD) throw new Error(`New password must be at least ${MIN_PASSWORD} characters`);
-    state.passwordHash = hashPassword(next);
-    for (const k of Object.keys(state.sessions)) if (k !== keepId) delete state.sessions[k];
-    save(); audit('password_changed', ip, 'other sessions signed out');
+    user.hash = hashPassword(next);
+    for (const k of Object.keys(state.sessions)) if (k !== s.id && state.sessions[k].user === s.user) delete state.sessions[k];
+    save(); audit('password_changed', ip, 'other sessions of this user signed out', s.user);
   }
 
   // ---- re-authentication for dangerous actions ----
   const needsReauth = (s) => !s.reauthAt || Date.now() - s.reauthAt > REAUTH_MINUTES * 60000;
   function reauth(s, password, ip) {
     if (isBanned(ip)) return false;
-    if (!checkHash(String(password || ''), state.passwordHash)) { failed(ip); audit('reauth_failed', ip); return false; }
-    state.sessions[s.id].reauthAt = Date.now(); save(); audit('reauth', ip); return true;
+    if (!checkHash(String(password || ''), state.users[s.user].hash)) { failed(ip); audit('reauth_failed', ip, '', s.user); return false; }
+    state.sessions[s.id].reauthAt = Date.now(); save(); audit('reauth', ip, '', s.user); return true;
   }
 
-  // ---- two-factor ----
+  // ---- two-factor (admins) ----
   function totpSetup(account) { const secret = totp.newSecret(); state.totp.pending = secret; save(); return { secret, url: totp.otpauthUrl(secret, account) }; }
-  function totpEnable(code, ip) {
+  function totpEnable(code, ip, by) {
     if (!state.totp.pending) throw new Error('Start 2FA setup first');
     if (!totp.verify(state.totp.pending, code)) throw new Error('That code did not match; check the phone clock and try again');
-    state.totp = { enabled: true, secret: state.totp.pending, pending: null }; save(); audit('2fa_enabled', ip); return true;
+    state.totp = { enabled: true, secret: state.totp.pending, pending: null }; save(); audit('2fa_enabled', ip, 'applies to admin sign-ins', by); return true;
   }
-  function totpDisable(password, ip) {
-    if (!checkHash(String(password || ''), state.passwordHash)) { failed(ip); throw new Error('Password is wrong'); }
-    state.totp = { enabled: false, secret: null, pending: null }; save(); audit('2fa_disabled', ip); return true;
+  function totpDisable(s, password, ip) {
+    if (!checkHash(String(password || ''), state.users[s.user].hash)) { failed(ip); throw new Error('Password is wrong'); }
+    state.totp = { enabled: false, secret: null, pending: null }; save(); audit('2fa_disabled', ip, '', s.user); return true;
   }
 
-  // ---- settings ----
-  function setOptions({ lanOnly, idleMinutes }, ip) {
+  // ---- options ----
+  function setOptions({ lanOnly, idleMinutes, guestEnabled }, ip, by) {
     if (typeof lanOnly === 'boolean') state.lanOnly = lanOnly;
+    if (typeof guestEnabled === 'boolean') state.guestEnabled = guestEnabled;
     if (idleMinutes != null) state.idleMinutes = Math.max(0, Math.min(10080, Number(idleMinutes) || 0));
-    save(); audit('options_changed', ip, `lanOnly=${state.lanOnly} idleMinutes=${state.idleMinutes}`);
+    save(); audit('options_changed', ip, `lanOnly=${state.lanOnly} idleMinutes=${state.idleMinutes} guest=${state.guestEnabled}`, by);
   }
   const isAllowedIp = (ip) => !state.lanOnly || isPrivateIp(ip);
 
   // ---- status for the Security tab ----
-  function status(currentId, extra = {}) {
+  function status(current, extra = {}) {
     prune();
     return {
-      passwordSet: !!state.passwordHash, totpEnabled: state.totp.enabled, totpPending: !!state.totp.pending, lanOnly: state.lanOnly, idleMinutes: state.idleMinutes,
-      sessions: Object.entries(state.sessions).map(([id, s]) => ({ id: shortId(id), current: id === currentId, created: s.created, lastSeen: s.lastSeen, expires: s.expires, ip: s.ip, ua: s.ua })).sort((a, b) => b.lastSeen - a.lastSeen),
+      passwordSet: hasUsers(), totpEnabled: state.totp.enabled, totpPending: !!state.totp.pending, lanOnly: state.lanOnly, idleMinutes: state.idleMinutes, guestEnabled: state.guestEnabled,
+      me: current ? { username: current.user, role: current.role } : null,
+      users: listUsers(),
+      sessions: Object.entries(state.sessions).map(([id, s]) => ({ id: shortId(id), current: current && id === current.id, user: s.user, role: s.role, created: s.created, lastSeen: s.lastSeen, expires: s.expires, ip: s.ip, ua: s.ua })).sort((a, b) => b.lastSeen - a.lastSeen),
       events: recent.slice(-100).reverse(),
       banned: [...bans.entries()].filter(([, u]) => u > Date.now()).map(([ip, until]) => ({ ip, until })),
       failedLogins24h: recent.filter(e => e.event === 'login_failed' && Date.now() - Date.parse(e.ts) < 86400000).length,
@@ -150,10 +208,14 @@ function createSecurity({ dataDir, log = () => {} }) {
       ...extra,
     };
   }
-  function revoke(short, currentId, ip) { for (const k of Object.keys(state.sessions)) if (shortId(k) === short && k !== currentId) { delete state.sessions[k]; save(); audit('session_revoked', ip, short); return true; } return false; }
-  function revokeOthers(currentId, ip) { let n = 0; for (const k of Object.keys(state.sessions)) if (k !== currentId) { delete state.sessions[k]; n++; } save(); audit('sessions_revoked', ip, `${n} other session(s)`); return n; }
+  function revoke(short, current, ip) { for (const k of Object.keys(state.sessions)) if (shortId(k) === short && k !== current.id) { delete state.sessions[k]; save(); audit('session_revoked', ip, short, current.user); return true; } return false; }
+  function revokeOthers(current, ip) { let n = 0; for (const k of Object.keys(state.sessions)) if (k !== current.id) { delete state.sessions[k]; n++; } save(); audit('sessions_revoked', ip, `${n} other session(s)`, current.user); return n; }
 
-  return { get state() { return state; }, audit, isBanned, isAllowedIp, login, logout, sessionOf, cookieFor, clearCookie, setPassword, changePassword, needsReauth, reauth, totpSetup, totpEnable, totpDisable, setOptions, status, revoke, revokeOthers, hasPassword: () => !!state.passwordHash };
+  return {
+    get state() { return state; }, audit, isBanned, isAllowedIp, login, logout, sessionOf, setSessionFlag, cookieFor, clearCookie,
+    setPassword, hasPassword: hasUsers, changePassword, needsReauth, reauth, totpSetup, totpEnable, totpDisable, setOptions, status, revoke, revokeOthers,
+    listUsers, addUser, setRole, resetPassword, deleteUser, userOf, guestEnabled: () => state.guestEnabled,
+  };
 }
 
-module.exports = { createSecurity, isPrivateIp, hashPassword, checkHash, MIN_PASSWORD };
+module.exports = { createSecurity, isPrivateIp, hashPassword, checkHash, MIN_PASSWORD, ROLES };

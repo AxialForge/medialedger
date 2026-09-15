@@ -29,7 +29,9 @@ const events = new Set(leaves.filter(l => l.startsWith('!')).map(l => l.slice(1)
 const electronOnly = new Set([...read('main/main.js').matchAll(/h\('([a-zA-Z]+:[a-zA-Z]+)'/g)].map(m => m[1]));
 for (const m of read('main/main.js').matchAll(/'(security:[a-zA-Z]+)'/g)) electronOnly.add(m[1]);
 const webOnly = new Set([...read('server/server.js').matchAll(/^\s*\['([a-zA-Z]+:[a-zA-Z]+)', /gm)].map(m => m[1]));
-assert.deepStrictEqual([...webOnly].sort(), [...electronOnly].sort(), 'the web shell must cover exactly the channels the Electron shell keeps for itself');
+// The web shell must serve every Electron-only channel; anything else it declares must be an override of a core channel (per-session state).
+for (const ch of electronOnly) assert.ok(webOnly.has(ch), `web shell must serve ${ch}`);
+for (const ch of webOnly) assert.ok(electronOnly.has(ch) || svc.handlers.has(ch), `web handler ${ch} is neither Electron-only nor a core override`);
 const served = new Set([...svc.handlers.keys(), ...electronOnly]);
 for (const ch of bridge) if (!events.has(ch)) assert.ok(served.has(ch), `bridge calls ${ch} but nothing serves it`);
 for (const ch of served) assert.ok(bridge.has(ch), `${ch} is served but the bridge never calls it`);
