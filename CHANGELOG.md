@@ -12,6 +12,44 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [1.3.0] - 2026-09-15
+
+### Added
+
+- **QR codes** for the two things people type by hand: the 2FA setup now shows
+  a code to scan with Google Authenticator (or any TOTP app), and when guest
+  access is on the Security tab shows a code for the site address to stick by
+  the TV. Dependency-free encoder (`renderer/qr.js`, byte mode, level M,
+  versions 1–15), verified against a reference decoder.
+- **Turn on HTTPS** button on the Security tab: makes a self-signed
+  certificate for every name and LAN address the Pi answers to (including a
+  custom domain), restarts on TLS, keeps sessions, and then offers *Download
+  certificate* with per-device steps (Windows, Android, iPhone, macOS) to
+  remove the browser warning. A port-80 install moves to 443 with a redirect
+  left on 80. `GET /tls/cert.pem` serves the public half to signed-in users.
+- **Plex token from the XML address**: Settings → Plex gains a box to paste
+  the *View XML* tab's address; the token (and the server URL when it is a LAN
+  address) are pulled out and the pasted text is discarded.
+- **Colour themes**: Settings → Appearance with eight palettes (Graphite,
+  Midnight blue, Obsidian, Forest, Rose quartz, Lavender, Gunmetal, Crimson
+  steel), applied at once and remembered per browser (`theme.js` applies it
+  before the first paint).
+- **Zip threshold** on the Export tab: *Zip the files as well, when at least N
+  files* (default 4), so a single-CSV export does not get an archive.
+- A **Save** button beside *Idle sign-out* (same as *Save options*).
+- **One at a time renaming** in both rename tools: a *Rename* button on every
+  ready row, and *One at a time (N)* that walks the ticked files through a
+  Rename / Skip / Stop dialog. Each confirmed file is its own batch (same
+  pre-flight, verification and journal), so every step is undoable alone.
+
+### Changed
+
+### Fixed
+
+- **2FA setup vanished on click.** The *Set up 2FA* handler re-rendered the
+  Security tab as soon as the secret arrived, wiping the secret before it could
+  be entered. The box now stays until the code is confirmed.
+
 ## [1.2.2] - 2026-09-14
 
 ### Changed

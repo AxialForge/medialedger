@@ -31,7 +31,7 @@
   db: { backup: 'db:backup', backups: 'db:backups', stats: 'db:stats' },
   sys: { stats: 'sys:stats' },
   roots: { check: 'roots:check', listDirs: 'roots:listDirs', last: 'roots:last', onStatus: '!roots:status' },
-  security: { me: 'security:me', status: 'security:status', changePassword: 'security:changePassword', totpSetup: 'security:totpSetup', totpEnable: 'security:totpEnable', totpDisable: 'security:totpDisable', setOptions: 'security:setOptions', revoke: 'security:revoke', revokeOthers: 'security:revokeOthers', users: 'security:users', addUser: 'security:addUser', setRole: 'security:setRole', resetPassword: 'security:resetPassword', deleteUser: 'security:deleteUser' },
+  security: { me: 'security:me', status: 'security:status', changePassword: 'security:changePassword', totpSetup: 'security:totpSetup', totpEnable: 'security:totpEnable', totpDisable: 'security:totpDisable', setOptions: 'security:setOptions', revoke: 'security:revoke', revokeOthers: 'security:revokeOthers', users: 'security:users', addUser: 'security:addUser', setRole: 'security:setRole', resetPassword: 'security:resetPassword', deleteUser: 'security:deleteUser', tlsEnable: 'security:tlsEnable' },
   requests: { list: 'requests:list', add: 'requests:add', update: 'requests:update', delete: 'requests:delete' },
   plexTest: 'plex:test',
   plex: { sync: 'plex:sync', status: 'plex:status', onProgress: '!plex:progress', webhookInfo: 'plex:webhookInfo', webhookSet: 'plex:webhookSet' },

@@ -43,7 +43,7 @@ const DEFAULTS = {
   videoExtensions: ['mp4', 'mkv', 'avi', 'mov', 'm4v', 'wmv', 'ts', 'webm', 'flv', 'mpg', 'mpeg'],
   subtitleExtensions: ['srt', 'ass', 'ssa', 'sub', 'idx', 'vtt', 'sup'],
   ignorePatterns: ['*.crdownload', '*.part', '*.!qb', 'Thumbs.db', 'desktop.ini', '.DS_Store'],
-  export: { sets: ['tv', 'anime', 'movies', 'web', 'changes'], zip: false }, // which CSV sets an export writes, and whether to zip them
+  export: { sets: ['tv', 'anime', 'movies', 'web', 'changes'], zip: false, zipMin: 4 }, // which CSV sets an export writes; zip them when at least zipMin files were written
   csvOutputDir: '',           // empty = <userData>/exports
   autoExportAfterScan: true,
   schedule: {

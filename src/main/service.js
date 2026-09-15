@@ -42,7 +42,7 @@ function createService({ userData, log, send, host }) {
 
   function runExport(scanId, trigger, opts) {
     const cfg = settings.get().export || {};
-    const out = exportAll(db, exportDir(), scanId, settings.get(), { sets: (opts && opts.sets) || cfg.sets, zip: opts && opts.zip != null ? !!opts.zip : !!cfg.zip });
+    const out = exportAll(db, exportDir(), scanId, settings.get(), { sets: (opts && opts.sets) || cfg.sets, zip: opts && opts.zip != null ? !!opts.zip : !!cfg.zip, zipMin: opts && opts.zipMin != null ? opts.zipMin : cfg.zipMin });
     db.addExport({ scan_id: scanId, dir: out.dir, files: out.files, rows: out.rows, trigger, zip: out.zip });
     return out;
   }

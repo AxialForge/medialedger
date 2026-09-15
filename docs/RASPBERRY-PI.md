@@ -257,8 +257,13 @@ admin sign-ins only.
 
 **HTTPS (optional)**
 
-Plain HTTP on a trusted LAN is normal for home services. If you want TLS, give
-the server a certificate. A self-signed one takes one command on the Pi:
+Plain HTTP on a trusted LAN is normal for home services. If you want TLS, the
+easiest way is the **Security tab → HTTPS → Turn on HTTPS** button: the server
+makes a self-signed certificate for every name and address it answers to,
+restarts on `https://`, and offers the certificate for download with per-device
+steps to stop the browser warning (Windows: Trusted Root store; Android: install
+a CA certificate; iPhone: profile + Certificate Trust Settings). A port-80
+install moves to 443 and leaves a redirect on 80. The same thing by hand:
 
 ```bash
 sudo mkdir -p /var/lib/medialedger/tls && sudo openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=medialedger.local" -keyout /var/lib/medialedger/tls/key.pem -out /var/lib/medialedger/tls/cert.pem && sudo chown -R medialedger:medialedger /var/lib/medialedger/tls && sudo chmod 600 /var/lib/medialedger/tls/*.pem && sudo systemctl restart medialedger
@@ -312,8 +317,8 @@ Now `http://medialedger.home` opens the app. The `--domain` is remembered in
 
 **3. Optional: HTTPS on the name.** Add `--https` (once) and the self-signed
 certificate is issued for `medialedger.home`, `medialedger.local` and the IP,
-served on the port you chose; use `--port=443` for `https://medialedger.home`
-with no port. Browsers warn once per device about the self-signed issuer;
+served on the port you chose; with `--port=80` the site moves to 443 when HTTPS
+is on, so `https://medialedger.home` needs no port. Browsers warn once per device about the self-signed issuer;
 accept it for this host. A public certificate (Let's Encrypt) needs a domain
 you own and is not needed on a LAN.
 

@@ -57,10 +57,10 @@ const TOC_ENTRIES = [
   '13. Media requests',
   '14. Change log',
   '15. Movie names (the naming engine)', '15.1 The pattern', '15.2 Ready, flagged, blocked', '15.3 Batch settings', '15.4 Running a batch', '15.5 Undo', '15.6 Bulk source, collisions, placeholders',
-  '16. Rename TV / anime', '17. CSV export', '17.1 Choosing what to export', '17.2 The files', '18. Settings reference',
+  '16. Rename TV / anime', '17. CSV export', '17.1 Choosing what to export', '17.2 The files', '18. Settings reference', '18.1 Appearance',
   '19. Plex integration', '19.1 Setup', '19.2 What a sync stores', '19.3 Plex webhook',
   '20. System (health and hardware)',
-  '21. Security', '21.1 Accounts and roles', '21.2 Always on', '21.3 Controls',
+  '21. Security', '21.1 Accounts and roles', '21.2 Always on', '21.3 Controls', '21.4 Two-factor codes with a phone', '21.5 HTTPS',
   '22. Running MediaLedger on a Raspberry Pi', '22.1 Requirements', '22.2 Install, step by step', '22.3 First run on the Pi', '22.3a Your own name for the Pi', '22.4 Command reference', '22.5 Security on the Pi', '22.6 Moving the desktop database to the Pi', '22.7 File locations', '22.8 Pi troubleshooting',
   '23. Troubleshooting', '24. Glossary',
 ];
@@ -334,6 +334,8 @@ add(H1('15. Movie names (the naming engine)'), ...img('movienames', 'Proposed na
     'Each rename is followed by a re-check of the file\'s size before the database is updated. A failure stops the batch; earlier renames stand and are journaled.',
   ]),
   P('While a live batch runs, scans and the folder watcher wait.'),
+  H3('One at a time'),
+  P('If a big batch feels like too much trust, do not use it. Every ready row has a **Rename** button that renames just that file, and **One at a time (N)** walks through the ticked files in a dialog that shows the current and proposed name and asks **Rename this file**, **Skip** or **Stop** for each. Every confirmed file runs as its own one-file batch through the same pre-flight, verification and journal, so it appears in the Batches table and can be undone on its own. The live switch must still be on.'),
   H2('15.5 Undo'),
   P('Every live batch is listed under **Batches** with an **Undo** button. Undo walks the journal in reverse; for each file it confirms the renamed file still exists with the recorded size and that the original name is free, then renames it back. Files that fail the check are left alone and reported, and the batch shows as "partially undone". **Items** shows the per-file journal of any batch.'),
   H2('15.6 Bulk source, collisions, placeholders'),
@@ -347,7 +349,7 @@ add(H1('15. Movie names (the naming engine)'), ...img('movienames', 'Proposed na
 
 // ---------------- 16 Rename TV/anime ----------------
 add(H1('16. Rename TV / anime'), ...img('rename', 'The episode rename tool, shown here while disabled.'),
-  P('A simpler tool for episodes. It is **off** until you enable it under Settings → Renaming. When on, it lists every episode file whose name differs from `Show - S01E02 - Title.ext`, built from the parsed details and your fixes. Tick files, press **Rename**, confirm. Files are renamed in place, never moved or overwritten, and every attempt is logged in the History table. Fix anything wrong under Problems first, because the proposal is only as good as the parse.'),
+  P('The same one-at-a-time scheme as the movie tool applies here: a **Rename** button per row and **One at a time** for the ticked files, each confirmed separately. A simpler tool for episodes. It is **off** until you enable it under Settings → Renaming. When on, it lists every episode file whose name differs from `Show - S01E02 - Title.ext`, built from the parsed details and your fixes. Tick files, press **Rename**, confirm. Files are renamed in place, never moved or overwritten, and every attempt is logged in the History table. Fix anything wrong under Problems first, because the proposal is only as good as the parse.'),
 );
 
 // ---------------- 17 CSV ----------------
@@ -356,7 +358,7 @@ add(H1('17. CSV export'), ...img('export', 'The export tab: pick the sets, optio
   H2('17.1 Choosing what to export'),
   bullets([
     '**What to export** lists the five sets: TV shows, Anime, Movies, Web videos and Change log. Tick the ones you need; the file names each set produces are shown beside it.',
-    '**Zip the files as well** adds `medialedger-<timestamp>.zip` next to the CSVs and refreshes `latest\\medialedger-latest.zip`. The archive is written by MediaLedger itself; no extra software is needed.',
+    '**Zip the files as well** adds `medialedger-<timestamp>.zip` next to the CSVs and refreshes `latest\\medialedger-latest.zip`. The archive is written by MediaLedger itself; no extra software is needed. The **when at least N files** box beside it skips the zip for small exports: with the default of 4, ticking only the change log gives a bare CSV, ticking everything gives the zip too.',
     '**Remember as default** saves the current ticks. The default is also what the automatic export after a scan uses.',
     'On the web server the history table links every CSV and zip for download in the browser (admin session). On the desktop the **Open latest folder** and **Open exports folder** buttons open the files in Explorer.',
   ]),
@@ -375,6 +377,7 @@ add(H1('17. CSV export'), ...img('export', 'The export tab: pick the sets, optio
 
 // ---------------- 18 Settings ----------------
 add(H1('18. Settings reference'), ...img('settings', 'The top of the Settings page.'),
+  H2('18.1 Appearance'), P('**Colour theme** switches the whole app between a few palettes and applies at once. The choice is remembered in the browser (or the desktop app) you set it in, not on the server, so every device and every person can have their own.'),
   H2('Library roots'), P('One row per folder: on/off, label, path (UNC or local; the … button browses), and type: TV, Anime, Movies, Web videos, or Adult (auto-detect anime / TV / movie). Roots with the same type may repeat. Press **Save settings** after editing.'),
   H2('Scanning'), bullets([
     '**Multi-threaded listing** deals show folders out to worker threads so directory listing over SMB overlaps. 0 threads means automatic (CPU count minus one). Turn off if the NAS struggles.',
@@ -404,8 +407,8 @@ add(H1('19. Plex integration'),
   H2('19.1 Setup'),
   steps([
     'In Plex Web, open any movie or episode, click the ⋯ menu, choose **Get Info**, then **View XML**.',
-    'The page that opens has `X-Plex-Token=` at the end of its address. Copy the value after the equals sign. Do not share it; it grants access to your server.',
-    'In MediaLedger, Settings → Plex: enter the server URL (for Plex on the NAS, `http://192.168.1.204:32400`), paste the token, press **Test**. It reports the server version and lists the libraries it can see.',
+    'A new tab opens showing XML. Copy its whole address from the browser\'s address bar; it ends in `X-Plex-Token=…`. Do not share it; it grants access to your server.',
+    'In MediaLedger, Settings → Plex, paste that address into **Paste the XML address**. The token is pulled out into the token field, the server URL is filled in when the address came from your LAN (for Plex on the NAS, `http://192.168.1.204:32400`), and the pasted text is discarded. Press **Test**. It reports the server version and lists the libraries it can see.',
     'Press **Sync now**. The first sync derives the path mapping from the first file it recognises, for example `/media` → `\\\\192.168.1.204\\Apocrypha_Media_Pool`, and shows it for editing.',
     'Tick **Sync after every scan** to keep it current.',
   ]),
@@ -473,14 +476,33 @@ add(H1('21. Security'),
     ['Posture checks', 'Coloured tiles at the top: admin account, two-factor, LAN-only, guest access, HTTPS, not running as root, secrets file permissions, share credentials permissions, idle sign-out, renaming switched off. Green is good; amber is an optional improvement; red needs attention.'],
     ['Change password', 'Changes the password of the signed-in account; needs the current one. Signs out every other session. Standard users get this control alone.'],
     ['LAN only', 'On by default. Turn off only if you know exactly which non-private network should reach the Pi.'],
-    ['Idle sign-out', 'Ends a session after N minutes without activity. 0 keeps the 30-day limit only.'],
+    ['Idle sign-out', 'Ends a session after N minutes without activity. 0 keeps the 30-day limit only. The **Save** beside the field and **Save options** below do the same thing.'],
     ['Guest access', 'Lets anyone on the LAN open the page without signing in, as a guest (21.1). Off by default.'],
     ['Users', 'Add an account (name, password, role), change a role, reset a password, delete an account. Admins only; every change asks for your password again.'],
-    ['Two-factor codes', 'Press **Set up 2FA**, add the shown secret (or the `otpauth://` link) to Google Authenticator, Aegis, Bitwarden, 1Password or any TOTP app, then enter the 6-digit code it shows. From then on sign-in needs password + code. Turning it off needs the password. If you lose the device, see the Pi troubleshooting table.'],
+    ['Two-factor codes', 'Press **Set up 2FA**, scan the QR code with an authenticator app and enter the 6-digit code it shows (21.4). From then on admin sign-in needs password + code. Turning it off needs the password. If you lose the device, see the Pi troubleshooting table.'],
+    ['HTTPS', 'Creates a self-signed certificate and restarts the server on it (21.5). Once on, a **Download certificate** button and per-device instructions replace the switch.'],
+    ['Guest link', 'Shown once Guest access is on: a QR code of the site address that anyone on the Wi-Fi can scan to open MediaLedger as a guest.'],
     ['Sessions', 'Every signed-in browser with its address, browser and last activity. **Sign out** ends one; **Sign out other sessions** keeps only this one; **Sign out here** ends yours.'],
     ['Audit log', 'The last 100 events with time, kind, address and detail. The full log is `security.log` in the data folder.'],
   ], [2600, 6760]),
   ...img('web-login', 'Signing in to the web server with a username and password. The code field is only needed once two-factor is on.'),
+  H2('21.4 Two-factor codes with a phone'),
+  steps([
+    'Install **Google Authenticator** (or Aegis, Bitwarden, 1Password, Microsoft Authenticator: any app that does time-based codes) on your phone.',
+    'On the Pi, Security → Two-factor codes → **Set up 2FA**. A QR code appears.',
+    'In the app tap **+** → **Scan a QR code** and point the camera at the screen. The app adds an entry named MediaLedger and starts showing a 6-digit code that changes every 30 seconds. No camera? Tap **Enter a setup key** and type the secret shown under the code.',
+    'Type the current 6-digit code into the box under the QR and press **Turn on 2FA**. The server checks it before switching on, so a mistyped secret cannot lock you out.',
+    'From now on the sign-in dialog asks for the code after the password, for admin accounts. Standard users and guests are unaffected.',
+  ]),
+  note('The secret lives in `web.json` on the Pi and in the app on your phone; nothing is sent to Google or anyone else. The Pi clock must be roughly right (`timedatectl`), since the codes are computed from the time.'),
+  H2('21.5 HTTPS'),
+  P('On a home LAN plain HTTP is normal, and MediaLedger refuses connections from outside the LAN anyway. HTTPS adds encryption between each browser and the Pi, which matters if you do not fully trust every device on the Wi-Fi, and it lets phones add the site as a proper app without warnings. There is no certificate authority for a private LAN name, so MediaLedger makes its own **self-signed** certificate; browsers trust it once you install it on each device.'),
+  steps([
+    'Security → HTTPS → **Turn on HTTPS**, then confirm. The server writes a certificate valid for ten years covering every name it answers to (`medialedger.local`, the hostname, your custom domain if the installer was given one, and every LAN address), audits the change, and restarts. Sign-in sessions survive the restart.',
+    'The page reopens on `https://`. If the Pi was installed with `--port=80`, the site moves to port 443 (no port in the address) and port 80 redirects there, so `http://medialedger.home` keeps working.',
+    'The browser warns that the certificate is not trusted. Either accept the warning for this site, or remove it for good: press **Download certificate** and follow the per-device steps under *Removing the browser warning* (Windows: Trusted Root Certification Authorities; Android: install a CA certificate; iPhone: install the profile, then Certificate Trust Settings; macOS: Keychain, Always Trust).',
+  ]),
+  warn('Adding a new name for the Pi later (a custom domain, a rename) needs a new certificate: delete `/var/lib/medialedger/tls/` on the Pi, restart the service, and turn HTTPS on again. Installing the certificate on a device is per device; the file itself is public, only `key.pem` on the Pi is secret.'),
 );
 
 // ---------------- 22 Raspberry Pi ----------------
@@ -537,7 +559,7 @@ add(H1('22. Running MediaLedger on a Raspberry Pi'),
     ['`vcgencmd measure_temp`', 'Chip temperature from the shell (the System tab shows the same).'],
   ], [4200, 5160]),
   H2('22.5 Security on the Pi'),
-  P('Chapter 21 describes every control. The short version: keep **LAN only** on, never port-forward the Pi, turn on **two-factor codes** if other people use your network, and let the posture tiles guide you. For HTTPS, rerun the installer with `--https` or place `cert.pem` and `key.pem` in `/var/lib/medialedger/tls/` and restart; the browser warns once about the self-signed certificate.'),
+  P('Chapter 21 describes every control. The short version: keep **LAN only** on, never port-forward the Pi, turn on **two-factor codes** if other people use your network, and let the posture tiles guide you. For HTTPS, press **Turn on HTTPS** on the Security tab (21.5); `--https` on the installer does the same at install time.'),
   P('The service runs as a user with no shell, with `NoNewPrivileges`, `ProtectSystem=full`, `ProtectHome` and a private `/tmp`; it can write only its data folder and the share. The share credentials are root-only in `/etc/medialedger-cifs.cred`; the account password hashes, sessions, 2FA secret and webhook key are owner-only in `/var/lib/medialedger/web.json`.'),
   H2('22.6 Moving the desktop database to the Pi'),
   P('This carries every fix, keep decision, series match, rating and the whole change log across, and skips the first full scan. On the PC, close MediaLedger and copy the database to the Pi:'),

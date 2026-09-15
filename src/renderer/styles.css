@@ -3,6 +3,20 @@
   --text: #e6e8ee; --muted: #8b93a7; --accent: #5aa9ff; --accent2: #7ee787; --warn: #f0b429; --bad: #ff6b6b; --ok: #7ee787;
   --tv: #5aa9ff; --anime: #c792ea; --movie: #f78c6c;
 }
+/* Colour themes. The block above is the default ("Graphite"). A theme overrides only the variables it changes;
+   pick one under Settings → Appearance (stored per browser). Keep the list in step with THEMES in app.js. */
+html[data-theme="midnight"] { --bg: #0b1220; --panel: #111a2e; --panel2: #172340; --panel3: #1e2d4f; --line: #22304d; --text: #e3e9f7; --muted: #8a97b8; --accent: #6fb1ff; }
+/* dark */
+html[data-theme="obsidian"] { --bg: #000000; --panel: #0d0d0e; --panel2: #171718; --panel3: #212123; --line: #262628; --text: #ededed; --muted: #8d8d92; --accent: #9ad0ff; }
+html[data-theme="forest"] { --bg: #0a120d; --panel: #10201a; --panel2: #16291f; --panel3: #1d3327; --line: #22392d; --text: #e2efe6; --muted: #86a493; --accent: #7ee0a0; --accent2: #b6f2c6; --ok: #b6f2c6; }
+/* soft */
+html[data-theme="rose"] { --bg: #1a0f16; --panel: #261623; --panel2: #331d2e; --panel3: #40253a; --line: #472a41; --text: #f7e6f0; --muted: #b58aa5; --accent: #ff8fc2; --accent2: #9ee8b8; --ok: #9ee8b8; --warn: #ffc46b; --anime: #d9a5ff; --movie: #ffa07a; }
+html[data-theme="lavender"] { --bg: #14101f; --panel: #1d182d; --panel2: #27203c; --panel3: #322a4b; --line: #372f52; --text: #ece6fb; --muted: #a394c4; --accent: #c9a3ff; --accent2: #a6f0c8; --ok: #a6f0c8; --tv: #8fb7ff; --anime: #f0a6ff; }
+/* hard */
+html[data-theme="gunmetal"] { --bg: #0e1012; --panel: #16191d; --panel2: #1f2328; --panel3: #292e34; --line: #2c3238; --text: #dfe3e8; --muted: #8c949d; --accent: #ff7a1a; --warn: #ffb020; --tv: #ff9a4d; --anime: #c8ced6; --movie: #ffd166; }
+html[data-theme="crimson"] { --bg: #0f0a0b; --panel: #1a1013; --panel2: #24161a; --panel3: #2f1c21; --line: #3a2229; --text: #f0e4e6; --muted: #a58a90; --accent: #ff3b4a; --bad: #ff8090; --tv: #ff6b6b; --anime: #ffb4a2; --movie: #ffd6a5; }
+.qrbox { display: inline-block; background: #fff; padding: 8px; border-radius: 8px; line-height: 0; }
+.qrbox svg { display: block; }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 13px/1.45 Segoe UI, system-ui, sans-serif; }
 

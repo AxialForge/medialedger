@@ -26,6 +26,29 @@ function toast(msg, bad = false) {
 }
 function openModal(html) { $('#modalCard').innerHTML = html; $('#modal').hidden = false; return $('#modalCard'); }
 function closeModal() { $('#modal').hidden = true; }
+// Walks a list of rename proposals one file at a time: Rename / Skip / Stop per file. Each confirmed file runs as its own
+// batch through the same pre-flight, verification and journal as a big batch, so a mistake is one file and still undoable.
+function stepThrough(items, { what, run }) {
+  let i = 0, done = 0, failed = 0;
+  return new Promise(resolve => {
+    const show = () => {
+      if (i >= items.length) { closeModal(); resolve({ done, failed, stopped: false }); return; }
+      const p = items[i];
+      const card = openModal(`<h2 class="bad">${esc(what)} · ${i + 1} of ${items.length}</h2>
+        <div class="preview"><div class="muted tiny">${esc(p.dir || (p.rel_path && p.rel_path.includes('\\') ? p.rel_path.slice(0, p.rel_path.lastIndexOf('\\')) : '') || '')}</div><div>${esc(p.from)}</div><div class="arrow" style="margin:4px 0">↓</div><div><b>${esc(p.name || p.to)}</b></div>${p.flags && p.flags.length ? `<div style="margin-top:6px">${p.flags.map(f => `<span class="badge ${/^no_|mismatch|claimed/.test(f) ? 'warn' : ''}">${esc(f)}</span>`).join('')}</div>` : ''}</div>
+        <p class="muted tiny">Renamed ${done} · failed ${failed} · ${items.length - i} to go. Only this one file is touched when you press Rename; nothing happens on Skip or Stop.</p>
+        <div class="actions"><button id="stStop">Stop</button><span class="grow"></span><button id="stSkip">Skip</button><button class="danger" id="stGo">Rename this file</button></div>`);
+      $('#stStop', card).onclick = () => { closeModal(); resolve({ done, failed, stopped: true }); };
+      $('#stSkip', card).onclick = () => { i++; show(); };
+      $('#stGo', card).onclick = async () => {
+        $('#stGo', card).disabled = true; $('#stSkip', card).disabled = true; $('#stStop', card).disabled = true; $('#stGo', card).textContent = 'Renaming…';
+        try { (await run(p)) ? done++ : failed++; } catch (e) { failed++; toast(e.message, true); }
+        i++; show();
+      };
+    };
+    show();
+  });
+}
 $('#modal').addEventListener('click', e => { if (e.target === $('#modal')) closeModal(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
@@ -134,6 +157,15 @@ async function refreshBadges() {
 }
 L.plex.onProgress(p => { const box = $('#metaProgress'); box.hidden = !p.running && !p.message; $('#metaBar').className = p.running ? 'indeterminate' : ''; $('#metaMsg').textContent = p.message || ''; if (!p.running) { setTimeout(() => { box.hidden = true; }, 8000); if (['ratings', 'settings', 'tv', 'anime', 'movies'].includes(currentView)) route(); } });
 // Who am I? Drives which navigation entries and controls are shown; the server enforces the same rules.
+// Colour themes: names must match html[data-theme="…"] blocks in styles.css. '' is the default palette.
+const THEMES = [['', 'Graphite (default)'], ['midnight', 'Midnight blue'], ['obsidian', 'Obsidian'], ['forest', 'Forest'], ['rose', 'Rose quartz'], ['lavender', 'Lavender'], ['gunmetal', 'Gunmetal'], ['crimson', 'Crimson steel']];
+function applyTheme(name) {
+  if (name) document.documentElement.dataset.theme = name; else delete document.documentElement.dataset.theme;
+  try { if (name) localStorage.setItem('medialedger.theme', name); else localStorage.removeItem('medialedger.theme'); } catch { /* storage blocked */ }
+  const meta = document.querySelector('meta[name=theme-color]'); if (meta) meta.content = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#0f1115';
+}
+const currentTheme = () => { try { return localStorage.getItem('medialedger.theme') || ''; } catch { return ''; } };
+
 let me = { role: 'admin', guest: false, username: null, available: false, guestEnabled: false };
 async function loadMe() {
   try { me = await L.security.me(); } catch { /* desktop or pre-login */ }
@@ -523,7 +555,7 @@ views.export = async () => {
     <p class="lead">Pick which sets to write. Each export goes into a timestamped folder and refreshes the <span class="mono">latest\\</span> copy, so a spreadsheet can always point at the same file names. Tick <b>Zip</b> to also get a single archive${L.isWeb ? ' you can download here' : ''}.</p>
     <div class="card" style="margin-bottom:12px"><h3>What to export</h3>
       <div class="inline" style="gap:16px;flex-wrap:wrap">${sets.map(x => `<label class="inline"><input type="checkbox" class="expSet" value="${x.key}" ${chosen.has(x.key) ? 'checked' : ''}> ${esc(x.label)} <span class="muted tiny">${esc(x.files)}</span></label>`).join('')}</div>
-      <div class="inline" style="margin-top:10px"><label class="inline"><input type="checkbox" id="expZip" ${s.export && s.export.zip ? 'checked' : ''}> Zip the files as well</label><button class="small" id="expSave">Remember as default</button><span class="muted tiny">The default is also what an automatic export after a scan uses.</span></div>
+      <div class="inline" style="margin-top:10px"><label class="inline"><input type="checkbox" id="expZip" ${s.export && s.export.zip ? 'checked' : ''}> Zip the files as well</label><label class="inline muted">when at least <input type="number" id="expZipMin" min="1" max="20" value="${(s.export && s.export.zipMin) || 1}" style="width:60px"> files</label><button class="small" id="expSave">Remember as default</button><span class="muted tiny">The default is also what an automatic export after a scan uses.</span></div>
     </div>
     <div class="tiles compact">
       ${tile('', 'Last export', last ? fmtAgo(last.ts) : 'never', last ? `${JSON.parse(last.files || '[]').length} files · ${(last.rows || 0).toLocaleString()} rows` : '')}
@@ -553,7 +585,7 @@ views.export = async () => {
   ], { short: true });
   $('#exportHist').append(t.node);
   t.node.addEventListener('click', e => { const b = e.target.closest('.openDir'); if (b) L.openPath(b.dataset.dir); });
-  const expOpts = () => ({ sets: [...document.querySelectorAll('.expSet:checked')].map(c => c.value), zip: $('#expZip').checked });
+  const expOpts = () => ({ sets: [...document.querySelectorAll('.expSet:checked')].map(c => c.value), zip: $('#expZip').checked, zipMin: Math.max(1, Number($('#expZipMin').value) || 1) });
   $('#expSave').onclick = async () => { await L.settings.set({ export: expOpts() }); toast('Export defaults saved'); };
   $('#runExport').onclick = async () => { const o = expOpts(); if (!o.sets.length) return toast('Pick at least one set', true); try { $('#exportMsg').textContent = 'Exporting…'; const r = await L.exportCsv(o); toast(`Export written: ${r.files.length} file(s)${r.zip ? ' + zip' : ''}`); views.export(); } catch (e) { $('#exportMsg').textContent = ''; toast(e.message, true); } };
   $('#openLatest').onclick = () => L.openPath((s.csvOutputDir || info.exportDir) + '\\latest');
@@ -663,7 +695,7 @@ views.rename = async () => {
   view.innerHTML = `<h1>Rename files</h1>
     <div class="warnbox">This page <b>renames files on your share</b>. Proposals come from the parsed details plus your manual fixes, so fix anything wrong under Problems first. Files are renamed in place (same folder), never overwritten, and each attempt is logged below.</div>
     <div class="tiles compact">${tile(list.length ? 'warnt' : 'okt', 'Proposed renames', list.length)}${tile('', 'From manual fixes', list.filter(p => p.has_override).length)}${tile('', 'Renamed so far', okHist, `${hist.length - okHist} failed`)}</div>
-    <div class="toolbar" style="margin-top:12px"><input type="search" id="rq" placeholder="Filter…"><select id="rtype"><option value="">all libraries</option><option value="tv">TV</option><option value="anime">Anime</option><option value="movie">Movies</option></select><label class="inline small"><input type="checkbox" id="rfixed"> Only files with manual fixes</label><span class="muted small" id="rcount"></span><span class="grow"></span><button class="small" id="selAll">Select shown</button><button class="small" id="selNone">Clear</button><button class="primary" id="apply" disabled>Rename 0 files</button></div>
+    <div class="toolbar" style="margin-top:12px"><input type="search" id="rq" placeholder="Filter…"><select id="rtype"><option value="">all libraries</option><option value="tv">TV</option><option value="anime">Anime</option><option value="movie">Movies</option></select><label class="inline small"><input type="checkbox" id="rfixed"> Only files with manual fixes</label><span class="muted small" id="rcount"></span><span class="grow"></span><button class="small" id="selAll">Select shown</button><button class="small" id="selNone">Clear</button><button class="primary" id="apply" disabled>Rename 0 files</button><button id="stepApply" disabled title="Walk through the ticked files one by one, confirming each">One at a time</button></div>
     <div class="table-wrap" id="rtable"></div>
     <h2>History</h2><div id="rhist"></div>`;
   const selected = new Set();
@@ -672,12 +704,17 @@ views.rename = async () => {
     const q = $('#rq').value.toLowerCase(), t = $('#rtype').value, fx = $('#rfixed').checked;
     shown = list.filter(p => (!t || p.library_type === t) && (!fx || p.has_override) && (!q || `${p.from} ${p.to} ${p.show_name || ''} ${p.movie_title || ''}`.toLowerCase().includes(q))).slice(0, 1000);
     $('#rcount').textContent = `${shown.length} of ${list.length}`;
-    $('#rtable').innerHTML = `<table><thead><tr><th></th><th>Library</th><th>Folder</th><th>Current name</th><th></th><th>Proposed name</th><th></th></tr></thead><tbody>${shown.map(p => `<tr class="rename-row"><td><input type="checkbox" class="rsel" data-id="${p.id}" ${selected.has(p.id) ? 'checked' : ''}></td><td><span class="badge ${p.library_type}">${typeName(p.library_type)}</span></td><td class="muted tiny wrap">${esc(p.rel_path.includes('\\') ? p.rel_path.slice(0, p.rel_path.lastIndexOf('\\')) : '')}</td><td class="wrap">${esc(p.from)}${p.has_override ? ' <span class="badge ok">fixed</span>' : ''}</td><td class="arrow">→</td><td class="wrap"><b>${esc(p.to)}</b></td><td>${fixBtn(p)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">Every file already matches the standard pattern.</td></tr>'}</tbody></table>`;
+    $('#rtable').innerHTML = `<table><thead><tr><th></th><th>Library</th><th>Folder</th><th>Current name</th><th></th><th>Proposed name</th><th></th></tr></thead><tbody>${shown.map(p => `<tr class="rename-row"><td><input type="checkbox" class="rsel" data-id="${p.id}" ${selected.has(p.id) ? 'checked' : ''}></td><td><span class="badge ${p.library_type}">${typeName(p.library_type)}</span></td><td class="muted tiny wrap">${esc(p.rel_path.includes('\\') ? p.rel_path.slice(0, p.rel_path.lastIndexOf('\\')) : '')}</td><td class="wrap">${esc(p.from)}${p.has_override ? ' <span class="badge ok">fixed</span>' : ''}</td><td class="arrow">→</td><td class="wrap"><b>${esc(p.to)}</b></td><td class="nowrap">${fixBtn(p)} <button class="small rOne" data-id="${p.id}" title="Rename just this file">Rename</button></td></tr>`).join('') || '<tr><td colspan="7" class="empty">Every file already matches the standard pattern.</td></tr>'}</tbody></table>`;
     $('#apply').textContent = `Rename ${selected.size} file${selected.size === 1 ? '' : 's'}`; $('#apply').disabled = !selected.size;
+    $('#stepApply').disabled = !selected.size;
   };
   render();
+  const runOne = async (p) => { const res = await L.rename.apply([p.id]); const x = res[0]; if (!x || !x.ok) { if (x && x.error) toast(x.error, true); return false; } return true; };
+  const stepFiles = async (items) => { const r = await stepThrough(items, { what: 'Rename episode file', run: runOne }); if (r.done || r.failed) { selected.clear(); toast(`${r.done} renamed${r.failed ? `, ${r.failed} failed` : ''}${r.stopped ? ' · stopped' : ''}`, !!r.failed); views.rename(); } };
+  $('#stepApply').onclick = () => stepFiles(list.filter(p => selected.has(p.id)));
+  $('#rtable').addEventListener('click', e => { const b = e.target.closest('.rOne'); if (b) { const p = list.find(x => x.id === Number(b.dataset.id)); if (p) stepFiles([p]); } });
   ['#rq', '#rtype', '#rfixed'].forEach(id => { $(id).oninput = render; $(id).onchange = render; });
-  $('#rtable').addEventListener('change', e => { const c = e.target.closest('.rsel'); if (c) { c.checked ? selected.add(Number(c.dataset.id)) : selected.delete(Number(c.dataset.id)); $('#apply').textContent = `Rename ${selected.size} file${selected.size === 1 ? '' : 's'}`; $('#apply').disabled = !selected.size; } });
+  $('#rtable').addEventListener('change', e => { const c = e.target.closest('.rsel'); if (c) { c.checked ? selected.add(Number(c.dataset.id)) : selected.delete(Number(c.dataset.id)); $('#apply').textContent = `Rename ${selected.size} file${selected.size === 1 ? '' : 's'}`; $('#apply').disabled = !selected.size; $('#stepApply').disabled = !selected.size; } });
   $('#selAll').onclick = () => { shown.forEach(p => selected.add(p.id)); render(); };
   $('#selNone').onclick = () => { selected.clear(); render(); };
   $('#apply').onclick = async () => {
@@ -732,6 +769,7 @@ views.movienames = async () => {
       <select id="mBulkSrc" title="Set the source for every selected file"><option value="">Set source for selected…</option><option value="web">Web (download)</option><option value="rip">Rip (disc)</option><option value="clear">clear manual source</option></select>
       <button id="mDry" disabled>Dry run 0</button>
       <button class="danger" id="mLive" disabled>Rename 0 live</button>
+      <button class="danger" id="mStep" disabled title="Walk through the ticked files one by one, confirming each">One at a time</button>
     </div>
     <div class="table-wrap" id="mtable"></div>
     <div id="mCollisions"></div>
@@ -752,13 +790,22 @@ views.movienames = async () => {
       return !q || `${p.from} ${p.name || ''} ${p.blocked || ''}`.toLowerCase().includes(q);
     }).slice(0, 1500);
     $('#mcount').textContent = `${shown.length.toLocaleString()} of ${plan.length.toLocaleString()}`;
-    $('#mtable').innerHTML = `<table><thead><tr><th></th><th>Current name</th><th></th><th>Proposed name</th><th>Flags</th><th></th></tr></thead><tbody>${shown.map(p => `<tr class="rename-row ${p.ok ? '' : 'blockedrow'}"><td>${p.ok && !p.unchanged ? `<input type="checkbox" class="msel" data-id="${p.id}" ${selected.has(p.id) ? 'checked' : ''}>` : ''}</td><td class="wrap">${esc(p.from)}${p.dir ? `<span class="sub">${esc(p.dir)}</span>` : ''}</td><td class="arrow">→</td><td class="wrap">${p.ok ? (p.unchanged ? '<span class="muted">unchanged</span>' : `<b>${esc(p.name)}</b>`) : `<span class="bad">blocked: ${esc(p.blocked)}</span>`}</td><td class="wrap">${p.flags.map(f => `<span class="badge ${/^no_|mismatch|claimed/.test(f) ? 'warn' : ''}" title="${esc(FLAG_TEXT[f.split(':')[0]] || '')}">${esc(f)}</span>`).join('')}</td><td>${fixBtn(p)}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">Nothing matches.</td></tr>'}</tbody></table>`;
+    $('#mtable').innerHTML = `<table><thead><tr><th></th><th>Current name</th><th></th><th>Proposed name</th><th>Flags</th><th></th></tr></thead><tbody>${shown.map(p => `<tr class="rename-row ${p.ok ? '' : 'blockedrow'}"><td>${p.ok && !p.unchanged ? `<input type="checkbox" class="msel" data-id="${p.id}" ${selected.has(p.id) ? 'checked' : ''}>` : ''}</td><td class="wrap">${esc(p.from)}${p.dir ? `<span class="sub">${esc(p.dir)}</span>` : ''}</td><td class="arrow">→</td><td class="wrap">${p.ok ? (p.unchanged ? '<span class="muted">unchanged</span>' : `<b>${esc(p.name)}</b>`) : `<span class="bad">blocked: ${esc(p.blocked)}</span>`}</td><td class="wrap">${p.flags.map(f => `<span class="badge ${/^no_|mismatch|claimed/.test(f) ? 'warn' : ''}" title="${esc(FLAG_TEXT[f.split(':')[0]] || '')}">${esc(f)}</span>`).join('')}</td><td class="nowrap">${fixBtn(p)}${p.ok && !p.unchanged && mr.enabled && !lock ? ` <button class="small danger mOne" data-id="${p.id}" title="Rename just this file, live">Rename</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">Nothing matches.</td></tr>'}</tbody></table>`;
+    syncButtons();
+  };
+  const syncButtons = () => {
     $('#mDry').textContent = `Dry run ${selected.size}`; $('#mDry').disabled = !selected.size;
     $('#mLive').textContent = `Rename ${selected.size} live`; $('#mLive').disabled = !selected.size || !mr.enabled || !!lock;
+    $('#mStep').textContent = selected.size ? `One at a time (${selected.size})` : 'One at a time'; $('#mStep').disabled = !selected.size || !mr.enabled || !!lock;
   };
+  // One file per batch: the same pre-flight, verification and journal as a big batch, so every step can be undone from the Batches table.
+  const runOne = async (p) => { const r = await L.movie.run([p.id], { live: true, layout: $('#mrLayout').value }); const x = r.results && r.results[0]; if (!x || !x.ok) { if (x && x.error) toast(x.error, true); return false; } return true; };
+  const stepMovies = async (items) => { const r = await stepThrough(items, { what: 'Rename movie file', run: runOne }); if (r.done || r.failed) { selected.clear(); toast(`${r.done} renamed${r.failed ? `, ${r.failed} failed` : ''}${r.stopped ? ' · stopped' : ''}`, !!r.failed); views.movienames(); } };
+  $('#mStep').onclick = () => stepMovies(plan.filter(p => selected.has(p.id)));
+  $('#mtable').addEventListener('click', e => { const b = e.target.closest('.mOne'); if (b) { const p = plan.find(x => x.id === Number(b.dataset.id)); if (p) stepMovies([p]); } });
   render();
   ['#mq', '#mstatus', '#mflag'].forEach(id => { $(id).oninput = render; $(id).onchange = render; });
-  $('#mtable').addEventListener('change', e => { const c = e.target.closest('.msel'); if (c) { c.checked ? selected.add(Number(c.dataset.id)) : selected.delete(Number(c.dataset.id)); $('#mDry').textContent = `Dry run ${selected.size}`; $('#mDry').disabled = !selected.size; $('#mLive').textContent = `Rename ${selected.size} live`; $('#mLive').disabled = !selected.size || !mr.enabled || !!lock; } });
+  $('#mtable').addEventListener('change', e => { const c = e.target.closest('.msel'); if (c) { c.checked ? selected.add(Number(c.dataset.id)) : selected.delete(Number(c.dataset.id)); syncButtons(); } });
   $('#mSelAll').onclick = () => { shown.filter(p => p.ok && !p.unchanged).forEach(p => selected.add(p.id)); render(); };
   $('#mBulkSrc').onchange = async e => {
     const v = e.target.value; e.target.value = ''; if (!v) return;
@@ -919,6 +966,9 @@ views.settings = async () => {
   view.innerHTML = `
     <h1>Settings</h1>
     <div class="form">
+      <h2>Appearance</h2>
+      <div class="field"><label>Colour theme</label><select id="themeSel">${THEMES.map(([k, v]) => `<option value="${k}" ${currentTheme() === k ? 'selected' : ''}>${v}</option>`).join('')}</select><div class="hint">Applies at once and is remembered in this browser only, so every device and person can pick their own.</div></div>
+
       <h2>Library roots <span class="right"><button class="small" id="checkRoots">Check reachability</button></span></h2>
       <table class="roots-table"><thead><tr><th>On</th><th>Label</th><th>Path (UNC or local)</th><th>Type</th><th>Status</th><th></th></tr></thead><tbody id="roots"></tbody></table>
       <div class="hint" id="rootDiag" hidden style="margin-top:6px"></div>
@@ -975,6 +1025,7 @@ views.settings = async () => {
       <h2>Plex</h2>
       <div class="field"><label>Plex URL</label><input type="text" id="plexUrl" value="${esc(s.plex.baseUrl)}"><div class="hint">Your Plex Media Server on the LAN, e.g. <span class="mono">http://192.168.1.204:32400</span> if Plex runs on the NAS.</div></div>
       <div class="field"><label>Plex token</label><div class="inline"><input type="password" id="plexToken" style="flex:1" value="${esc(s.plex.token)}" autocomplete="off"><button class="small" id="plexTest">Test</button></div><div class="hint" id="plexMsg">In Plex Web: any item → ⋯ → Get Info → View XML; copy the value after <span class="mono">X-Plex-Token=</span> in that page's address. Stored only in settings.json on this PC.</div></div>
+      <div class="field"><label>Paste the XML address</label><input type="text" id="plexXmlUrl" placeholder="http://192.168.1.204:32400/library/metadata/1234?…&X-Plex-Token=…" autocomplete="off"><div class="hint">The easy way to get the token. In Plex Web open any movie or episode, click <b>⋯</b> → <b>Get Info</b> → <b>View XML</b>. A new tab opens: copy its whole address from the browser's address bar and paste it here. The token (and the server address, when the page came from your LAN) are filled in above; the pasted text itself is not kept. Then press <b>Test</b> and <b>Save settings</b>.</div></div>
       <div class="field"><label>Sync after every scan</label><input type="checkbox" id="plexOn" ${s.plex.enabled ? 'checked' : ''}><div class="hint">Pulls every movie and show section, links each Plex item to a file by path, and stores Plex's title, year, ids, your Plex rating, audience rating and watched state. Read-only against Plex.</div></div>
       <div class="field"><label>Path mapping</label><div id="plexMap"></div><div class="hint">How Plex's file paths translate to yours. Derived automatically from the first match; edit if Plex runs elsewhere.</div></div>
       <div class="field"><label></label><div class="inline"><button class="small" id="plexSync">Sync now</button><span class="muted small" id="plexSyncMsg"></span></div></div>
@@ -1068,6 +1119,15 @@ views.settings = async () => {
     if ($('#hookRotate')) $('#hookRotate').onclick = async () => { if (confirm('Generate a new key? Update the URL in Plex afterwards.')) { await L.plex.webhookSet({ rotate: true }); refreshHook(); } };
   };
   refreshHook();
+  $('#themeSel').onchange = () => { applyTheme($('#themeSel').value); toast('Theme applied'); };
+  $('#plexXmlUrl').oninput = () => {
+    const v = $('#plexXmlUrl').value.trim(); const m = v.match(/X-Plex-Token=([A-Za-z0-9_-]{8,})/);
+    if (!m) return;
+    $('#plexToken').value = m[1];
+    try { const u = new URL(v); if (u.port === '32400' || /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(u.hostname)) $('#plexUrl').value = u.origin; } catch { /* not a full URL: the token alone is fine */ }
+    $('#plexXmlUrl').value = '';
+    $('#plexMsg').textContent = 'Token filled in from the address. Press Test, then Save settings.'; $('#plexMsg').className = 'hint ok';
+  };
   const refreshPlex = async () => {
     const st = await L.plex.status();
     $('#plexStatus').innerHTML = st.last ? `Last sync ${fmtDate(st.last.ts)}: ${st.last.matched.toLocaleString()} of ${st.last.items.toLocaleString()} Plex items matched to files · ${st.linked.toLocaleString()} of ${st.total.toLocaleString()} files linked · ${st.watched.toLocaleString()} watched · ${st.rated} with your Plex rating${st.unlinked.length ? `<br><span class="muted">${st.unlinked.length}${st.unlinked.length === 300 ? '+' : ''} files not in Plex, e.g. ${esc(st.unlinked.slice(0, 3).map(u => u.rel_path).join(' · '))}</span>` : ''}` : 'Never synced.';
@@ -1181,7 +1241,7 @@ views.security = async () => {
   const bad = st.checks.filter(c => !c.ok && c.level === 'bad').length, warn = st.checks.filter(c => !c.ok && c.level === 'warn').length;
   pill.hidden = !bad; pill.textContent = bad; pill.className = 'pill bad';
   const ago = (ms) => { const s = Math.round((Date.now() - ms) / 1000); return s < 60 ? 'just now' : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`; };
-  const EVENT_TEXT = { login: 'Signed in', login_failed: 'Failed sign-in', login_blocked: 'Blocked (locked out)', ip_locked: 'Address locked out', logout: 'Signed out', reauth: 'Password re-entered', reauth_failed: 'Re-entry failed', sensitive_action: 'Sensitive action', password_changed: 'Password changed', password_change_failed: 'Password change refused', '2fa_enabled': '2FA turned on', '2fa_disabled': '2FA turned off', options_changed: 'Options changed', session_revoked: 'Session revoked', sessions_revoked: 'Other sessions revoked', refused_non_lan: 'Refused: outside LAN', cross_origin_refused: 'Refused: cross-origin' };
+  const EVENT_TEXT = { login: 'Signed in', login_failed: 'Failed sign-in', login_blocked: 'Blocked (locked out)', ip_locked: 'Address locked out', logout: 'Signed out', reauth: 'Password re-entered', reauth_failed: 'Re-entry failed', sensitive_action: 'Sensitive action', password_changed: 'Password changed', password_change_failed: 'Password change refused', '2fa_enabled': '2FA turned on', '2fa_disabled': '2FA turned off', options_changed: 'Options changed', session_revoked: 'Session revoked', sessions_revoked: 'Other sessions revoked', tls_enabled: 'HTTPS turned on', refused_non_lan: 'Refused: outside LAN', cross_origin_refused: 'Refused: cross-origin' };
   const evClass = (e) => /failed|blocked|locked|refused/.test(e) ? 'bad' : /sensitive|changed|revoked|disabled/.test(e) ? 'warn' : '';
   view.innerHTML = `<h1>Security</h1>
     <p class="muted">Web server on ${st.https ? 'HTTPS' : 'HTTP'} port ${st.port} · ${st.sessions.length} active session${st.sessions.length === 1 ? '' : 's'} · ${st.failedLogins24h} failed sign-in${st.failedLogins24h === 1 ? '' : 's'} in 24 h · ${st.banned.length} address${st.banned.length === 1 ? '' : 'es'} locked out</p>
@@ -1194,8 +1254,9 @@ views.security = async () => {
         <div class="inline"><button class="primary" id="pwChange">Change password</button><span class="muted tiny">Signs out every other session.</span></div>
         <h3 style="margin-top:16px">Options</h3>
         <div class="field"><label>LAN only</label><input type="checkbox" id="optLan" ${st.lanOnly ? 'checked' : ''}><div class="hint">Refuse connections from outside private address ranges. Leave on unless you know why.</div></div>
-        <div class="field"><label>Idle sign-out</label><div class="inline"><input type="number" id="optIdle" min="0" max="10080" value="${st.idleMinutes}" style="width:90px"> <span class="muted">minutes (0 = off)</span></div></div>
+        <div class="field"><label>Idle sign-out</label><div class="inline"><input type="number" id="optIdle" min="0" max="10080" value="${st.idleMinutes}" style="width:90px"> <span class="muted">minutes (0 = off)</span><button class="small" id="optIdleSave">Save</button></div></div>
         <div class="field"><label>Guest access</label><input type="checkbox" id="optGuest" ${st.guestEnabled ? 'checked' : ''}><div class="hint">Anyone on the LAN can open the page without signing in and see library statistics and lists, and file media requests. Guests never see adult content, issues, settings or any control.</div></div>
+        ${st.guestEnabled ? `<div class="field"><label>Guest link</label><div class="inline" style="align-items:flex-start;gap:14px"><div class="qrbox">${qrSvg(location.origin + '/', { size: 132, label: 'Guest link' })}</div><div class="muted tiny">Anyone on your Wi-Fi can scan this to open <span class="mono">${esc(location.origin)}</span> as a guest. Screenshot it or print this page and put it by the TV.</div></div></div>` : ''}
         <div class="inline"><button id="optSave">Save options</button></div>
         <h3 style="margin-top:16px">Users</h3>
         <table><thead><tr><th>User</th><th>Role</th><th>Last sign-in</th><th>Sessions</th><th></th></tr></thead><tbody>${st.users.map(u => `<tr><td><b>${esc(u.username)}</b>${st.me && u.username === st.me.username ? ' <span class="badge ok">you</span>' : ''}</td><td><select class="small uRole" data-u="${esc(u.username)}"><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option><option value="standard" ${u.role === 'standard' ? 'selected' : ''}>standard</option></select></td><td class="muted">${u.lastLogin ? ago(u.lastLogin) : 'never'}</td><td>${u.sessions}</td><td class="nowrap"><button class="small uReset" data-u="${esc(u.username)}">Reset password</button> <button class="small uDel" data-u="${esc(u.username)}">✕</button></td></tr>`).join('')}</tbody></table>
@@ -1206,6 +1267,16 @@ views.security = async () => {
         ${st.totpEnabled
           ? `<p>Sign-in requires your password and a 6-digit code from your authenticator app.</p><div class="field"><label>Password</label><input type="password" id="totpPw"></div><div class="inline"><button class="danger" id="totpOff">Turn off 2FA</button></div>`
           : `<p class="muted">Adds a code from Google Authenticator, Aegis, Bitwarden, 1Password or any TOTP app. Even a leaked password then cannot sign in.</p><div id="totpBox"><button class="primary" id="totpStart">Set up 2FA</button></div>`}
+        <h3 style="margin-top:16px">HTTPS ${st.https ? '<span class="right ok">on</span>' : '<span class="right muted">off</span>'}</h3>
+        ${st.https
+          ? `<p class="muted">Traffic between browsers and this server is encrypted with a self-signed certificate on port ${st.port}. Each device warns once until the certificate is installed on it.</p><div class="inline"><a href="tls/cert.pem" download="medialedger-cert.pem"><button>Download certificate</button></a></div>`
+          : `<p class="muted">Encrypts the traffic between browsers and this server with a self-signed certificate made here, for every name and address the server answers to. The service restarts, sign-in sessions are kept${st.tlsPort !== st.port ? `, and the site moves to port ${st.tlsPort} with a redirect left on ${st.port}` : ''}.</p><div class="inline"><button class="primary" id="tlsOn" ${st.opensslAvailable ? '' : 'disabled title="openssl is not installed on the server"'}>Turn on HTTPS</button></div>`}
+        <details style="margin-top:8px"><summary class="muted tiny" style="cursor:pointer">Removing the browser warning: install the certificate once per device</summary><div class="tiny" style="margin-top:6px;line-height:1.6">
+          <b>Windows</b>: download it, double-click → Install Certificate → Local Machine → Place all certificates in the following store → <i>Trusted Root Certification Authorities</i>. Restart the browser.<br>
+          <b>Android</b>: download it, then Settings → Security → Encryption &amp; credentials → Install a certificate → <i>CA certificate</i> → pick the file. Chrome trusts it at once.<br>
+          <b>iPhone / iPad</b>: open the download in Safari, allow the profile, then Settings → General → VPN &amp; Device Management → install it, and finally Settings → General → About → Certificate Trust Settings → switch it on.<br>
+          <b>macOS</b>: double-click → Keychain Access → find it under System → Get Info → Trust → Always Trust.<br>
+          The certificate lasts ten years. If you later add a new name for the Pi, delete <span class="mono">tls/</span> in the data folder, restart, and turn HTTPS on again so the new name is included.</div></details>
         <h3 style="margin-top:16px">Sessions</h3>
         <table><thead><tr><th>User</th><th>Where</th><th>Browser</th><th>Last seen</th><th></th></tr></thead><tbody>${st.sessions.map(s => `<tr><td>${esc(s.user || '')} <span class="muted tiny">${esc(s.role || '')}</span></td><td>${esc(s.ip || '')}${s.current ? ' <span class="badge ok">this</span>' : ''}</td><td class="muted tiny" title="${esc(s.ua)}">${esc((s.ua || '').replace(/^Mozilla\/5\.0 /, '').slice(0, 48))}</td><td>${ago(s.lastSeen)}</td><td>${s.current ? '' : `<button class="small revoke" data-id="${s.id}">Sign out</button>`}</td></tr>`).join('')}</tbody></table>
         <div class="inline" style="margin-top:8px"><button id="revokeOthers" ${st.sessions.length > 1 ? '' : 'disabled'}>Sign out other sessions</button><button id="logoutBtn">Sign out here</button></div>
@@ -1217,7 +1288,14 @@ views.security = async () => {
     <p class="muted tiny">Lockout after ${st.limits.lockFails} failures in ${st.limits.lockMinutes} min · sensitive actions ask for the password again after ${st.limits.reauthMinutes} min · sessions last ${st.limits.sessionDays} days · full log in ${esc(st.dataDir)}/security.log</p></div>`;
   const act = async (fn, okMsg) => { try { await fn(); if (okMsg) toast(okMsg); views.security(); } catch (e) { toast(e.message, true); } };
   $('#pwChange').onclick = () => { if ($('#pwNew').value !== $('#pwNew2').value) return toast('New passwords differ', true); act(() => L.security.changePassword($('#pwCur').value, $('#pwNew').value), 'Password changed'); };
-  $('#optSave').onclick = () => act(() => L.security.setOptions({ lanOnly: $('#optLan').checked, idleMinutes: Number($('#optIdle').value), guestEnabled: $('#optGuest').checked }), 'Options saved');
+  const saveOptions = () => act(() => L.security.setOptions({ lanOnly: $('#optLan').checked, idleMinutes: Number($('#optIdle').value), guestEnabled: $('#optGuest').checked }), 'Options saved');
+  $('#optSave').onclick = saveOptions; $('#optIdleSave').onclick = saveOptions;
+  if ($('#tlsOn')) $('#tlsOn').onclick = () => { if (!confirm('Create a certificate and restart on HTTPS? Every browser will warn once until the certificate is installed on it.')) return; act(async () => {
+    const r = await L.security.tlsEnable();
+    const target = `https://${location.hostname}${r.port === 443 ? '' : ':' + r.port}/#security`;
+    toast(`Certificate created. Restarting on HTTPS; this page will open ${target} in a few seconds.`);
+    setTimeout(() => { location.href = target; }, 7000);
+  }); };
   $('#nuAdd').onclick = () => act(() => L.security.addUser($('#nuName').value, $('#nuPw').value, $('#nuRole').value), 'User added');
   document.querySelectorAll('.uRole').forEach(s => { s.onchange = () => act(() => L.security.setRole(s.dataset.u, s.value), 'Role changed'); });
   document.querySelectorAll('.uReset').forEach(b => { b.onclick = () => { const pw = prompt(`New password for ${b.dataset.u} (8+ characters). They will be signed out everywhere.`); if (pw) act(() => L.security.resetPassword(b.dataset.u, pw), 'Password reset'); }; });
@@ -1225,11 +1303,12 @@ views.security = async () => {
   $('#revokeOthers').onclick = () => act(() => L.security.revokeOthers(), 'Other sessions signed out');
   $('#logoutBtn').onclick = () => L.logout();
   document.querySelectorAll('.revoke').forEach(b => { b.onclick = () => act(() => L.security.revoke(b.dataset.id), 'Session signed out'); });
-  if ($('#totpStart')) $('#totpStart').onclick = () => act(async () => {
+  // Not through act(): that re-renders the tab and would wipe the QR code before it can be scanned.
+  if ($('#totpStart')) $('#totpStart').onclick = async () => { try {
     const r = await L.security.totpSetup();
-    $('#totpBox').innerHTML = `<p>1. In your authenticator app choose <b>Add account → enter key manually</b> and type this secret (or paste the link):</p><div class="secret">${esc(r.secret.replace(/(.{4})/g, '$1 ').trim())}</div><p class="muted tiny mono" style="word-break:break-all">${esc(r.url)}</p><p>2. Enter the 6-digit code it shows to confirm:</p><div class="inline"><input type="text" id="totpCode" inputmode="numeric" placeholder="000000" style="width:120px"><button class="primary" id="totpConfirm">Turn on 2FA</button></div>`;
+    $('#totpBox').innerHTML = `<p>1. In Google Authenticator (or Aegis, Bitwarden, 1Password…) tap <b>+</b> → <b>Scan a QR code</b> and point the camera here:</p><div class="qrbox">${qrSvg(r.url, { size: 184, label: 'Two-factor setup code' })}</div><p class="muted tiny" style="margin-top:8px">No camera? Choose <b>Enter a setup key</b> instead and type this secret (time-based, 6 digits):</p><div class="secret">${esc(r.secret.replace(/(.{4})/g, '$1 ').trim())}</div><p class="muted tiny mono" style="word-break:break-all">${esc(r.url)}</p><p>2. Enter the 6-digit code it shows to confirm:</p><div class="inline"><input type="text" id="totpCode" inputmode="numeric" placeholder="000000" style="width:120px"><button class="primary" id="totpConfirm">Turn on 2FA</button></div>`;
     $('#totpConfirm').onclick = () => act(() => L.security.totpEnable($('#totpCode').value), 'Two-factor codes are on');
-  });
+  } catch (e) { toast(e.message, true); } };
   if ($('#totpOff')) $('#totpOff').onclick = () => act(() => L.security.totpDisable($('#totpPw').value), 'Two-factor codes are off');
 };
 

@@ -50,6 +50,8 @@ if (process.argv.includes('--set-password')) {
 const tlsDir = path.join(dataDir, 'tls');
 let tls = null;
 try { tls = { cert: fs.readFileSync(path.join(tlsDir, 'cert.pem')), key: fs.readFileSync(path.join(tlsDir, 'key.pem')) }; } catch { /* plain http */ }
+// A port-80 install that turns on HTTPS serves on 443 and leaves a redirect on 80, so http://name keeps working.
+const servePort = tls && port === 80 ? 443 : port;
 
 // ---- core ------------------------------------------------------------------------------
 const clients = new Set(); // SSE responses
@@ -63,7 +65,7 @@ const GUEST = new Set(['app:info', 'security:me', 'data:dashboard', 'data:series
 // A standard user: everything a guest may, plus the review pages, own ratings, the adult switch for their own session.
 const STANDARD = new Set([...GUEST, 'data:problems', 'data:duplicates', 'data:missing', 'data:quality', 'data:changes', 'data:changeStats', 'movie:plan', 'movie:batches', 'movie:batchItems', 'rename:proposals', 'rename:history', 'export:list', 'override:list', 'override:suggest', 'meta:status', 'plex:status', 'watch:status', 'schedule:nextInApp', 'db:stats', 'settings:get', 'adult:toggle', 'ratings:setUser', 'security:changePassword']);
 // Admins: every channel. Actions that write to the share or throw data away also need a fresh password (re-auth).
-const SENSITIVE = new Set(['plex:webhookSet', 'movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']);
+const SENSITIVE = new Set(['security:tlsEnable', 'plex:webhookSet', 'movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']);
 const isSensitive = (ch, args) => ch === 'movie:run' ? !!(args[1] && args[1].live) : SENSITIVE.has(ch);
 const allowed = (role, ch) => role === 'admin' || (role === 'standard' ? STANDARD.has(ch) : GUEST.has(ch));
 // Settings hold secrets (Plex token, GitHub token); a standard user sees them blanked.
@@ -101,7 +103,28 @@ const webHandlers = new Map([
   ['requests:add', (ctx, r) => svc.handlers.get('requests:add')({ ...(r || {}), requested_by: ctx.role === 'guest' ? `guest: ${String((r || {}).requested_by || 'anonymous').slice(0, 40)}` : ctx.session.user })],
   // security
   ['security:me', (ctx) => ({ available: true, guest: ctx.role === 'guest', username: ctx.session ? ctx.session.user : null, role: ctx.role, guestEnabled: sec.guestEnabled(), hasUsers: sec.hasPassword() })],
-  ['security:status', (ctx) => sec.status(ctx.session, { available: true, https: !!tls, port, bindHost, dataDir, checks: posture() })],
+  ['security:status', (ctx) => sec.status(ctx.session, { available: true, https: !!tls, port: servePort, tlsPort: port === 80 ? 443 : port, bindHost, dataDir, checks: posture(), opensslAvailable: hasOpenssl() })],
+  // Creates a self-signed certificate for every name this Pi answers to, then exits so systemd restarts the service on HTTPS.
+  ['security:tlsEnable', (ctx) => {
+    if (tls) return { ok: true, already: true, port: servePort };
+    if (!hasOpenssl()) throw new Error('openssl is not installed on this server (sudo apt install openssl)');
+    fs.mkdirSync(tlsDir, { recursive: true, mode: 0o700 });
+    const isIp = (h) => /^\d+(\.\d+){3}$/.test(h);
+    const names = new Set(), ips = new Set();
+    const hostHdr = String(ctx.req.headers.host || '').replace(/:\d+$/, '');
+    for (const h of [hostHdr, os.hostname() + '.local', os.hostname()]) if (h) (isIp(h) ? ips : names).add(h.toLowerCase());
+    try { const d = fs.readFileSync('/etc/medialedger-domain', 'utf8').trim(); if (d) names.add(d.toLowerCase()); } catch { /* no custom domain */ }
+    for (const i of Object.values(os.networkInterfaces()).flat()) if (i && i.family === 'IPv4' && !i.internal) ips.add(i.address);
+    const san = [...names].map(n => 'DNS:' + n).concat([...ips].map(i => 'IP:' + i)).join(',');
+    const cn = [...names][0] || [...ips][0];
+    const r = require('child_process').spawnSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '3650', '-subj', '/CN=' + cn, '-addext', 'subjectAltName=' + san, '-keyout', path.join(tlsDir, 'key.pem'), '-out', path.join(tlsDir, 'cert.pem')], { encoding: 'utf8', timeout: 60000 });
+    if (r.status !== 0) { try { fs.rmSync(path.join(tlsDir, 'key.pem'), { force: true }); fs.rmSync(path.join(tlsDir, 'cert.pem'), { force: true }); } catch { /* ignore */ } throw new Error('openssl failed: ' + ((r.stderr || '').trim().split('\n').pop() || (r.error && r.error.message) || 'unknown')); }
+    try { fs.chmodSync(path.join(tlsDir, 'key.pem'), 0o600); fs.chmodSync(path.join(tlsDir, 'cert.pem'), 0o600); } catch { /* windows */ }
+    sec.audit('tls_enabled', ctx.ip, san, ctx.session.user);
+    log(`HTTPS certificate created for ${san}; restarting`);
+    setTimeout(() => process.exit(0), 1500);
+    return { ok: true, san, port: port === 80 ? 443 : port };
+  }],
   ['security:changePassword', (ctx, current, next) => { sec.changePassword(ctx.session, current, next, ctx.ip); return true; }],
   ['security:totpSetup', () => sec.totpSetup(`${os.hostname()} admin`)],
   ['security:totpEnable', (ctx, code) => sec.totpEnable(code, ctx.ip, ctx.session.user)],
@@ -124,6 +147,8 @@ webHandlers.set('plex:webhookSet', (ctx, opts) => { sec.webhookSet(opts || {}, c
 const CTX_HANDLERS = new Set([...webHandlers.keys()].filter(k => k.startsWith('security:') || ['settings:get', 'adult:status', 'adult:toggle', 'requests:add', 'plex:webhookInfo', 'plex:webhookSet'].includes(k)));
 const handlers = new Map([...svc.handlers, ...webHandlers]);
 
+const hasOpenssl = () => { try { return require('child_process').spawnSync('openssl', ['version'], { encoding: 'utf8', timeout: 5000 }).status === 0; } catch { return false; } };
+
 // Security posture checklist shown at the top of the Security tab.
 function posture() {
   const st = sec.state;
@@ -134,7 +159,7 @@ function posture() {
   add(st.totp.enabled, 'Two-factor codes for admins', st.totp.enabled ? 'a phone code is required at admin sign-in' : 'optional: turn on below so a leaked admin password alone is not enough');
   add(st.lanOnly, 'LAN-only access', st.lanOnly ? 'connections from outside private address ranges are refused' : 'off: any address that can reach the port may try to sign in');
   add(!st.guestEnabled, 'Guest access', st.guestEnabled ? 'on: anyone on the LAN sees library statistics without signing in (never adult content, never controls)' : 'off: every page needs an account');
-  add(!!tls, 'HTTPS', tls ? 'serving TLS from <data>/tls' : 'plain HTTP: fine on a trusted LAN; see the Pi guide to enable TLS');
+  add(!!tls, 'HTTPS', tls ? `serving TLS on port ${servePort} from <data>/tls` : 'plain HTTP: fine on a trusted LAN; turn it on below');
   add(process.getuid ? process.getuid() !== 0 : true, 'Not running as root', process.getuid && process.getuid() === 0 ? 'the service runs as root; use the installer\'s medialedger user' : 'service user has no shell and no sudo', 'bad');
   try { const m = fs.statSync(path.join(dataDir, 'web.json')).mode & 0o777; add(process.platform === 'win32' || m === 0o600, 'Secrets file permissions', `web.json mode ${m.toString(8)}`); } catch { /* none */ }
   try { const m = fs.statSync('/etc/medialedger-cifs.cred').mode & 0o777; add(m === 0o600, 'Share credentials file', `/etc/medialedger-cifs.cred mode ${m.toString(8)}, root only`); } catch { /* not the Pi install */ }
@@ -215,6 +240,12 @@ async function handle(req, res) {
       return json(res, 200, { ok: true, result: result === undefined ? null : result });
     }
 
+    // The public half of the self-signed certificate, for installing on phones and PCs (any signed-in session).
+    if (url.pathname === '/tls/cert.pem') {
+      if (!tls || !sec.sessionOf(req.headers.cookie)) { res.writeHead(404); return res.end('not found'); }
+      res.writeHead(200, { 'content-type': 'application/x-x509-ca-cert', 'content-disposition': 'attachment; filename="medialedger-cert.pem"', 'cache-control': 'no-store' });
+      return fs.createReadStream(path.join(tlsDir, 'cert.pem')).pipe(res);
+    }
     // Export downloads (admin session): /exports/<folder>/<file.csv> or /exports/<file.zip> from the export directory.
     if (url.pathname.startsWith('/exports/')) {
       const session = sec.sessionOf(req.headers.cookie);
@@ -245,8 +276,11 @@ server.requestTimeout = 0;       // a scan request legitimately runs for minutes
 server.headersTimeout = 60000;
 server.keepAliveTimeout = 65000;
 
-server.listen(port, bindHost, () => {
-  log(`MediaLedger ${pkg.version} web server on ${tls ? 'https' : 'http'}://${bindHost}:${port} (data: ${dataDir}, LAN-only: ${sec.state.lanOnly}, guest: ${sec.guestEnabled()})`);
+server.listen(servePort, bindHost, () => {
+  log(`MediaLedger ${pkg.version} web server on ${tls ? 'https' : 'http'}://${bindHost}:${servePort} (data: ${dataDir}, LAN-only: ${sec.state.lanOnly}, guest: ${sec.guestEnabled()})`);
+  if (servePort !== port) {
+    http.createServer((req, res) => { res.writeHead(301, { location: `https://${String(req.headers.host || os.hostname() + '.local').replace(/:\d+$/, '')}${req.url}` }); res.end(); }).listen(port, bindHost, () => log(`http://:${port} redirects to https`));
+  }
   if (!sec.hasPassword()) log('No account yet: run with --set-password to create "admin" before anyone can sign in.');
   svc.scheduler.start(); svc.watcher.apply();
   const s = svc.settings.get();

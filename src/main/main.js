@@ -198,7 +198,7 @@ function createWindow() {
   h('security:me', () => ({ available: false, guest: false, username: null, role: 'admin' })); // the desktop user owns the machine
   h('plex:webhookInfo', () => ({ available: false })); // Plex can only call an always-on server
   h('plex:webhookSet', () => { throw new Error('Only available on the web server'); });
-  for (const ch of ['security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revoke', 'security:revokeOthers', 'security:users', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']) h(ch, () => { throw new Error('Only available on the web server'); });
+  for (const ch of ['security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revoke', 'security:revokeOthers', 'security:users', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser', 'security:tlsEnable']) h(ch, () => { throw new Error('Only available on the web server'); });
 
   // Everything else comes from the core, unchanged in name and signature.
   for (const [ch, fn] of svc.handlers) h(ch, fn);

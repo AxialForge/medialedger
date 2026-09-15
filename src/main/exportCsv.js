@@ -168,7 +168,7 @@ const SETS = {
 };
 
 /**
- * @param {object} [opts]  { sets: ['tv','anime',...] (default all), zip: boolean }
+ * @param {object} [opts]  { sets: ['tv','anime',...] (default all), zip: boolean, zipMin: number (zip only when at least this many files were written; default 1) }
  * @returns {{ dir, latest, files, rows, zip: string|null, sets: string[] }}
  */
 function exportAll(db, outDir, scanId, settings, opts = {}) {
@@ -181,7 +181,7 @@ function exportAll(db, outDir, scanId, settings, opts = {}) {
   fs.mkdirSync(latest, { recursive: true });
   for (const f of written) fs.copyFileSync(path.join(dir, f), path.join(latest, f));
   let zip = null;
-  if (opts.zip) { zip = path.join(outDir, `medialedger-${stamp}.zip`); writeZip(zip, written.map(f => ({ name: f, file: path.join(dir, f) }))); fs.copyFileSync(zip, path.join(latest, 'medialedger-latest.zip')); }
+  if (opts.zip && written.length >= Math.max(1, Number(opts.zipMin) || 1)) { zip = path.join(outDir, `medialedger-${stamp}.zip`); writeZip(zip, written.map(f => ({ name: f, file: path.join(dir, f) }))); fs.copyFileSync(zip, path.join(latest, 'medialedger-latest.zip')); }
   const rows = db.get('SELECT COUNT(*) n FROM files WHERE ignored=0').n;
   return { dir, latest, files: written, rows, zip, sets };
 }
