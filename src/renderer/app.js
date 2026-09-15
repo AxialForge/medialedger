@@ -83,6 +83,20 @@ function searchToolbar(table, total, extra = '') {
   $('input', tb).oninput = e => table.setQuery(e.target.value);
   return tb;
 }
+// Dropdown filters over a list's rows (genre, sub/dub, your tag, watched). `rebuild(rows)` swaps the table for the filtered rows.
+function filterBar(rows, rebuild, { watched = true } = {}) {
+  const uniq = (get) => [...new Set(rows.flatMap(get).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const genres = uniq(r => r.genres || []), tags = uniq(r => r.tags || []), audios = uniq(r => r.audio_type ? [r.audio_type] : []);
+  const sel = (id, label, opts) => `<select id="${id}" class="small"><option value="">${label}</option>${opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>`;
+  const bar = el(`<div class="toolbar filterbar">${sel('fGenre', 'any genre', genres.map(g => [g, g]))}${sel('fAudio', 'sub or dub', audios.map(a => [a, AUDIO_LABEL[a] || a]))}${sel('fTag', 'any tag', tags.map(t => [t, t]))}${watched ? sel('fWatched', 'watched or not', [['unwatched', 'unwatched'], ['started', 'partly watched'], ['watched', 'watched'], ['unknown', 'not in Plex']]) : ''}<button class="small" id="fClear" hidden>Clear filters</button></div>`);
+  const state = () => ({ genre: $('#fGenre', bar).value, audio: $('#fAudio', bar).value, tag: $('#fTag', bar).value, watched: watched ? $('#fWatched', bar).value : '' });
+  const pass = (r, f) => (!f.genre || (r.genres || []).includes(f.genre)) && (!f.audio || r.audio_type === f.audio) && (!f.tag || (r.tags || []).includes(f.tag))
+    && (!f.watched || (r.unwatched == null ? f.watched === 'unknown' : f.watched === 'unwatched' ? r.unwatched > 0 && r.watched === 0 : f.watched === 'started' ? r.watched > 0 && r.unwatched > 0 : f.watched === 'watched' ? r.unwatched === 0 : false));
+  const apply = () => { const f = state(); const any = Object.values(f).some(Boolean); $('#fClear', bar).hidden = !any; rebuild(any ? rows.filter(r => pass(r, f)) : rows); };
+  bar.querySelectorAll('select').forEach(x => { x.onchange = apply; });
+  $('#fClear', bar).onclick = () => { bar.querySelectorAll('select').forEach(x => { x.value = ''; }); apply(); };
+  return bar;
+}
 const tile = (cls, label, value, sub = '') => `<div class="tile ${cls}"><div class="label">${label}</div><div class="value" title="${esc(String(value).replace(/<[^>]+>/g, ''))}">${value}</div><div class="sub">${sub}</div></div>`;
 function bars(rows, title, { order, legend = true, max: maxLimit = 10, keyLabel = k => k } = {}) {
   const keys = [...new Set(rows.map(r => String(r.k ?? 'unknown')))];
@@ -323,11 +337,27 @@ async function refreshTagSuggestions() {
   try { const all = await L.tags.all(); let dl = $('#tagSuggest'); if (!dl) { dl = el('<datalist id="tagSuggest"></datalist>'); document.body.append(dl); } dl.innerHTML = all.map(t => `<option value="${esc(t.tag)}">`).join(''); } catch { /* guest or offline */ }
 }
 
+// ---------- storage forecast ---------------------------------------------------
+const fmtMonths = (m) => m == null ? '' : m > 120 ? 'over 10 years' : m >= 24 ? `${(m / 12).toFixed(1)} years` : `${Math.round(m)} month${Math.round(m) === 1 ? '' : 's'}`;
+function storageTile(st) {
+  if (!st.disks.length) return tile('', 'Free on the share', '—', 'no root reachable');
+  const cls = st.monthsLeft != null && st.monthsLeft < 3 ? 'badt' : st.monthsLeft != null && st.monthsLeft < 12 ? 'warnt' : 'okt';
+  return tile(cls, 'Free on the share', fmtBytes(st.free), st.monthsLeft != null ? `full in about ${fmtMonths(st.monthsLeft)} at ${fmtBytes(st.perMonth)}/month` : st.basis ? 'nothing added lately' : 'growth unknown yet');
+}
+function storagePanel(st) {
+  const max = Math.max(1, ...st.months.map(m => m.bytes || 0));
+  const usedPct = st.capacity ? Math.round(100 * (st.capacity - st.free) / st.capacity) : 0;
+  return `<div class="card" style="margin-top:12px"><h3>Storage <span class="muted tiny">added per month, from when each file was first seen</span></h3>
+    <div class="bars">${st.months.map(m => `<div class="row"><span class="k">${esc(m.ym)}</span><div class="track"><div class="seg added" style="width:${Math.round(100 * (m.bytes || 0) / max)}%"></div></div><span class="n">${fmtBytes(m.bytes || 0)} <span class="muted tiny">${m.files} files</span></span></div>`).join('') || '<div class="muted">No dated files yet.</div>'}</div>
+    <p class="muted tiny" style="margin:8px 0 0">${st.disks.map(d => `${esc(d.label)}: ${fmtBytes(d.free)} free of ${fmtBytes(d.total)}`).join(' · ')}${st.capacity ? ` · ${usedPct}% used` : ''}${st.basis ? ` · average of the last ${st.basis} complete month${st.basis === 1 ? '' : 's'}: ${fmtBytes(st.perMonth)}/month` : ''}${st.monthsLeft != null ? ` · <b>full in about ${fmtMonths(st.monthsLeft)}</b>` : ''}</p></div>`;
+}
+
 // ---------- views -----------------------------------------------------------
 const views = {};
 
 views.dashboard = async () => {
   const d = await L.data.dashboard();
+  L.storage().then(st => { const t = $('#storageTile'); if (!t) return; t.outerHTML = storageTile(st); view.append(el(storagePanel(st))); }).catch(() => {});
   const t = Object.fromEntries(d.byType.map(r => [r.library_type, r]));
   const tot = d.byType.reduce((a, r) => ({ files: a.files + r.files, bytes: a.bytes + (r.bytes || 0), seconds: a.seconds + (r.seconds || 0), probed: a.probed + r.probed, captioned: a.captioned + r.captioned }), { files: 0, bytes: 0, seconds: 0, probed: 0, captioned: 0 });
   const capPct = r => r && r.probed ? pct(r.captioned, r.files) + '% captioned' : 'not probed yet';
@@ -352,6 +382,7 @@ views.dashboard = async () => {
       ${tile('', 'Last scan', last ? fmtAgo(last.started) : 'never', last ? `${last.status} in ${fmtMs(last.duration_ms)} · +${last.added} −${last.removed} ~${last.modified}` : 'Run a scan to populate the library')}
       ${tile('', 'Manual fixes', d.overrides, d.overrides ? 'applied on every scan' : 'none needed yet')}
       ${tile('', 'Last export', d.lastExport ? fmtAgo(d.lastExport.ts) : 'never', d.lastExport ? `${JSON.parse(d.lastExport.files || '[]').length} CSV files` : '')}
+      <div id="storageTile"></div>
     </div>
     <div class="tiles compact">
       ${tile(d.missingEpisodes.episodes ? 'badt' : 'okt', 'Missing episodes', d.missingEpisodes.episodes.toLocaleString(), `${d.missingEpisodes.series} series · ${d.missingEpisodes.matched} matched · ${d.missingEpisodes.unmatched} unmatched${d.missingEpisodes.pending ? ` · ${d.missingEpisodes.pending} pending` : ''}`)}
@@ -409,12 +440,64 @@ async function seriesView(type) {
     { key: 'missing_count', label: 'Missing', num: true, sortVal: r => r.expected ? r.missing_count : -1, render: r => r.expected ? (r.missing_count ? `<span class="badge bad">${r.missing_count}</span> <span class="muted tiny">of ${r.expected}</span>` : '<span class="badge ok">complete</span>') : (r.meta_source === 'none' ? '<span class="badge" title="no match found">no match</span>' : '<span class="muted">—</span>') },
     { key: 'unparsed', label: 'Issues', num: true, render: r => (r.unparsed ? `<span class="badge warn">${r.unparsed} unparsed</span>` : '') + (r.probed < r.episodes ? `<span class="badge">${r.episodes - r.probed} unprobed</span>` : '') },
   ];
-  const table = makeTable(rows, cols, { search: r => `${r.show_name} ${tagText(r)}`, defaultSort: { key: 'show_name' }, onRow: r => { location.hash = `#${type}/${encodeURIComponent(r.show_name)}`; } });
+  rows.forEach(r => { r.unwatched = r.plex_linked ? r.episodes - r.watched : null; });
+  const build = (list) => makeTable(list, cols, { search: r => `${r.show_name} ${tagText(r)}`, defaultSort: { key: 'show_name' }, onRow: r => { location.hash = `#${type}/${encodeURIComponent(r.show_name)}`; } });
+  let table = build(rows);
   const eps = rows.reduce((a, r) => a + r.episodes, 0), bytes = rows.reduce((a, r) => a + (r.bytes || 0), 0), secs = rows.reduce((a, r) => a + (r.seconds || 0), 0);
   view.innerHTML = `<h1>${typeName(type)}</h1><div class="tiles compact"><div class="tile ${type}"><div class="label">Series</div><div class="value">${rows.length}</div></div>${tile('', 'Episodes', eps.toLocaleString())}${tile('', 'Size', fmtBytes(bytes))}${tile('', 'Runtime', fmtHours(secs))}${tile('', 'Full captions', rows.filter(r => r.probed && r.captioned === r.episodes).length + ' series')}${tile('', 'With issues', rows.filter(r => r.unparsed).length + ' series')}</div>`;
-  view.append(searchToolbar(table, rows.length, '<span class="muted tiny">Filter also matches genres, sub/dub and your tags</span>'), table.node);
+  const tb = searchToolbar(table, rows.length, '<span class="muted tiny">Filter also matches genres, sub/dub and your tags</span>');
+  const fb = filterBar(rows, (list) => { const q = $('input[type=search]', tb).value; const nt = build(list); table.node.replaceWith(nt.node); table = nt; nt.node.addEventListener('count', ev => $('.count', tb).textContent = `${ev.detail} of ${rows.length}`); nt.setQuery(q); if (!q) $('.count', tb).textContent = `${list.length} of ${rows.length}`; });
+  view.append(tb, fb, table.node);
 }
 views.tv = () => seriesView('tv');
+
+// ---- Watch tonight: one list across series and movies, filtered by what you have not seen, how long you have, and your tags ----
+views.tonight = async () => {
+  const all = await L.tonight();
+  const pref = (() => { try { return JSON.parse(localStorage.getItem('medialedger.tonight') || '{}'); } catch { return {}; } })();
+  view.innerHTML = `<h1>Watch tonight</h1>
+    <p class="lead">Everything in the library on one list, narrowed by what Plex says you have not watched, how long you have, and your own ratings and tags. <b>Pick for me</b> chooses one at random from whatever is left.</p>
+    <div class="toolbar" style="flex-wrap:wrap;gap:8px">
+      <select id="tKind" class="small"><option value="">series and movies</option><option value="series">series only</option><option value="movie">movies only</option></select>
+      <label class="inline small"><input type="checkbox" id="tUnwatched" ${pref.unwatched !== false ? 'checked' : ''}> unwatched only</label>
+      <label class="inline small"><input type="checkbox" id="tComplete" ${pref.complete ? 'checked' : ''}> complete series only</label>
+      <label class="inline small">up to <input type="number" id="tMinutes" min="0" step="5" value="${pref.minutes || ''}" style="width:70px" placeholder="any"> min</label>
+      <label class="inline small">my rating ≥ <select id="tStars" class="small"><option value="">any</option><option value="1">★</option><option value="2">★★</option><option value="3">★★★</option><option value="4">★★★★</option><option value="5">★★★★★</option></select></label>
+      <span class="grow"></span><button class="primary" id="tPick">Pick for me</button>
+    </div>
+    <div id="tFilters"></div><div id="tPickBox"></div><div id="tTable"></div>`;
+  const cols = [
+    { key: 'title', label: 'Title', cls: 'wrap', render: r => `<span class="badge ${r.type}">${r.kind === 'movie' ? 'Movie' : typeName(r.type)}</span> ${esc(r.title)}${r.year ? ` <span class="muted">(${r.year})</span>` : ''}` },
+    { key: 'tags', label: 'Tags', cls: 'wrap tagcell', render: tagCell },
+    { key: 'minutes', label: 'Length', num: true, render: r => r.kind === 'movie' ? fmtDur(r.minutes * 60) : `${r.minutes} min × ${r.episodes}` },
+    { key: 'unwatched', label: 'Unwatched', num: true, sortVal: r => r.unwatched == null ? -1 : r.unwatched, render: r => r.unwatched == null ? '<span class="muted">not in Plex</span>' : r.kind === 'movie' ? (r.unwatched ? 'yes' : '<span class="muted">seen</span>') : `${r.unwatched} of ${r.episodes}` },
+    { key: 'complete', label: 'Complete', render: r => r.kind === 'movie' ? '' : r.complete == null ? '<span class="muted">unknown</span>' : r.complete ? '<span class="badge ok">yes</span>' : '<span class="badge warn">gaps</span>' },
+    { key: 'my_rating', label: 'Mine', sortVal: r => r.my_rating || 0, render: r => starsHtml(r.my_rating, r.type, r.key, r.title) },
+    { key: 'online_rating', label: 'Rating', num: true, render: r => r.online_rating != null ? Number(r.online_rating).toFixed(1) : '<span class="muted">—</span>' },
+    { key: 'resolution', label: 'Best', render: r => r.resolution ? `<span class="badge">${esc(r.resolution)}</span>` : '' },
+    { key: 'last_added', label: 'Added', render: r => fmtAgo(r.last_added) },
+  ];
+  let current = all;
+  const build = (list) => makeTable(list, cols, { search: r => `${r.title} ${tagText(r)}`, defaultSort: { key: 'last_added', asc: false }, onRow: r => { location.hash = r.kind === 'movie' ? '#movies/' + encodeURIComponent(r.key) : `#${r.type}/${encodeURIComponent(r.key)}`; } });
+  let table = build(all); $('#tTable').append(table.node);
+  const base = () => {
+    const kind = $('#tKind').value, unw = $('#tUnwatched').checked, comp = $('#tComplete').checked, mins = Number($('#tMinutes').value) || 0, stars = Number($('#tStars').value) || 0;
+    try { localStorage.setItem('medialedger.tonight', JSON.stringify({ unwatched: unw, complete: comp, minutes: mins || '' })); } catch { /* ignore */ }
+    return all.filter(r => (!kind || r.kind === kind) && (!unw || r.unwatched == null || r.unwatched > 0) && (!comp || r.kind === 'movie' || r.complete) && (!mins || (r.kind === 'movie' ? r.minutes <= mins : r.minutes <= mins)) && (!stars || (r.my_rating || 0) >= stars));
+  };
+  const fb = filterBar(all, (list) => { const keys = new Set(list.map(r => r.type + '|' + r.key)); current = base().filter(r => keys.has(r.type + '|' + r.key)); const nt = build(current); table.node.replaceWith(nt.node); table = nt; }, { watched: false });
+  $('#tFilters').append(fb);
+  const refresh = () => { const f = { genre: $('#fGenre', fb).value, audio: $('#fAudio', fb).value, tag: $('#fTag', fb).value }; current = base().filter(r => (!f.genre || (r.genres || []).includes(f.genre)) && (!f.audio || r.audio_type === f.audio) && (!f.tag || (r.tags || []).includes(f.tag))); const nt = build(current); table.node.replaceWith(nt.node); table = nt; };
+  ['#tKind', '#tUnwatched', '#tComplete', '#tMinutes', '#tStars'].forEach(id => { $(id).onchange = refresh; $(id).oninput = refresh; });
+  refresh();
+  $('#tPick').onclick = () => {
+    if (!current.length) return toast('Nothing matches; loosen the filters', true);
+    const r = current[Math.floor(Math.random() * current.length)];
+    $('#tPickBox').innerHTML = `<div class="card" style="margin:10px 0;border-color:var(--accent)"><h3>Tonight: <span class="badge ${r.type}">${r.kind === 'movie' ? 'Movie' : typeName(r.type)}</span> ${esc(r.title)}${r.year ? ` (${r.year})` : ''}</h3><div class="tagcell">${tagCell(r)}</div><p class="muted">${r.kind === 'movie' ? fmtDur(r.minutes * 60) : `${r.episodes} episodes of about ${r.minutes} min${r.unwatched != null ? `, ${r.unwatched} unwatched` : ''}`}${r.online_rating != null ? ` · rated ${Number(r.online_rating).toFixed(1)}` : ''}</p><div class="inline"><button class="small" id="tOpen">Open</button><button class="small" id="tAgain">Pick another</button></div></div>`;
+    $('#tOpen').onclick = () => { location.hash = r.kind === 'movie' ? '#movies/' + encodeURIComponent(r.key) : `#${r.type}/${encodeURIComponent(r.key)}`; };
+    $('#tAgain').onclick = () => $('#tPick').click();
+  };
+};
 views.anime = () => seriesView('anime');
 
 // "S3: 5,7; S6–S12 entirely" — whole missing seasons collapse into ranges, partial ones list episodes.
@@ -482,14 +565,17 @@ views.movies = async () => {
     { key: 'has_captions', label: 'Captions', render: r => r.probed ? yn(r.has_captions) : '<span class="muted">—</span>' },
     { key: 'bytes', label: 'Size', num: true, render: r => fmtBytes(r.bytes) },
   ];
-  let onlyMulti = false;
-  const build = () => makeTable(onlyMulti ? rows.filter(r => r.files > 1) : rows, cols, { search: r => `${r.title} ${r.year || ''} ${tagText(r)}`, defaultSort: { key: 'title' }, onRow: r => { location.hash = '#movies/' + encodeURIComponent(r.group_key); } });
+  rows.forEach(r => { r.watched = r.watched_count > 0 ? 1 : 0; r.unwatched = r.plex_linked ? (r.watched_count > 0 ? 0 : 1) : null; });
+  let onlyMulti = false, filtered = rows;
+  const build = () => makeTable((onlyMulti ? filtered.filter(r => r.files > 1) : filtered), cols, { search: r => `${r.title} ${r.year || ''} ${tagText(r)}`, defaultSort: { key: 'title' }, onRow: r => { location.hash = '#movies/' + encodeURIComponent(r.group_key); } });
   let table = build();
   const multi = rows.filter(r => r.files > 1);
   view.innerHTML = `<h1>Movies</h1><div class="tiles compact"><div class="tile movie"><div class="label">Titles</div><div class="value">${rows.length}</div></div>${tile('', 'Files', rows.reduce((a, r) => a + r.files, 0))}${tile('', 'Size', fmtBytes(rows.reduce((a, r) => a + (r.bytes || 0), 0)))}${tile(multi.length ? 'warnt' : '', 'Multiples', multi.length + ' titles', fmtBytes(multi.reduce((a, r) => a + (r.bytes || 0), 0)))}${tile('', 'With captions', rows.filter(r => r.has_captions === 1).length)}</div>`;
   const tb = searchToolbar(table, rows.length, '<label class="inline small"><input type="checkbox" id="multi"> Only titles with multiple files</label>');
-  view.append(tb, table.node);
-  $('#multi', tb).onchange = e => { onlyMulti = e.target.checked; const q = $('input[type=search]', tb).value; const nt = build(); table.node.replaceWith(nt.node); table = nt; nt.node.addEventListener('count', ev => $('.count', tb).textContent = `${ev.detail} of ${rows.length}`); nt.setQuery(q); };
+  const swap = () => { const q = $('input[type=search]', tb).value; const nt = build(); table.node.replaceWith(nt.node); table = nt; nt.node.addEventListener('count', ev => $('.count', tb).textContent = `${ev.detail} of ${rows.length}`); nt.setQuery(q); };
+  const fb = filterBar(rows, (list) => { filtered = list; swap(); });
+  view.append(tb, fb, table.node);
+  $('#multi', tb).onchange = e => { onlyMulti = e.target.checked; swap(); };
 };
 
 async function movieFilesView(groupKey) {
@@ -859,9 +945,9 @@ views.movienames = async () => {
   };
   $('#mSelNone').onclick = () => { selected.clear(); render(); };
   // ---- name parts: ordered chips, off = left out of every name. Saved with the batch settings; the plan is rebuilt by the core.
-  const PART_LABEL = { source: 'Source', resolution: 'Resolution', hdr: 'HDR/SDR', codec: 'Codec', audio: '[Audio]', edition: '{edition}' };
-  const PART_SAMPLE = { source: 'Web', resolution: '1080p', hdr: 'SDR', codec: 'H264', audio: '[eng]', edition: '{edition-Extended}' };
-  const ALL_PARTS = ['source', 'resolution', 'hdr', 'codec', 'audio', 'edition'];
+  const PART_LABEL = { source: 'Source', resolution: 'Resolution', hdr: 'HDR/SDR', codec: 'Codec', audio: '[Audio]', edition: '{edition}', dubsub: 'Sub/Dub' };
+  const PART_SAMPLE = { source: 'Web', resolution: '1080p', hdr: 'SDR', codec: 'H264', audio: '[eng]', edition: '{edition-Extended}', dubsub: 'Sub' };
+  const ALL_PARTS = ['source', 'resolution', 'hdr', 'codec', 'audio', 'edition', 'dubsub']; // dubsub is off unless you switch it on
   let parts = Array.isArray(mr.parts) ? mr.parts.filter(p => ALL_PARTS.includes(p)) : ALL_PARTS.slice();
   const partsOrder = () => [...parts, ...ALL_PARTS.filter(p => !parts.includes(p))];
   const renderParts = () => {
@@ -1080,6 +1166,7 @@ views.settings = async () => {
       <h2>Data</h2>
       <div class="field"><label>Database</label><div class="status-line"><span class="mono">${esc(info.dbFile)}</span><br><span class="muted">${fmtBytes(info.db.size)} · schema v${info.db.version} · ${info.db.files.toLocaleString()} files · ${info.db.scans} scans · ${info.db.changes.toLocaleString()} changes · ${info.db.overrides} fixes · ${info.db.backups} backups</span></div><div class="hint">Everything MediaLedger knows lives in this one file plus <span class="mono">settings.json</span> next to it. Both sit in your user profile, outside the install folder, so closing the app, reinstalling, or updating never loses them. A backup copy is taken automatically before any schema upgrade.</div></div>
       <div class="field"><label></label><div class="inline"><button class="small" id="backupNow">Back up database now</button><button class="small" id="openBackups">Open backups folder</button><button class="small" id="openData">Open data folder</button><button class="small" id="openLog">Open log</button></div></div>
+      <div class="field"><label>Nightly backup to a folder</label><div class="inline"><input type="checkbox" id="bkOn" ${s.backup && s.backup.enabled ? 'checked' : ''}> <input type="text" id="bkDir" style="flex:1" placeholder="${L.isWeb ? '/mnt/media/Backups/MediaLedger' : '\\\\192.168.1.204\\Apocrypha_Media_Pool\\Backups\\MediaLedger'}" value="${esc((s.backup && s.backup.dir) || '')}"><button class="small" id="pickBk">Browse…</button> at <input type="time" id="bkTime" value="${esc((s.backup && s.backup.time) || '03:30')}"> keep <input type="number" id="bkKeep" min="1" max="60" value="${(s.backup && s.backup.keep) || 7}" style="width:60px"> <button class="small" id="bkNow">Back up there now</button></div><div class="hint">Copies the database (every fix, rating, tag, match and the change log) to that folder once a day, dated, keeping the newest N. Put it on the NAS so a dead SD card or PC costs nothing. ${s.backup && s.backup.lastRun ? `Last: ${esc(fmtDate(s.backup.lastRun))} → <span class="mono">${esc(s.backup.lastFile || '')}</span>` : 'Never run yet.'}${s.backup && s.backup.lastError ? ` <span class="bad">Last error: ${esc(s.backup.lastError)}</span>` : ''}</div></div>
 
       <h2>Updates</h2>
       <div class="field"><label>Automatic updates</label><input type="checkbox" id="updOn" ${s.updates.enabled ? 'checked' : ''}><div class="hint">Installed builds check GitHub Releases on launch and every 6 hours, download silently and apply on the next restart. Your database and settings are untouched by updates.</div></div>
@@ -1133,6 +1220,8 @@ views.settings = async () => {
   $('#openLog').onclick = () => L.openPath(info.logFile);
   $('#openBackups').onclick = () => L.openPath(info.dbFile + '.backups');
   $('#backupNow').onclick = async () => { const p = await L.db.backup(); toast('Backup written: ' + p); };
+  $('#pickBk').onclick = async () => { const p = await pickFolder($('#bkDir').value); if (p) $('#bkDir').value = p; };
+  $('#bkNow').onclick = async () => { try { const p = await L.backupTo($('#bkDir').value.trim(), Number($('#bkKeep').value) || 7); toast('Backup copied to ' + p); } catch (e) { toast(e.message, true); } };
   $('#dlFf').onclick = () => downloadFfmpeg($('#dlMsg'), $('#dlProg'), $('#dlBar'), () => views.settings());
 
   const collect = () => {
@@ -1146,6 +1235,7 @@ views.settings = async () => {
       multiThreaded: $('#mt').checked, scanThreads: Number($('#threads').value) || 0,
       videoExtensions: list($('#vext').value), subtitleExtensions: list($('#sext').value), ignorePatterns: $('#ignore').value.split(',').map(x => x.trim()).filter(Boolean),
       csvOutputDir: $('#csvDir').value.trim(), autoExportAfterScan: $('#autoExport').checked,
+      backup: { ...(s.backup || {}), enabled: $('#bkOn').checked, dir: $('#bkDir').value.trim(), time: $('#bkTime').value || '03:30', keep: Number($('#bkKeep').value) || 7 },
       schedule: { ...s.schedule, inAppEnabled: $('#inApp').checked, inAppIntervalHours: Number($('#inAppHours').value) || 24, taskTime: $('#taskTime').value || '03:00' },
       updates: { enabled: $('#updOn').checked }, githubToken: $('#ghToken').value.trim(),
       metadata: { ...s.metadata, enabled: $('#metaOn').checked, refreshDays: Number($('#metaDays').value) || 14 },

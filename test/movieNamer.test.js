@@ -66,5 +66,10 @@ assert.strictEqual(same[0].unchanged, true);
   assert.strictEqual(proposeMovieName({ ...base, parts: [] }).name, 'Avatar (2009).mkv');
   assert.strictEqual(proposeMovieName({ ...base, parts: ['bogus', 'resolution', 'resolution'] }).name, 'Avatar (2009) - 4K.mkv');
   assert.deepStrictEqual(proposeMovieName(base).segments.map(x => x.part), ['title', 'year', 'source', 'resolution', 'hdr', 'codec', 'ext']);
+  // Sub/Dub part is opt-in and comes from the probed languages
+  assert.ok(!proposeMovieName(base).name.includes('Sub'), 'off by default');
+  assert.strictEqual(proposeMovieName({ ...base, audio_langs: 'jpn', sub_langs: 'eng', parts: ['resolution', 'dubsub'] }).name, 'Avatar (2009) - 4K Sub.mkv');
+  assert.strictEqual(proposeMovieName({ ...base, audio_langs: 'jpn,eng', parts: ['dubsub'] }).name, 'Avatar (2009) - Dual.mkv');
+  assert.strictEqual(proposeMovieName({ ...base, audio_langs: 'eng', parts: ['dubsub', 'codec'] }).name, 'Avatar (2009) - HEVC.mkv', 'English-only film has no sub/dub word');
 }
 console.log('movie namer tests passed');

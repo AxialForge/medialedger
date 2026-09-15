@@ -42,6 +42,7 @@
   adult: { status: 'adult:status', toggle: 'adult:toggle', dashboard: 'adult:dashboard' },
   ratings: { list: 'ratings:list', setUser: 'ratings:setUser' },
   tags: { list: 'tags:list', all: 'tags:all', get: 'tags:get', add: 'tags:add', remove: 'tags:remove' },
+  tonight: 'data:tonight', storage: 'data:storage', backupTo: 'db:backupTo',
   web: { channels: 'web:channels', videos: 'web:videos' },
   movie: { plan: 'movie:plan', run: 'movie:run', undo: 'movie:undo', batches: 'movie:batches', batchItems: 'movie:batchItems', onProgress: '!movie:progress' },
   data: {

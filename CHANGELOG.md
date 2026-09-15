@@ -12,6 +12,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [1.5.0] - 2026-09-15
+
+### Added
+
+- **Watch tonight** page: every series and movie on one list, narrowed by
+  unwatched (Plex), complete series, length, your rating, genre, sub/dub and
+  tag, with *Pick for me* choosing at random from what is left.
+- **Filter dropdowns** on the TV, Anime and Movies lists: genre, sub/dub, your
+  tag, and watched state from Plex.
+- **Storage forecast**: a *Free on the share* tile and a per-month growth panel
+  on the Dashboard, estimating when the share fills at the recent rate.
+- **Nightly backup to a folder** (Settings → Data): a dated copy of the
+  database to the NAS once a day, newest N kept, with *Back up there now*.
+- **Sub/Dub name part** for the movie naming engine, off by default: `Sub`,
+  `Dub` or `Dual` from the probed languages.
+### Changed
+
+### Fixed
+
 ## [1.4.0] - 2026-09-15
 
 ### Added

@@ -1,4 +1,5 @@
 'use strict';
+const { fileAudioType } = require('./tags');
 // Movie naming engine — a pure function from a database row to a proposed name.
 //
 //   Title (Year) - Source Resolution HDR Codec [Audio] [{edition-…}].ext
@@ -81,7 +82,8 @@ function editionToken(editionTag, originalName) {
  */
 // Which parts follow "Title (Year) -", in order. Settings → Movie names lets the user switch parts off or reorder them.
 const DEFAULT_PARTS = ['source', 'resolution', 'hdr', 'codec', 'audio', 'edition'];
-const ALL_PARTS = new Set(DEFAULT_PARTS);
+// 'dubsub' (Sub / Dub / Dual from the probed languages) is opt-in: it is never in DEFAULT_PARTS.
+const ALL_PARTS = new Set([...DEFAULT_PARTS, 'dubsub']);
 const normalizeParts = (parts) => Array.isArray(parts) ? parts.filter((p, i, a) => ALL_PARTS.has(p) && a.indexOf(p) === i) : DEFAULT_PARTS.slice();
 
 function proposeMovieName(f) {
@@ -133,6 +135,8 @@ function proposeMovieName(f) {
   if (a.flag) flags.push(a.flag);
 
   tokens.edition = editionToken(f.edition_tag, f.file_name);
+  const at = fileAudioType(f.audio_langs, f.sub_langs, { anime: false });
+  tokens.dubsub = at === 'dual' ? 'Dual' : at === 'sub' ? 'Sub' : at === 'dub' ? 'Dub' : null;
 
   // Segments let the UI show which part of the name came from where (and toggle parts by clicking them).
   const segments = [{ part: 'title', text: tokens.title }, { part: 'year', text: ` (${tokens.year})` }];

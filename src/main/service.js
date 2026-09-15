@@ -474,9 +474,74 @@ function createService({ userData, log, send, host }) {
   h('data:movies', () => { const movieTags = db.tagsFor('movie'); return db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, SUM(size) bytes, MAX(duration_s) seconds,
       GROUP_CONCAT(DISTINCT resolution) resolutions, GROUP_CONCAT(DISTINCT video_codec) codecs, GROUP_CONCAT(DISTINCT audio_langs) audio_langs, GROUP_CONCAT(DISTINCT sub_langs) sub_langs,
       MAX(has_captions) has_captions, SUM(CASE WHEN probe_ok=1 THEN 1 ELSE 0 END) probed, GROUP_CONCAT(edition_tag, ' | ') editions, MAX(plex_genres) plex_genres,
+      MAX(plex_view_count) watched_count, MAX(plex_user_rating) plex_user, SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) plex_linked, MAX(hdr) hdr,
       ${AUDIO_COUNTS}
     FROM files WHERE library_type='movie' AND missing=0 AND ignored=0${AF()} GROUP BY group_key ORDER BY title COLLATE NOCASE, year`).map(r => ({ ...r, genres: onlineTags({ genres: r.plex_genres }), audio_type: titleAudioType({ files: r.probed_audio, jpn: r.jpn_files, eng: r.eng_files, dual: r.dual_files }), tags: movieTags.get(r.group_key) || [] })); });
   h('data:movieFiles', (groupKey) => db.all(`SELECT * FROM files WHERE library_type='movie' AND group_key=?${AF()} ORDER BY missing, file_name`, groupKey));
+  // ---- storage: how fast the library grows (from first_seen) and how long the free space lasts ----
+  h('data:storage', () => {
+    const months = db.all(`SELECT substr(first_seen,1,7) ym, SUM(size) bytes, COUNT(*) files FROM files WHERE first_seen IS NOT NULL AND ignored=0${AF()} GROUP BY ym ORDER BY ym DESC LIMIT 13`).reverse();
+    const thisMonth = new Date().toISOString().slice(0, 7);
+    const full = months.filter(m => m.ym < thisMonth).slice(-3); // last three complete months
+    const perMonth = full.length ? full.reduce((a, m) => a + m.bytes, 0) / full.length : 0;
+    const total = db.get(`SELECT SUM(size) b FROM files WHERE missing=0 AND ignored=0${AF()}`).b || 0;
+    const roots = (settings.get().roots || []).filter(r => r.enabled);
+    const seen = new Set(); const disks = [];
+    for (const r of roots) { try { const st = fs.statfsSync(r.path); const key = `${st.blocks}-${st.bsize}`; /* same volume = same size; free blocks drift between calls on a busy NAS */ if (seen.has(key)) continue; seen.add(key); disks.push({ label: r.label || r.id, total: st.blocks * st.bsize, free: st.bavail * st.bsize }); } catch { /* unreachable root */ } }
+    const free = disks.reduce((a, d) => a + d.free, 0), capacity = disks.reduce((a, d) => a + d.total, 0);
+    const monthsLeft = perMonth > 0 && disks.length ? free / perMonth : null;
+    return { months, perMonth, total, free, capacity, disks, monthsLeft, basis: full.length };
+  });
+
+  // ---- tonight: everything worth watching, one row per title, for the Watch tonight page ----
+  h('data:tonight', () => {
+    const out = [];
+    for (const type of ['tv', 'anime']) {
+      const tagMap = db.tagsFor(type), metas = db.allSeriesMeta(type), ur = new Map(db.userRatings(type).map(u => [u.title_key, u]));
+      const miss = new Map(missingSummary(type).map(m => [m.show_name, m]));
+      const plexShows = new Map(db.all('SELECT rating_key, user_rating, genres FROM plex_shows').map(x => [x.rating_key, x]));
+      for (const r of db.all(`SELECT show_name, COUNT(*) episodes, SUM(duration_s) seconds, AVG(duration_s) avg_seconds, MAX(resolution) resolution, SUM(CASE WHEN plex_view_count>0 THEN 1 ELSE 0 END) watched, SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) plex_linked, MAX(plex_show_key) plex_show_key, MAX(first_seen) last_added, ${AUDIO_COUNTS} FROM files WHERE library_type=? AND missing=0 AND ignored=0${AF()} GROUP BY show_name`, type)) {
+        const sm = metas.get(r.show_name), m = miss.get(r.show_name), u = ur.get(r.show_name), ps = r.plex_show_key ? plexShows.get(r.plex_show_key) : null;
+        out.push({ kind: 'series', type, key: r.show_name, title: r.show_name, episodes: r.episodes, minutes: Math.round((r.avg_seconds || 0) / 60), total_minutes: Math.round((r.seconds || 0) / 60), watched: r.watched, unwatched: r.plex_linked ? r.episodes - r.watched : null, complete: m && m.expected ? m.missing_count === 0 : null, genres: onlineTags(sm).length ? onlineTags(sm) : onlineTags({ genres: ps && ps.genres }), audio_type: titleAudioType({ files: r.probed_audio, jpn: r.jpn_files, eng: r.eng_files, dual: r.dual_files }, { anime: type === 'anime' }), tags: tagMap.get(r.show_name) || [], my_rating: u ? u.stars : null, online_rating: sm ? sm.rating : null, plex_user: ps ? ps.user_rating : null, resolution: r.resolution, last_added: r.last_added });
+      }
+    }
+    const mt = db.tagsFor('movie'), mur = new Map(db.userRatings('movie').map(u => [u.title_key, u]));
+    for (const r of db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, MAX(duration_s) seconds, MAX(resolution) resolution, MAX(plex_view_count) watched_count, MAX(plex_user_rating) plex_user, MAX(plex_audience_rating) plex_audience, SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) plex_linked, MAX(plex_genres) plex_genres, MAX(first_seen) last_added, ${AUDIO_COUNTS} FROM files WHERE library_type='movie' AND missing=0 AND ignored=0${AF()} GROUP BY group_key`)) {
+      const u = mur.get(r.group_key);
+      out.push({ kind: 'movie', type: 'movie', key: r.group_key, title: r.title, year: r.year, minutes: Math.round((r.seconds || 0) / 60), total_minutes: Math.round((r.seconds || 0) / 60), watched: r.watched_count > 0 ? 1 : 0, unwatched: r.plex_linked ? (r.watched_count > 0 ? 0 : 1) : null, complete: true, genres: onlineTags({ genres: r.plex_genres }), audio_type: titleAudioType({ files: r.probed_audio, jpn: r.jpn_files, eng: r.eng_files, dual: r.dual_files }), tags: mt.get(r.group_key) || [], my_rating: u ? u.stars : null, online_rating: r.plex_audience != null ? r.plex_audience : null, plex_user: r.plex_user, resolution: r.resolution, last_added: r.last_added });
+    }
+    return out;
+  });
+
+  // ---- backup to a folder (the NAS): local backup first, then a dated copy, newest `keep` kept ----
+  function backupTo(dir, keep, label = 'nightly') {
+    if (!dir) throw new Error('No backup folder set');
+    const local = db.backup(label);
+    fs.mkdirSync(dir, { recursive: true });
+    const dest = path.join(dir, `medialedger-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.db`);
+    fs.copyFileSync(local, dest);
+    const st = fs.statSync(dest); if (!st.size) throw new Error('Copied backup is empty');
+    const olds = fs.readdirSync(dir).filter(f => /^medialedger-.*\.db$/.test(f)).sort().reverse().slice(Math.max(1, Number(keep) || 7));
+    for (const f of olds) { try { fs.unlinkSync(path.join(dir, f)); } catch { /* ignore */ } }
+    settings.set({ backup: { ...(settings.get().backup || {}), lastRun: new Date().toISOString(), lastFile: dest, lastError: null } });
+    log(`backup: ${dest} (${(st.size / 1048576).toFixed(1)} MB)`);
+    return dest;
+  }
+  let lastBackupDay = null;
+  const backupTick = () => {
+    const b = settings.get().backup || {};
+    if (!b.enabled || !b.dir) return;
+    const now = new Date(); const [hh, mm] = String(b.time || '03:30').split(':').map(Number);
+    const today = now.toISOString().slice(0, 10);
+    if (lastBackupDay === today || (b.lastRun || '').slice(0, 10) === today) { lastBackupDay = today; return; }
+    if (now.getHours() < hh || (now.getHours() === hh && now.getMinutes() < mm)) return;
+    if (scanner.status().running) return; // wait for a quiet moment
+    lastBackupDay = today;
+    try { backupTo(b.dir, b.keep); } catch (e) { log('backup failed: ' + e.message); settings.set({ backup: { ...b, lastError: e.message } }); }
+  };
+  const backupTimer = setInterval(backupTick, 60000); if (backupTimer.unref) backupTimer.unref();
+  h('db:backupTo', (dir, keep) => backupTo(dir || (settings.get().backup || {}).dir, keep || (settings.get().backup || {}).keep, 'manual'));
+
   // ---- tags: your own words per title; genres come with the online match / Plex, sub/dub from the probe ----
   h('tags:list', (type) => Object.fromEntries(db.tagsFor(type)));
   h('tags:all', () => db.allTags());

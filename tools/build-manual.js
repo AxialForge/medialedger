@@ -48,12 +48,12 @@ const TOC_ENTRIES = [
   '1. What MediaLedger is', '1.1 What it never does', '1.2 Core concepts',
   '2. Installing and first run', '2.1 Install', '2.2 First launch', '2.3 Where your data lives', '2.4 Updates',
   '3. The window',
-  '4. Dashboard', '4.1 Top tiles', '4.2 Charts', '4.3 Panels',
+  '4. Dashboard', '4.1 Top tiles', '4.2 Charts', '4.3 Panels', '4.4 Storage forecast',
   '5. TV Shows and Anime', '5.1 Episode detail', '5.2 Tags: genres, sub/dub and your own',
   '6. Movies', '7. Web videos', '8. Adult library',
   '9. Missing episodes', '9.1 The Match dialog',
   '10. Issues', '10.1 Problems', '10.2 The Fix dialog', '10.3 Duplicates',
-  '11. Quality', '12. Ratings',
+  '11. Quality', '12. Ratings', '12.1 Watch tonight',
   '13. Media requests',
   '14. Change log',
   '15. Movie names (the naming engine)', '15.1 The pattern', '15.2 Ready, flagged, blocked', '15.3 Batch settings', '15.4 Running a batch', '15.5 Undo', '15.6 Bulk source, collisions, placeholders',
@@ -175,6 +175,9 @@ add(H1('4. Dashboard'), ...img('dashboard', 'The Dashboard after a full scan.'),
 );
 
 // ---------------- 5 TV & Anime ----------------
+  H2('4.4 Storage forecast'),
+  P('The **Free on the share** tile and the Storage panel at the bottom use the date each file was first seen to work out how much the library grows per month, average the last three complete months, and divide the free space on your roots by it. The tile turns amber under a year and red under three months. It is an estimate from your own history, so a one-off bulk import skews it for a quarter.'),
+
 add(H1('5. TV Shows and Anime'), ...img('anime', 'The Anime list. TV Shows looks the same.'),
   P('One row per series. The summary strip counts series, episodes, size, runtime, how many series have full captions and how many have parse issues.'),
   table(['Column', 'Meaning'], [
@@ -192,7 +195,7 @@ add(H1('5. TV Shows and Anime'), ...img('anime', 'The Anime list. TV Shows looks
   ], [1800, 7560]),
   H2('5.1 Episode detail'), ...img('episodes', 'A series opened from the Anime list, with the expected-episode grid at the top.'),
   H2('5.2 Tags: genres, sub/dub and your own'),
-  P('Every series and movie carries three kinds of tag, shown in a **Tags** column on the lists and as a strip under the title on its own page. The filter box matches them, so typing `comedy`, `dub` or `kids` narrows the list.'),
+  P('Every series and movie carries three kinds of tag, shown in a **Tags** column on the lists and as a strip under the title on its own page. The filter box matches them, so typing `comedy`, `dub` or `kids` narrows the list, and the dropdown row under it filters by one genre, sub/dub state, tag, or watched state (from Plex) at a time.'),
   table(['Kind', 'Where it comes from', 'Examples'], [
     ['Genres (grey)', 'The same TVmaze / AniList lookup that fetches episode counts also returns genres, and AniList adds its crowd-ranked tags. Fetched automatically with the next lookup; series matched before this version are filled in once in the background. Movies take their genres from Plex when synced.', '`Action`, `Slice of Life`, `Isekai`, `Documentary`'],
     ['Sub / dub (coloured)', 'Worked out on this machine from the audio and subtitle languages ffprobe recorded: Japanese audio with English subtitles is **Subbed**, English audio on anime is **Dubbed**, both audio tracks is **Dual audio**, and a series whose episodes disagree is **Mixed**. Nothing is fetched.', '`Subbed`, `Dubbed`, `Dual audio`'],
@@ -289,6 +292,8 @@ add(H1('12. Ratings'), ...img('ratings', 'Online averages beside your own stars.
     ['Note', 'Free text saved when you leave the field.'],
   ], [1800, 7560]),
   P('Filters narrow the list to one library, to titles you have rated, to titles you have not, or to titles with a Plex rating of yours. Your stars and notes are exported in the series and movie CSVs.'),
+  H2('12.1 Watch tonight'),
+  P('One list across every series and movie, made for the "what shall we watch" moment. Narrow it by kind, **unwatched only** (from Plex play counts; titles Plex does not have stay in), **complete series only** (no missing episodes), a length limit in minutes (episode length for series), your minimum star rating, and the genre, sub/dub and tag dropdowns. **Pick for me** chooses one at random from what is left and shows it in a card with an Open button; **Pick another** rerolls. Your last settings are remembered in the browser.'),
 );
 
 // ---------------- 13 Media requests ----------------
@@ -308,7 +313,7 @@ add(H1('15. Movie names (the naming engine)'), ...img('movienames', 'Proposed na
   P('This tab renames movie files to a consistent pattern built from facts the app can prove. It is the most carefully guarded part of MediaLedger, because it is one of only two places that write to the share.'),
   H2('15.1 The pattern'),
   P('`Title (Year) - Source Resolution HDR Codec [Audio] [{edition-Name}].ext`'),
-  P('Only `Title (Year)` is fixed, because Plex matches on it. Everything after the dash is a **name part** you can leave out or reorder under Batch settings → **Name parts**: click a chip to switch it off (it shows struck through) or on, use the ◂ ▸ arrows to move it, and watch the preview. The whole list rebuilds at once. The same thing works from the list itself: every word in a proposed name is clickable, so clicking `Source` in any row removes Source from every name, the way editing one dimension in a CAD sketch updates the whole part. If you do not like `Web` / `Rip` in your names, click it once and it is gone; the `no_source` flag disappears with it.'),
+  P('A seventh part, **Sub/Dub**, is off unless you switch it on: it writes `Sub`, `Dub` or `Dual` from the probed languages and nothing for a plain English film. Only `Title (Year)` is fixed, because Plex matches on it. Everything after the dash is a **name part** you can leave out or reorder under Batch settings → **Name parts**: click a chip to switch it off (it shows struck through) or on, use the ◂ ▸ arrows to move it, and watch the preview. The whole list rebuilds at once. The same thing works from the list itself: every word in a proposed name is clickable, so clicking `Source` in any row removes Source from every name, the way editing one dimension in a CAD sketch updates the whole part. If you do not like `Web` / `Rip` in your names, click it once and it is gone; the `no_source` flag disappears with it.'),
   P('Examples: `A Breed Apart (2025) - Web 1080p SDR H264.mp4` and `Avatar (2009) - Rip 4K HDR HEVC {edition-Extended Collector\'s Edition}.mkv`.'),
   table(['Token', 'Where it comes from', 'When unknown'], [
     ['Title, Year', 'The parser and your manual fixes, or the Plex match when the truth source is set to Plex.', 'Year becomes the word `Year`; the file is flagged.'],
@@ -405,7 +410,7 @@ add(H1('18. Settings reference'), ...img('settings', 'The top of the Settings pa
     '**In-app timer** – scans every N hours while the window is open.',
     '**Windows Task Scheduler** – installs a daily task that launches MediaLedger with `--scan`, which scans, exports and exits even when the app is closed. If the app is already open, the open window runs the scan instead. Re-install the task after upgrading so it points at the current program.',
   ]),
-  H2('Data'), P('Database path and size, schema version, counts, and buttons to back up now, open the backups folder, the data folder and the log.'),
+  H2('Data'), P('Database path and size, schema version, counts, and buttons to back up now, open the backups folder, the data folder and the log. **Nightly backup to a folder** copies the database to a folder of your choice once a day at the time you set, dated, keeping the newest N. Point it at the NAS: the database holds every fix, rating, tag, match and the whole change log, and this is the only copy that survives a dead SD card or PC. **Back up there now** tests the folder.'),
   H2('Updates'), P('Automatic updates on/off, and the GitHub token needed only while the repository is private.'),
   H2('Plex'), P('Server, token, path mapping and sync options: see chapter 19. The **Webhook** row belongs to the web server (19.3); on the desktop it explains that webhooks need the always-on server.'),
 );

@@ -46,6 +46,7 @@ const DEFAULTS = {
   ignorePatterns: ['*.crdownload', '*.part', '*.!qb', 'Thumbs.db', 'desktop.ini', '.DS_Store'],
   export: { sets: ['tv', 'anime', 'movies', 'web', 'changes'], zip: false, zipMin: 4 }, // which CSV sets an export writes; zip them when at least zipMin files were written
   csvOutputDir: '',           // empty = <userData>/exports
+  backup: { enabled: false, dir: '', time: '03:30', keep: 7 }, // nightly copy of the database to a folder (the NAS), newest `keep` kept
   autoExportAfterScan: true,
   schedule: {
     inAppEnabled: false,
