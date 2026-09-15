@@ -3,7 +3,8 @@
 const fs = require('fs'); const os = require('os'); const path = require('path');
 const assert = require('assert');
 const { Db } = require('../src/main/db');
-const { applyRenames, proposals } = require('../src/main/renamer');
+const { applyRenames, proposals, proposeSegments } = require('../src/main/renamer');
+const { runBatch, undoBatch } = require('../src/main/movieRename');
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ml-ren-'));
 const showDir = path.join(tmp, 'The Boys', 'The Boys S3'); fs.mkdirSync(showDir, { recursive: true });
@@ -31,6 +32,36 @@ const row = db.get('SELECT rel_path, file_name FROM files WHERE id=?', props[0].
 assert.strictEqual(row.file_name, 'The Boys - S03E04.mp4');
 assert.strictEqual(db.get('SELECT keep FROM overrides WHERE rel_path=?', 'The Boys\\The Boys S3\\The Boys - S03E04.mp4').keep, 1, 'override follows the rename');
 assert.strictEqual(db.listRenames().length, 2);
+// ---- name parts ----
+const ep = { library_type: 'anime', parse_ok: 1, file_name: 'x.mkv', show_name: 'Frieren', season: 1, episode: 2, episode_title: 'Pilot', resolution: '1080p', video_codec: 'hevc', audio_langs: 'jpn', sub_langs: 'eng' };
+assert.strictEqual(proposeSegments(ep).name, 'Frieren - S01E02 - Pilot.mkv', 'title on by default');
+assert.strictEqual(proposeSegments(ep, []).name, 'Frieren - S01E02.mkv');
+assert.strictEqual(proposeSegments(ep, ['title', 'resolution', 'codec', 'dubsub']).name, 'Frieren - S01E02 - Pilot [1080p HEVC Sub].mkv');
+assert.strictEqual(proposeSegments(ep, ['dubsub', 'bogus']).name, 'Frieren - S01E02 [Sub].mkv');
+assert.deepStrictEqual(proposeSegments(ep).segments.map(x => x.part), ['show', 'code', 'title', 'ext']);
+
+// ---- episodes through the batch engine: pre-flight abort on a collision, then a clean batch and its undo ----
+{
+  const dir2 = path.join(tmp, 'Show B', 'S1'); fs.mkdirSync(dir2, { recursive: true });
+  const a = path.join(dir2, 'showb 1.mp4'); fs.writeFileSync(a, 'aa');
+  const b = path.join(dir2, 'showb 2.mp4'); fs.writeFileSync(b, 'bbb');
+  db.upsertFile({ ...base, size: 2, rel_path: 'Show B\\S1\\showb 1.mp4', abs_path: a, file_name: 'showb 1.mp4', show_name: 'Show B', season: 1, episode: 1 });
+  db.upsertFile({ ...base, size: 3, rel_path: 'Show B\\S1\\showb 2.mp4', abs_path: b, file_name: 'showb 2.mp4', show_name: 'Show B', season: 1, episode: 2 });
+  const items = proposals(db, { show: 'Show B' });
+  assert.strictEqual(items.length, 2); assert.strictEqual(items[0].name, 'Show B - S01E01.mp4'); assert.strictEqual(items[0].dir, 'Show B\\S1');
+  fs.writeFileSync(path.join(dir2, 'Show B - S01E02.mp4'), 'taken');
+  const aborted = runBatch(db, items, { live: true, layout: 'episodes', rootPath: tmp });
+  assert.strictEqual(aborted.status, 'aborted'); assert.ok(fs.existsSync(a) && fs.existsSync(b), 'pre-flight abort touches nothing');
+  fs.unlinkSync(path.join(dir2, 'Show B - S01E02.mp4'));
+  const dry = runBatch(db, items, { live: false, layout: 'episodes', rootPath: tmp });
+  assert.strictEqual(dry.status, 'done'); assert.ok(fs.existsSync(a), 'dry run renames nothing');
+  const live = runBatch(db, items, { live: true, layout: 'episodes', rootPath: tmp });
+  assert.strictEqual(live.done, 2); assert.ok(fs.existsSync(path.join(dir2, 'Show B - S01E01.mp4')) && !fs.existsSync(a));
+  assert.strictEqual(db.get('SELECT file_name FROM files WHERE id=?', items[1].id).file_name, 'Show B - S01E02.mp4');
+  const undo = undoBatch(db, live.batchId);
+  assert.strictEqual(undo.undone, 2); assert.ok(fs.existsSync(a) && fs.existsSync(b), 'undo restores both');
+  assert.strictEqual(db.get('SELECT file_name FROM files WHERE id=?', items[0].id).file_name, 'showb 1.mp4');
+}
 db.close();
 fs.rmSync(tmp, { recursive: true, force: true });
-console.log('rename harness passed');
+console.log('rename harness passed (episodes through the batch engine)');

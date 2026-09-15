@@ -12,6 +12,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [1.7.0] - 2026-09-15
+
+### Added
+
+- **TV and anime renames go through the movie batch engine**: pre-flight of
+  the whole batch, verified renames, a journal in the Batches table on the
+  Rename tab, and **Undo**. Dry run added. Name parts for episodes: the episode
+  title (on by default) plus opt-in Resolution, Codec and Sub/Dub in square
+  brackets, editable by clicking chips or the words in any proposed name.
+### Changed
+
+### Fixed
+
 ## [1.6.0] - 2026-09-15
 
 ### Added

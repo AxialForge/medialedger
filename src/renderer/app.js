@@ -839,36 +839,51 @@ views.rename = async () => {
       <p class="lead">When enabled, this page lists every file whose name differs from the standard pattern (<span class="mono">Show - S01E02 - Title.ext</span>, <span class="mono">Title (Year) - Edition.ext</span>), built from the parsed details and your manual fixes. You tick the ones to rename; files are renamed in place, never moved, never overwritten, and every attempt is logged.</p>`;
     return;
   }
-  const [{ list }, hist] = await Promise.all([L.rename.proposals({}), L.rename.history()]);
-  const okHist = hist.filter(h => h.ok).length;
+  const [{ list, parts: savedParts, lock }, hist, allBatches] = await Promise.all([L.rename.proposals({}), L.rename.history(), L.movie.batches()]);
+  const batches = allBatches.filter(b => b.layout === 'episodes');
+  const okHist = hist.filter(h => h.ok).length + batches.reduce((a, b) => a + (b.mode === 'live' ? (b.done || 0) - (b.undone || 0) : 0), 0);
   view.innerHTML = `<h1>Rename files</h1>
-    <div class="warnbox">This page <b>renames files on your share</b>. Proposals come from the parsed details plus your manual fixes, so fix anything wrong under Problems first. Files are renamed in place (same folder), never overwritten, and each attempt is logged below.</div>
+    <div class="warnbox">This page <b>renames files on your share</b>. Proposals come from the parsed details plus your manual fixes, so fix anything wrong under Issues first. Files are renamed in place (same folder), never overwritten. Every run is a batch: pre-flighted as a whole, each rename verified, journaled below, and undoable.</div>
+    <div class="card" style="margin-bottom:12px"><div class="inline" style="align-items:center;flex-wrap:wrap"><span class="small">Name parts</span><span class="chip fixed" title="Always present: Plex matches on it">Show - S01E02</span><span id="rParts"></span><span class="muted tiny">Click a part to leave it out or put it back. Preview: <span class="mono" id="rPreview"></span></span></div></div>
     <div class="tiles compact">${tile(list.length ? 'warnt' : 'okt', 'Proposed renames', list.length)}${tile('', 'From manual fixes', list.filter(p => p.has_override).length)}${tile('', 'Renamed so far', okHist, `${hist.length - okHist} failed`)}</div>
-    <div class="toolbar" style="margin-top:12px"><input type="search" id="rq" placeholder="Filter…"><select id="rtype"><option value="">all libraries</option><option value="tv">TV</option><option value="anime">Anime</option><option value="movie">Movies</option></select><label class="inline small"><input type="checkbox" id="rfixed"> Only files with manual fixes</label><span class="muted small" id="rcount"></span><span class="grow"></span><button class="small" id="selAll">Select shown</button><button class="small" id="selNone">Clear</button><button class="primary" id="apply" disabled>Rename 0 files</button><button id="stepApply" disabled title="Walk through the ticked files one by one, confirming each">One at a time</button></div>
+    <div class="toolbar" style="margin-top:12px"><input type="search" id="rq" placeholder="Filter…"><select id="rtype"><option value="">all libraries</option><option value="tv">TV</option><option value="anime">Anime</option><option value="movie">Movies</option></select><label class="inline small"><input type="checkbox" id="rfixed"> Only files with manual fixes</label><span class="muted small" id="rcount"></span><span class="grow"></span><button class="small" id="selAll">Select shown</button><button class="small" id="selNone">Clear</button><button id="rDry" disabled>Dry run 0</button><button class="primary" id="apply" disabled>Rename 0 files</button><button id="stepApply" disabled title="Walk through the ticked files one by one, confirming each">One at a time</button></div>
     <div class="table-wrap" id="rtable"></div>
-    <h2>History</h2><div id="rhist"></div>`;
+    <h2>Batches</h2><div id="rbatches"></div>
+    <details style="margin-top:12px"><summary class="muted">Older history (before batches)</summary><div id="rhist"></div></details>`;
+  // ---- name parts chips (same idea as the movie tab; 'title' on by default)
+  const EP_LABEL = { title: 'Episode title', resolution: 'Resolution', codec: 'Codec', dubsub: 'Sub/Dub' }, EP_SAMPLE = { title: 'Pilot', resolution: '1080p', codec: 'H264', dubsub: 'Sub' }, EP_ALL = ['title', 'resolution', 'codec', 'dubsub'];
+  let parts = Array.isArray(savedParts) ? savedParts.filter(p => EP_ALL.includes(p)) : ['title'];
+  const renderParts = () => {
+    $('#rParts').innerHTML = [...parts, ...EP_ALL.filter(p => !parts.includes(p))].map(p => `<span class="chip ${parts.includes(p) ? '' : 'off'}" data-part="${p}">${EP_LABEL[p]}</span>`).join('');
+    const extra = parts.filter(p => p !== 'title').map(p => EP_SAMPLE[p]);
+    $('#rPreview').textContent = `Show - S01E02${parts.includes('title') ? ' - Pilot' : ''}${extra.length ? ' [' + extra.join(' ') + ']' : ''}.mkv`;
+  };
+  renderParts();
+  $('#rParts').addEventListener('click', async e => { const chip = e.target.closest('.chip'); if (!chip || !chip.dataset.part) return; const p = chip.dataset.part; parts = parts.includes(p) ? parts.filter(x => x !== p) : [...parts, p]; renderParts(); await L.settings.set({ renaming: { ...s.renaming, parts } }); toast('Name parts saved'); views.rename(); });
   const selected = new Set();
   let shown = [];
   const render = () => {
     const q = $('#rq').value.toLowerCase(), t = $('#rtype').value, fx = $('#rfixed').checked;
     shown = list.filter(p => (!t || p.library_type === t) && (!fx || p.has_override) && (!q || `${p.from} ${p.to} ${p.show_name || ''} ${p.movie_title || ''}`.toLowerCase().includes(q))).slice(0, 1000);
     $('#rcount').textContent = `${shown.length} of ${list.length}`;
-    $('#rtable').innerHTML = `<table><thead><tr><th></th><th>Library</th><th>Folder</th><th>Current name</th><th></th><th>Proposed name</th><th></th></tr></thead><tbody>${shown.map(p => `<tr class="rename-row"><td><input type="checkbox" class="rsel" data-id="${p.id}" ${selected.has(p.id) ? 'checked' : ''}></td><td><span class="badge ${p.library_type}">${typeName(p.library_type)}</span></td><td class="muted tiny wrap">${esc(p.rel_path.includes('\\') ? p.rel_path.slice(0, p.rel_path.lastIndexOf('\\')) : '')}</td><td class="wrap">${esc(p.from)}${p.has_override ? ' <span class="badge ok">fixed</span>' : ''}</td><td class="arrow">→</td><td class="wrap"><b>${esc(p.to)}</b></td><td class="nowrap">${fixBtn(p)} <button class="small rOne" data-id="${p.id}" title="Rename just this file">Rename</button></td></tr>`).join('') || '<tr><td colspan="7" class="empty">Every file already matches the standard pattern.</td></tr>'}</tbody></table>`;
-    $('#apply').textContent = `Rename ${selected.size} file${selected.size === 1 ? '' : 's'}`; $('#apply').disabled = !selected.size;
-    $('#stepApply').disabled = !selected.size;
+    $('#rtable').innerHTML = `<table><thead><tr><th></th><th>Library</th><th>Folder</th><th>Current name</th><th></th><th>Proposed name</th><th></th></tr></thead><tbody>${shown.map(p => `<tr class="rename-row"><td><input type="checkbox" class="rsel" data-id="${p.id}" ${selected.has(p.id) ? 'checked' : ''}></td><td><span class="badge ${p.library_type}">${typeName(p.library_type)}</span></td><td class="muted tiny wrap">${esc(p.rel_path.includes('\\') ? p.rel_path.slice(0, p.rel_path.lastIndexOf('\\')) : '')}</td><td class="wrap">${esc(p.from)}${p.has_override ? ' <span class="badge ok">fixed</span>' : ''}</td><td class="arrow">→</td><td class="wrap"><b>${p.segments ? p.segments.map(x => `<span class="seg${['show', 'code', 'ext'].includes(x.part) ? '' : ' seg-part'}" data-part="${x.part}" title="${['show', 'code', 'ext'].includes(x.part) ? '' : 'Click to leave ' + x.part + ' out of every name'}">${esc(x.text)}</span>`).join('') : esc(p.to)}</b></td><td class="nowrap">${fixBtn(p)} <button class="small rOne" data-id="${p.id}" title="Rename just this file">Rename</button></td></tr>`).join('') || '<tr><td colspan="7" class="empty">Every file already matches the standard pattern.</td></tr>'}</tbody></table>`;
+    $('#apply').textContent = `Rename ${selected.size} file${selected.size === 1 ? '' : 's'}`; $('#apply').disabled = !selected.size || !!lock;
+    $('#stepApply').disabled = !selected.size || !!lock; $('#rDry').textContent = `Dry run ${selected.size}`; $('#rDry').disabled = !selected.size;
   };
   render();
+  $('#rtable').addEventListener('click', e => { const seg = e.target.closest('.seg-part'); if (!seg) return; const p = seg.dataset.part; if (!EP_ALL.includes(p)) return; $(`#rParts .chip[data-part="${p}"]`).click(); });
+  $('#rDry').onclick = async () => { try { const r = await L.rename.dry([...selected]); const okN = r.results.filter(x => x.ok).length; openModal(`<h2>Dry run: ${okN} of ${r.results.length} would rename</h2><div class="preview" style="max-height:300px;overflow:auto">${r.results.map(x => `<div>${x.ok ? '<span class="ok">✓</span>' : '<span class="bad">✗</span>'} ${esc(x.from)} <span class="arrow">→</span> <b>${esc(x.to)}</b>${x.error ? ` <span class="bad tiny">${esc(x.error)}</span>` : ''}</div>`).join('')}</div><p class="muted tiny">Nothing was renamed. Batch #${r.batchId} is recorded as a dry run.</p><div class="actions"><span class="grow"></span><button id="dC">Close</button></div>`); $('#dC').onclick = closeModal; } catch (e) { toast(e.message, true); } };
   const runOne = async (p) => { const res = await L.rename.apply([p.id]); const x = res[0]; if (!x || !x.ok) { if (x && x.error) toast(x.error, true); return false; } return true; };
   const stepFiles = async (items) => { const r = await stepThrough(items, { what: 'Rename episode file', run: runOne }); if (r.done || r.failed) { selected.clear(); toast(`${r.done} renamed${r.failed ? `, ${r.failed} failed` : ''}${r.stopped ? ' · stopped' : ''}`, !!r.failed); views.rename(); } };
   $('#stepApply').onclick = () => stepFiles(list.filter(p => selected.has(p.id)));
   $('#rtable').addEventListener('click', e => { const b = e.target.closest('.rOne'); if (b) { const p = list.find(x => x.id === Number(b.dataset.id)); if (p) stepFiles([p]); } });
   ['#rq', '#rtype', '#rfixed'].forEach(id => { $(id).oninput = render; $(id).onchange = render; });
-  $('#rtable').addEventListener('change', e => { const c = e.target.closest('.rsel'); if (c) { c.checked ? selected.add(Number(c.dataset.id)) : selected.delete(Number(c.dataset.id)); $('#apply').textContent = `Rename ${selected.size} file${selected.size === 1 ? '' : 's'}`; $('#apply').disabled = !selected.size; $('#stepApply').disabled = !selected.size; } });
+  $('#rtable').addEventListener('change', e => { const c = e.target.closest('.rsel'); if (c) { c.checked ? selected.add(Number(c.dataset.id)) : selected.delete(Number(c.dataset.id)); $('#apply').textContent = `Rename ${selected.size} file${selected.size === 1 ? '' : 's'}`; $('#apply').disabled = !selected.size || !!lock; $('#stepApply').disabled = !selected.size || !!lock; $('#rDry').textContent = `Dry run ${selected.size}`; $('#rDry').disabled = !selected.size; } });
   $('#selAll').onclick = () => { shown.forEach(p => selected.add(p.id)); render(); };
   $('#selNone').onclick = () => { selected.clear(); render(); };
   $('#apply').onclick = async () => {
     const ids = [...selected];
-    const card = openModal(`<h2>Rename ${ids.length} file${ids.length === 1 ? '' : 's'} on the share?</h2><p class="muted">Each file is renamed in its current folder. Existing targets are skipped. This cannot be undone from MediaLedger (the history below records every old and new name).</p><div class="preview" style="max-height:240px;overflow:auto">${list.filter(p => selected.has(p.id)).slice(0, 50).map(p => `<div>${esc(p.from)} <span class="arrow">→</span> <b>${esc(p.to)}</b></div>`).join('')}${ids.length > 50 ? `<div class="muted">…and ${ids.length - 50} more</div>` : ''}</div><div class="actions"><span class="grow"></span><button id="rc">Cancel</button><button class="danger" id="rgo">Rename now</button></div>`);
+    const card = openModal(`<h2>Rename ${ids.length} file${ids.length === 1 ? '' : 's'} on the share?</h2><p class="muted">Each file is renamed in its current folder. Pre-flight checks every file first; if any check fails nothing is renamed. Each rename is verified, and the batch can be undone from the Batches table below.</p><div class="preview" style="max-height:240px;overflow:auto">${list.filter(p => selected.has(p.id)).slice(0, 50).map(p => `<div>${esc(p.from)} <span class="arrow">→</span> <b>${esc(p.to)}</b></div>`).join('')}${ids.length > 50 ? `<div class="muted">…and ${ids.length - 50} more</div>` : ''}</div><div class="actions"><span class="grow"></span><button id="rc">Cancel</button><button class="danger" id="rgo">Rename now</button></div>`);
     $('#rc', card).onclick = closeModal;
     $('#rgo', card).onclick = async () => {
       $('#rgo', card).disabled = true; $('#rgo', card).textContent = 'Renaming…';
@@ -876,12 +891,25 @@ views.rename = async () => {
       catch (e) { closeModal(); toast(e.message, true); }
     };
   };
+  const bt = makeTable(batches, [
+    { key: 'id', label: '#', num: true }, { key: 'ts', label: 'When', render: r => fmtDate(r.ts) },
+    { key: 'mode', label: 'Mode', render: r => r.mode === 'live' ? '<span class="badge bad">live</span>' : '<span class="badge">dry</span>' },
+    { key: 'status', label: 'Status', render: r => `<span class="badge ${r.status === 'done' ? 'ok' : /abort|stopped/.test(r.status) ? 'bad' : ''}">${esc(r.status)}</span>` },
+    { key: 'planned', label: 'Planned', num: true }, { key: 'done', label: 'Done', num: true }, { key: 'failed', label: 'Failed', num: true }, { key: 'undone', label: 'Undone', num: true },
+    { key: 'note', label: '', render: r => `<button class="small rbItems" data-id="${r.id}">Items</button> ${r.mode === 'live' && r.done > (r.undone || 0) && !/undone$/.test(r.status) ? `<button class="small danger rbUndo" data-id="${r.id}">Undo</button>` : ''}` },
+  ], { short: true });
+  $('#rbatches').append(bt.node);
+  bt.node.addEventListener('click', async e => {
+    const u = e.target.closest('.rbUndo'); if (u) { if (!confirm(`Undo batch #${u.dataset.id}? Each renamed file is checked and renamed back.`)) return; try { const r = await L.movie.undo(Number(u.dataset.id)); toast(`Undo: ${r.undone} restored, ${r.failed} could not be restored`, r.failed > 0); views.rename(); } catch (err) { toast(err.message, true); } return; }
+    const b = e.target.closest('.rbItems'); if (b) { const items = await L.movie.batchItems(Number(b.dataset.id)); const card = openModal(`<h2>Batch #${b.dataset.id} — ${items.length} item(s)</h2><div class="preview" style="max-height:60vh;overflow:auto">${items.map(i => `<div><span class="badge ${i.status === 'done' ? 'ok' : i.status === 'undone' ? '' : /fail|abor/.test(i.status) ? 'bad' : ''}">${esc(i.status)}</span> ${esc(i.from_rel)} <span class="arrow">→</span> ${esc(i.to_rel)}${i.error ? ` <span class="bad tiny">${esc(i.error)}</span>` : ''}</div>`).join('')}</div><div class="actions"><span class="grow"></span><button id="iC">Close</button></div>`); $('#iC', card).onclick = closeModal; }
+  });
   const ht = makeTable(hist, [{ key: 'ts', label: 'When', render: r => fmtDate(r.ts) }, { key: 'from_rel', label: 'From', cls: 'pathcell' }, { key: 'to_rel', label: 'To', cls: 'pathcell' }, { key: 'ok', label: 'Result', render: r => r.ok ? '<span class="badge ok">renamed</span>' : `<span class="badge bad">failed</span> <span class="tiny">${esc(r.error || '')}</span>` }], { short: true });
   $('#rhist').append(ht.node);
 };
 
 views.movienames = async () => {
-  const [{ plan, lock, settings: mr }, batches] = await Promise.all([L.movie.plan(), L.movie.batches()]);
+  const [{ plan, lock, settings: mr }, allBatches] = await Promise.all([L.movie.plan(), L.movie.batches()]);
+  const batches = allBatches.filter(b => b.layout !== 'episodes');
   const ready = plan.filter(p => p.ok && !p.unchanged), unchanged = plan.filter(p => p.unchanged), blocked = plan.filter(p => !p.ok);
   const flagged = ready.filter(p => p.flags.length);
   const placeholders = ready.filter(p => p.flags.some(f => f === 'no_year' || f === 'no_source'));
@@ -1172,7 +1200,7 @@ views.settings = async () => {
       <div class="field"><label>Watch roots for changes</label><div class="inline"><input type="checkbox" id="watchOn" ${s.watchFolders ? 'checked' : ''}> <span class="muted small">scan after changes settle for</span> <input type="number" id="watchSettle" min="15" value="${s.watchSettleSeconds}" style="width:70px"> <span class="muted small">seconds</span></div><div class="hint">Uses Windows change notifications on each root (works on UNC shares). A download that is still copying keeps pushing the timer back, so the scan starts once the folder is quiet. Status: ${info.watch.enabled ? `<span class="ok">watching ${info.watch.roots.length} root(s)</span>` : 'off'}.</div></div>
 
       <h2>Renaming <span class="badge warn">writes to the share</span></h2>
-      <div class="field"><label>Enable rename tool</label><input type="checkbox" id="renOn" ${s.renaming.enabled ? 'checked' : ''}><div class="hint">Unlocks the <b>Rename files</b> page, which proposes Plex-standard names and renames only the files you tick, in place, never overwriting. Off by default because it is the one feature that modifies the NAS.</div></div>
+      <div class="field"><label>Enable rename tool</label><input type="checkbox" id="renOn" ${s.renaming.enabled ? 'checked' : ''}><div class="hint">Unlocks the <b>Rename files</b> page, which proposes Plex-standard names and renames only the files you tick, in place, never overwriting, through the same batch engine as the movie tool (pre-flight, verification, journal, undo). Off by default because it is the one feature that modifies the NAS.</div></div>
 
       <h2>Adult content</h2>
       <div class="field"><label>Include in CSV exports</label><input type="checkbox" id="adultCsv" ${s.adult.exportCsv ? 'checked' : ''}><div class="hint">Off by default: adult roots are left out of every CSV. In the app they are hidden until the "Show adult content" switch in the sidebar is on; the switch resets each launch.</div></div>

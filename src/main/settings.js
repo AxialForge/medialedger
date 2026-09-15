@@ -29,7 +29,7 @@ const DEFAULTS = {
   rootCheckMinutes: 5,        // periodic reachability check of every enabled root; 0 = off (Settings badge + toast when one disappears)
   watchFolders: false,        // fs.watch on each root; triggers a scan after changes settle
   watchSettleSeconds: 90,
-  renaming: { enabled: false, template: 'plex' }, // opt-in rename tool for TV/anime (writes to the share!)
+  renaming: { enabled: false, template: 'plex', parts: ['title'], batchLimit: 200 }, // opt-in rename tool for TV/anime (writes to the share!); parts follow "Show - S01E02"
   movieRename: {              // movie naming engine tab
     enabled: false,           // "Allow live renames" switch; dry runs always work
     layout: 'inplace',        // inplace | folders

@@ -418,8 +418,30 @@ function createService({ userData, log, send, host }) {
   });
 
   // ---- rename tool (opt-in) -------------------------------------------------------------
-  h('rename:proposals', (opts) => { if (!settings.get().renaming.enabled) return { disabled: true, list: [] }; return { list: renamer.proposals(db, opts || {}) }; });
-  h('rename:apply', (ids) => { if (!settings.get().renaming.enabled) throw new Error('Renaming is disabled in Settings'); return renamer.applyRenames(db, ids, log); });
+  h('rename:proposals', (opts) => { const cfg = settings.get().renaming; if (!cfg.enabled) return { disabled: true, list: [], parts: cfg.parts }; return { list: renamer.proposals(db, { ...(opts || {}), parts: cfg.parts }), parts: renamer.normalizeEpParts(cfg.parts), lock: renameLock }; });
+  // Episodes go through the same batch engine as movies (pre-flight, verified rename, journal, undo). One root per batch, in place only.
+  function episodeBatch(ids, live) {
+    const cfg = settings.get();
+    if (!cfg.renaming.enabled) throw new Error('Renaming is disabled in Settings');
+    if (renameLock) throw new Error('Another rename batch is still running');
+    if (scanner.running) throw new Error('A scan is running; wait for it to finish before renaming');
+    const wanted = new Set(ids);
+    const items = renamer.proposals(db, { parts: cfg.renaming.parts }).filter(p => wanted.has(p.id));
+    if (!items.length) throw new Error('Nothing selected has a proposed name');
+    const rootIds = [...new Set(items.map(i => i.root_id))];
+    if (rootIds.length !== 1) throw new Error('A batch must stay within one root');
+    const root = cfg.roots.find(r => r.id === rootIds[0]);
+    if (!root) throw new Error('Root not found in settings');
+    if (live) renameLock = { rootId: root.id, since: new Date().toISOString() };
+    try {
+      const r = movieRename.runBatch(db, items, { live, layout: 'episodes', rootPath: root.path, limit: Number(cfg.renaming.batchLimit) || 200, log, onProgress: p => send('movie:progress', p) });
+      // Same shape the Rename tab always had: one result per file; a pre-flight abort reports each problem as a failure.
+      const results = r.status === 'aborted' ? items.map(it => { const pr = r.problems.find(x => x.id === it.id) || r.problems[0]; return { id: it.id, ok: false, error: pr ? pr.reason : 'pre-flight failed', from: it.from, to: it.to }; }) : r.results;
+      return { batchId: r.batchId, status: r.status, results };
+    } finally { if (live) renameLock = null; db.checkpoint(); }
+  }
+  h('rename:apply', (ids) => episodeBatch(ids, true).results);
+  h('rename:dry', (ids) => episodeBatch(ids, false));
   h('rename:history', () => db.listRenames(500));
 
   // ---- data queries ------------------------------------------------------------------

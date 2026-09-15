@@ -38,7 +38,7 @@
   override: { list: 'override:list', bulkSource: 'override:bulkSource', save: 'override:save', delete: 'override:delete', suggest: 'override:suggest' },
   meta: { refresh: 'meta:refresh', status: 'meta:status', get: 'meta:get', search: 'meta:search', setMatch: 'meta:setMatch', setManual: 'meta:setManual', setNone: 'meta:setNone', unlock: 'meta:unlock', onProgress: '!meta:progress' },
   dup: { keep: 'dup:keep', clear: 'dup:clear' },
-  rename: { proposals: 'rename:proposals', apply: 'rename:apply', history: 'rename:history' },
+  rename: { proposals: 'rename:proposals', apply: 'rename:apply', dry: 'rename:dry', history: 'rename:history' },
   adult: { status: 'adult:status', toggle: 'adult:toggle', dashboard: 'adult:dashboard' },
   ratings: { list: 'ratings:list', setUser: 'ratings:setUser' },
   tags: { list: 'tags:list', all: 'tags:all', get: 'tags:get', add: 'tags:add', remove: 'tags:remove' },
