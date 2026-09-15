@@ -443,7 +443,7 @@ class Db {
   recentScans(limit = 30) { return this.all('SELECT * FROM scans ORDER BY id DESC LIMIT ?', limit); }
   changesForScan(scanId, limit = 5000) { return this.all('SELECT * FROM changes WHERE scan_id = ? ORDER BY id LIMIT ?', scanId, limit); }
   recentChanges(limit = 200) { return this.all('SELECT c.*, s.started AS scan_started FROM changes c JOIN scans s ON s.id = c.scan_id ORDER BY c.id DESC LIMIT ?', limit); }
-  addExport(rec) { this.run('INSERT INTO exports (ts, scan_id, dir, files, rows, trigger) VALUES (?,?,?,?,?,?)', new Date().toISOString(), rec.scan_id ?? null, rec.dir, JSON.stringify(rec.files), rec.rows ?? null, rec.trigger || 'manual'); }
+  addExport(rec) { this.run('INSERT INTO exports (ts, scan_id, dir, files, rows, trigger) VALUES (?,?,?,?,?,?)', new Date().toISOString(), rec.scan_id ?? null, rec.dir, JSON.stringify(rec.zip ? [...rec.files, { zip: rec.zip }] : rec.files), rec.rows ?? null, rec.trigger || 'manual'); }
   listExports(limit = 50) { return this.all('SELECT * FROM exports ORDER BY id DESC LIMIT ?', limit); }
   // ---- media requests ----
   listRequests(limit = 500) { return this.all('SELECT * FROM requests ORDER BY CASE status WHEN \'pending\' THEN 0 WHEN \'approved\' THEN 1 ELSE 2 END, id DESC LIMIT ?', limit); }

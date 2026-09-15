@@ -24,6 +24,7 @@ const path = require('path');
 const os = require('os');
 const { createService } = require('../main/service');
 const { createSecurity } = require('./security');
+const plex = require('../main/plex');
 const pkg = require('../../package.json');
 
 // ---- options -----------------------------------------------------------------------
@@ -62,7 +63,7 @@ const GUEST = new Set(['app:info', 'security:me', 'data:dashboard', 'data:series
 // A standard user: everything a guest may, plus the review pages, own ratings, the adult switch for their own session.
 const STANDARD = new Set([...GUEST, 'data:problems', 'data:duplicates', 'data:missing', 'data:quality', 'data:changes', 'data:changeStats', 'movie:plan', 'movie:batches', 'movie:batchItems', 'rename:proposals', 'rename:history', 'export:list', 'override:list', 'override:suggest', 'meta:status', 'plex:status', 'watch:status', 'schedule:nextInApp', 'db:stats', 'settings:get', 'adult:toggle', 'ratings:setUser', 'security:changePassword']);
 // Admins: every channel. Actions that write to the share or throw data away also need a fresh password (re-auth).
-const SENSITIVE = new Set(['movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']);
+const SENSITIVE = new Set(['plex:webhookSet', 'movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']);
 const isSensitive = (ch, args) => ch === 'movie:run' ? !!(args[1] && args[1].live) : SENSITIVE.has(ch);
 const allowed = (role, ch) => role === 'admin' || (role === 'standard' ? STANDARD.has(ch) : GUEST.has(ch));
 // Settings hold secrets (Plex token, GitHub token); a standard user sees them blanked.
@@ -114,7 +115,13 @@ const webHandlers = new Map([
   ['security:resetPassword', (ctx, name, password) => sec.resetPassword(name, password, ctx.ip, ctx.session.user)],
   ['security:deleteUser', (ctx, name) => sec.deleteUser(name, ctx.ip, ctx.session.user)],
 ]);
-const CTX_HANDLERS = new Set([...webHandlers.keys()].filter(k => k.startsWith('security:') || ['settings:get', 'adult:status', 'adult:toggle', 'requests:add'].includes(k)));
+// Plex webhook status/controls (admin). The URL includes the key; the Settings → Plex section shows it.
+const webhookEvents = []; // last 50 events received
+let webhookScanTimer = null;
+const webhookUrl = (req) => { const w = sec.webhook(); if (!w.key) return null; const host = req && req.headers.host ? req.headers.host : `${os.hostname()}.local:${port}`; return `${tls ? 'https' : 'http'}://${host}/api/plex/webhook?key=${w.key}`; };
+webHandlers.set('plex:webhookInfo', (ctx) => ({ available: true, enabled: sec.webhook().enabled, url: webhookUrl(ctx.req), events: webhookEvents.slice().reverse() }));
+webHandlers.set('plex:webhookSet', (ctx, opts) => { sec.webhookSet(opts || {}, ctx.ip, ctx.session.user); return { enabled: sec.webhook().enabled, url: webhookUrl(ctx.req) }; });
+const CTX_HANDLERS = new Set([...webHandlers.keys()].filter(k => k.startsWith('security:') || ['settings:get', 'adult:status', 'adult:toggle', 'requests:add', 'plex:webhookInfo', 'plex:webhookSet'].includes(k)));
 const handlers = new Map([...svc.handlers, ...webHandlers]);
 
 // Security posture checklist shown at the top of the Security tab.
@@ -147,6 +154,21 @@ const SEC_HEADERS = {
 const json = (res, status, body) => { res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); };
 const readBody = (req) => new Promise((resolve, reject) => { let s = ''; req.on('data', d => { s += d; if (s.length > 4 * 1024 * 1024) { reject(new Error('body too large')); req.destroy(); } }); req.on('end', () => resolve(s)); req.on('error', reject); });
 const clientIp = (req) => String(req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+const readRaw = (req, max = 8 * 1024 * 1024) => new Promise((resolve, reject) => { const chunks = []; let n = 0; req.on('data', d => { n += d.length; if (n > max) { reject(new Error('body too large')); req.destroy(); } else chunks.push(d); }); req.on('end', () => resolve(Buffer.concat(chunks))); req.on('error', reject); });
+
+// Plex → us. No session: the key in the URL is the credential (LAN-only still applies). Plex sends multipart with a JSON "payload" part and sometimes a thumbnail.
+async function handlePlexWebhook(req, res, url, ip) {
+  if (req.method !== 'POST') { res.writeHead(405); return res.end(); }
+  if (!sec.webhookOk(url.searchParams.get('key') || '')) { sec.audit('webhook_refused', ip, 'bad or missing key'); res.writeHead(403); return res.end('bad key'); }
+  const payload = plex.parseWebhookBody(req.headers['content-type'], await readRaw(req));
+  if (!payload) { res.writeHead(400); return res.end('no payload'); }
+  const r = plex.applyWebhookEvent(svc.db, payload);
+  webhookEvents.push({ ts: new Date().toISOString(), ...r, account: payload.Account && payload.Account.title || null, player: payload.Player && payload.Player.title || null }); if (webhookEvents.length > 50) webhookEvents.shift();
+  log(`plex webhook: ${r.event}${r.title ? ' ' + r.title : ''}${r.updated ? ' → ' + r.updated : ''}${r.scan ? ' → scan queued' : ''}`);
+  if (r.scan) { clearTimeout(webhookScanTimer); webhookScanTimer = setTimeout(() => svc.runScan('plex-webhook').catch(e => log('webhook scan: ' + e.message)), 120000); }
+  if (r.updated) send('plex:progress', { running: false, message: `Plex: ${r.title} ${r.updated === 'watched' ? 'watched' : 'rated'}` });
+  res.writeHead(200); res.end('ok');
+}
 
 async function handle(req, res) {
   const url = new URL(req.url, 'http://x');
@@ -154,6 +176,7 @@ async function handle(req, res) {
   for (const [k, v] of Object.entries(SEC_HEADERS)) res.setHeader(k, v);
   try {
     if (!sec.isAllowedIp(ip)) { sec.audit('refused_non_lan', ip, url.pathname); res.writeHead(403); return res.end('LAN only'); }
+    if (url.pathname === '/api/plex/webhook') return handlePlexWebhook(req, res, url, ip);
     if (url.pathname.startsWith('/api/')) {
       const ch = decodeURIComponent(url.pathname.slice(5));
       const origin = req.headers.origin;
@@ -187,9 +210,20 @@ async function handle(req, res) {
       if (isSensitive(ch, args)) { if (sec.needsReauth(session)) return json(res, 401, { ok: false, reason: 'reauth', error: 'Please re-enter your password for this action' }); sec.audit('sensitive_action', ip, ch, session.user); }
       // Adult visibility is per session: apply this caller's choice to the core before every call.
       svc.setShowAdult(!!(session && session.showAdult));
-      const ctx = { session, ip, role };
+      const ctx = { session, ip, role, req };
       const result = CTX_HANDLERS.has(ch) ? await fn(ctx, ...args) : await fn(...args);
       return json(res, 200, { ok: true, result: result === undefined ? null : result });
+    }
+
+    // Export downloads (admin session): /exports/<folder>/<file.csv> or /exports/<file.zip> from the export directory.
+    if (url.pathname.startsWith('/exports/')) {
+      const session = sec.sessionOf(req.headers.cookie);
+      if (!session || session.role !== 'admin') { res.writeHead(401); return res.end('sign in as admin'); }
+      const base = path.resolve(svc.exportDir());
+      const target = path.resolve(base, decodeURIComponent(url.pathname.slice('/exports/'.length)));
+      if (!target.startsWith(base + path.sep) || !fs.existsSync(target) || !fs.statSync(target).isFile()) { res.writeHead(404); return res.end('not found'); }
+      res.writeHead(200, { 'content-type': target.endsWith('.zip') ? 'application/zip' : 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="${path.basename(target)}"`, 'cache-control': 'no-store' });
+      return fs.createReadStream(target).pipe(res);
     }
 
     // Static renderer files. Everything the desktop app loads from disk is served from here.

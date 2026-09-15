@@ -2,6 +2,7 @@
 // CSV export. Writes a timestamped folder plus a "latest" copy so a spreadsheet
 // can always point at the same file name.
 const fs = require('fs');
+const { writeZip } = require('./zip');
 const path = require('path');
 const { missingEpisodes } = require('./metadata');
 
@@ -157,22 +158,32 @@ function exportChanges(db, dir, scanId) {
   return ['changes.csv'];
 }
 
-function exportAll(db, outDir, scanId, settings) {
+// The selectable sets. Keys are what Settings stores and the Export tab shows.
+const SETS = {
+  tv: { label: 'TV shows', files: 'tv_episodes.csv, tv_series.csv', run: (db, dir, scanId, s) => exportEpisodes(db, 'tv', dir, 'tv', s) },
+  anime: { label: 'Anime', files: 'anime_episodes.csv, anime_series.csv', run: (db, dir, scanId, s) => exportEpisodes(db, 'anime', dir, 'anime', s) },
+  movies: { label: 'Movies', files: 'movies.csv, movies_titles.csv, movies_multiples.csv', run: (db, dir, scanId, s) => exportMovies(db, dir, s) },
+  web: { label: 'Web videos', files: 'web_videos.csv', run: (db, dir, scanId, s) => exportWeb(db, dir, s) },
+  changes: { label: 'Change log', files: 'changes.csv', run: (db, dir, scanId) => exportChanges(db, dir, scanId) },
+};
+
+/**
+ * @param {object} [opts]  { sets: ['tv','anime',...] (default all), zip: boolean }
+ * @returns {{ dir, latest, files, rows, zip: string|null, sets: string[] }}
+ */
+function exportAll(db, outDir, scanId, settings, opts = {}) {
+  const sets = (opts.sets && opts.sets.length ? opts.sets : Object.keys(SETS)).filter(k => SETS[k]);
   const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '').replace(/(\d{8})(\d{4})/, '$1_$2');
   const dir = path.join(outDir, stamp);
   fs.mkdirSync(dir, { recursive: true });
-  const written = [
-    ...exportEpisodes(db, 'tv', dir, 'tv', settings),
-    ...exportEpisodes(db, 'anime', dir, 'anime', settings),
-    ...exportMovies(db, dir, settings),
-    ...exportWeb(db, dir, settings),
-    ...exportChanges(db, dir, scanId),
-  ];
+  const written = sets.flatMap(k => SETS[k].run(db, dir, scanId, settings));
   const latest = path.join(outDir, 'latest');
   fs.mkdirSync(latest, { recursive: true });
   for (const f of written) fs.copyFileSync(path.join(dir, f), path.join(latest, f));
+  let zip = null;
+  if (opts.zip) { zip = path.join(outDir, `medialedger-${stamp}.zip`); writeZip(zip, written.map(f => ({ name: f, file: path.join(dir, f) }))); fs.copyFileSync(zip, path.join(latest, 'medialedger-latest.zip')); }
   const rows = db.get('SELECT COUNT(*) n FROM files WHERE ignored=0').n;
-  return { dir, latest, files: written, rows };
+  return { dir, latest, files: written, rows, zip, sets };
 }
 
-module.exports = { exportAll, episodeGaps };
+module.exports = { exportAll, episodeGaps, SETS };

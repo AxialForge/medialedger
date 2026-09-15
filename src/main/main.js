@@ -196,6 +196,8 @@ function createWindow() {
   // Security controls belong to the web server (sessions, 2FA, lockout). The desktop app has no login, so it only reports that.
   h('security:status', () => ({ available: false }));
   h('security:me', () => ({ available: false, guest: false, username: null, role: 'admin' })); // the desktop user owns the machine
+  h('plex:webhookInfo', () => ({ available: false })); // Plex can only call an always-on server
+  h('plex:webhookSet', () => { throw new Error('Only available on the web server'); });
   for (const ch of ['security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revoke', 'security:revokeOthers', 'security:users', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']) h(ch, () => { throw new Error('Only available on the web server'); });
 
   // Everything else comes from the core, unchanged in name and signature.

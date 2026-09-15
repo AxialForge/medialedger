@@ -28,7 +28,7 @@ const bridge = new Set(leaves.map(l => l.replace(/^!/, '')));
 const events = new Set(leaves.filter(l => l.startsWith('!')).map(l => l.slice(1)));
 const electronOnly = new Set([...read('main/main.js').matchAll(/h\('([a-zA-Z]+:[a-zA-Z]+)'/g)].map(m => m[1]));
 for (const m of read('main/main.js').matchAll(/'(security:[a-zA-Z]+)'/g)) electronOnly.add(m[1]);
-const webOnly = new Set([...read('server/server.js').matchAll(/^\s*\['([a-zA-Z]+:[a-zA-Z]+)', /gm)].map(m => m[1]));
+const webOnly = new Set([...read('server/server.js').matchAll(/(?:^\s*\[|webHandlers\.set\()'([a-zA-Z]+:[a-zA-Z]+)', /gm)].map(m => m[1]));
 // The web shell must serve every Electron-only channel; anything else it declares must be an override of a core channel (per-session state).
 for (const ch of electronOnly) assert.ok(webOnly.has(ch), `web shell must serve ${ch}`);
 for (const ch of webOnly) assert.ok(electronOnly.has(ch) || svc.handlers.has(ch), `web handler ${ch} is neither Electron-only nor a core override`);

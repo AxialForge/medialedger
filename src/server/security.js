@@ -51,11 +51,11 @@ const normUser = (u) => String(u || '').trim().toLowerCase();
 function createSecurity({ dataDir, log = () => {} }) {
   const webFile = path.join(dataDir, 'web.json');
   const auditFile = path.join(dataDir, 'security.log');
-  const DEFAULTS = { users: {}, guestEnabled: false, lanOnly: true, idleMinutes: 0, totp: { enabled: false, secret: null, pending: null }, sessions: {} };
+  const DEFAULTS = { users: {}, guestEnabled: false, lanOnly: true, idleMinutes: 0, totp: { enabled: false, secret: null, pending: null }, sessions: {}, webhook: { enabled: false, key: null } };
   let state = { ...DEFAULTS };
   try {
     state = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(webFile, 'utf8')) };
-    state.totp = { ...DEFAULTS.totp, ...(state.totp || {}) }; state.sessions = state.sessions || {}; state.users = state.users || {};
+    state.totp = { ...DEFAULTS.totp, ...(state.totp || {}) }; state.sessions = state.sessions || {}; state.users = state.users || {}; state.webhook = { ...DEFAULTS.webhook, ...(state.webhook || {}) };
     for (const [k, v] of Object.entries(state.sessions)) if (!v || !v.lastSeen || !v.user) delete state.sessions[k]; // pre-1.1 sessions have no user
   } catch { /* first run */ }
   // 1.0 → 1.1: the single password becomes the "admin" account.
@@ -192,6 +192,13 @@ function createSecurity({ dataDir, log = () => {} }) {
     save(); audit('options_changed', ip, `lanOnly=${state.lanOnly} idleMinutes=${state.idleMinutes} guest=${state.guestEnabled}`, by);
   }
   const isAllowedIp = (ip) => !state.lanOnly || isPrivateIp(ip);
+  // Plex webhook: a random key in the URL is the only credential Plex can present.
+  function webhookSet({ enabled, rotate }, ip, by) {
+    if (rotate || (enabled && !state.webhook.key)) state.webhook.key = crypto.randomBytes(18).toString('base64url');
+    if (typeof enabled === 'boolean') state.webhook.enabled = enabled;
+    save(); audit('webhook_changed', ip, `enabled=${state.webhook.enabled}${rotate ? ' key rotated' : ''}`, by); return state.webhook;
+  }
+  const webhookOk = (key) => state.webhook.enabled && !!state.webhook.key && !!key && key.length === state.webhook.key.length && crypto.timingSafeEqual(Buffer.from(key), Buffer.from(state.webhook.key));
 
   // ---- status for the Security tab ----
   function status(current, extra = {}) {
@@ -215,6 +222,7 @@ function createSecurity({ dataDir, log = () => {} }) {
     get state() { return state; }, audit, isBanned, isAllowedIp, login, logout, sessionOf, setSessionFlag, cookieFor, clearCookie,
     setPassword, hasPassword: hasUsers, changePassword, needsReauth, reauth, totpSetup, totpEnable, totpDisable, setOptions, status, revoke, revokeOthers,
     listUsers, addUser, setRole, resetPassword, deleteUser, userOf, guestEnabled: () => state.guestEnabled,
+    webhookSet, webhookOk, webhook: () => state.webhook,
   };
 }
 

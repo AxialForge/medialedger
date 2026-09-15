@@ -40,9 +40,10 @@ function createService({ userData, log, send, host }) {
   function exportDir() { return settings.get().csvOutputDir || path.join(userData, 'exports'); }
   function ffprobePath() { return findFfprobe(settings.get().ffprobePath) || ffmpegdl.installedFfprobe(userData); }
 
-  function runExport(scanId, trigger) {
-    const out = exportAll(db, exportDir(), scanId, settings.get());
-    db.addExport({ scan_id: scanId, dir: out.dir, files: out.files, rows: out.rows, trigger });
+  function runExport(scanId, trigger, opts) {
+    const cfg = settings.get().export || {};
+    const out = exportAll(db, exportDir(), scanId, settings.get(), { sets: (opts && opts.sets) || cfg.sets, zip: opts && opts.zip != null ? !!opts.zip : !!cfg.zip });
+    db.addExport({ scan_id: scanId, dir: out.dir, files: out.files, rows: out.rows, trigger, zip: out.zip });
     return out;
   }
 
@@ -220,7 +221,8 @@ function createService({ userData, log, send, host }) {
   h('scan:status', () => ({ running: scanner.running, progress: scanner.progress }));
   h('scan:list', (limit) => db.recentScans(limit || 30));
 
-  h('export:run', () => runExport(null, 'manual'));
+  h('export:run', (opts) => runExport(null, 'manual', opts || {}));
+  h('export:sets', () => Object.entries(require('./exportCsv').SETS).map(([key, v]) => ({ key, label: v.label, files: v.files })));
   h('export:list', () => db.listExports(50));
 
   h('schedule:taskStatus', () => scheduler.taskStatus());

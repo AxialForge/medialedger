@@ -516,10 +516,16 @@ views.problems = async () => {
 };
 
 views.export = async () => {
-  const [list, info, s] = await Promise.all([L.exportList(), L.appInfo(), L.settings.get()]);
+  const [list, info, s, sets] = await Promise.all([L.exportList(), L.appInfo(), L.settings.get(), L.exportSets()]);
   const last = list[0];
+  const chosen = new Set((s.export && s.export.sets) || sets.map(x => x.key));
+  const dl = (rel) => L.isWeb ? `<a href="exports/${encodeURIComponent(rel).replace(/%2F/g, '/')}" download>${esc(rel.split(/[\\/]/).pop())}</a>` : esc(rel.split(/[\\/]/).pop());
   view.innerHTML = `<h1>CSV export</h1>
-    <p class="lead">Every export writes eight CSV files into a timestamped folder and refreshes the <span class="mono">latest\\</span> copy, so a spreadsheet can always point at the same file names.</p>
+    <p class="lead">Pick which sets to write. Each export goes into a timestamped folder and refreshes the <span class="mono">latest\\</span> copy, so a spreadsheet can always point at the same file names. Tick <b>Zip</b> to also get a single archive${L.isWeb ? ' you can download here' : ''}.</p>
+    <div class="card" style="margin-bottom:12px"><h3>What to export</h3>
+      <div class="inline" style="gap:16px;flex-wrap:wrap">${sets.map(x => `<label class="inline"><input type="checkbox" class="expSet" value="${x.key}" ${chosen.has(x.key) ? 'checked' : ''}> ${esc(x.label)} <span class="muted tiny">${esc(x.files)}</span></label>`).join('')}</div>
+      <div class="inline" style="margin-top:10px"><label class="inline"><input type="checkbox" id="expZip" ${s.export && s.export.zip ? 'checked' : ''}> Zip the files as well</label><button class="small" id="expSave">Remember as default</button><span class="muted tiny">The default is also what an automatic export after a scan uses.</span></div>
+    </div>
     <div class="tiles compact">
       ${tile('', 'Last export', last ? fmtAgo(last.ts) : 'never', last ? `${JSON.parse(last.files || '[]').length} files · ${(last.rows || 0).toLocaleString()} rows` : '')}
       ${tile('', 'Exports on record', list.length)}
@@ -543,11 +549,14 @@ views.export = async () => {
   const t = makeTable(list, [
     { key: 'ts', label: 'When', render: r => fmtDate(r.ts) }, { key: 'trigger', label: 'Trigger' }, { key: 'scan_id', label: 'Scan', num: true, render: r => r.scan_id ? '#' + r.scan_id : '' },
     { key: 'rows', label: 'Rows', num: true, render: r => (r.rows || 0).toLocaleString() }, { key: 'dir', label: 'Folder', cls: 'pathcell' },
-    { key: 'id', label: '', render: r => `<button class="small openDir" data-dir="${esc(r.dir)}">Open</button>` },
+    { key: 'files', label: 'Files', cls: 'wrap', render: r => { const fl = JSON.parse(r.files || '[]'); const stamp = r.dir.split(/[\\/]/).pop(); const names = fl.filter(f => typeof f === 'string'); const zip = fl.find(f => f && f.zip); return `${names.length} CSV${zip ? ' · ' + (L.isWeb ? `<a href="exports/${encodeURIComponent(zip.zip.split(/[\\/]/).pop())}" download>zip</a>` : 'zip') : ''}${L.isWeb && names.length ? '<div class="tiny">' + names.map(n => dl(stamp + '/' + n)).join(' · ') + '</div>' : ''}`; } },
+    { key: 'id', label: '', render: r => L.isWeb ? '' : `<button class="small openDir" data-dir="${esc(r.dir)}">Open</button>` },
   ], { short: true });
   $('#exportHist').append(t.node);
   t.node.addEventListener('click', e => { const b = e.target.closest('.openDir'); if (b) L.openPath(b.dataset.dir); });
-  $('#runExport').onclick = async () => { try { $('#exportMsg').textContent = 'Exporting…'; const r = await L.exportCsv(); toast('Export written to ' + r.dir); views.export(); } catch (e) { $('#exportMsg').textContent = ''; toast('Export failed: ' + e.message, true); } };
+  const expOpts = () => ({ sets: [...document.querySelectorAll('.expSet:checked')].map(c => c.value), zip: $('#expZip').checked });
+  $('#expSave').onclick = async () => { await L.settings.set({ export: expOpts() }); toast('Export defaults saved'); };
+  $('#runExport').onclick = async () => { const o = expOpts(); if (!o.sets.length) return toast('Pick at least one set', true); try { $('#exportMsg').textContent = 'Exporting…'; const r = await L.exportCsv(o); toast(`Export written: ${r.files.length} file(s)${r.zip ? ' + zip' : ''}`); views.export(); } catch (e) { $('#exportMsg').textContent = ''; toast(e.message, true); } };
   $('#openLatest').onclick = () => L.openPath((s.csvOutputDir || info.exportDir) + '\\latest');
   $('#openRoot').onclick = () => L.openPath(s.csvOutputDir || info.exportDir);
 };
@@ -971,6 +980,7 @@ views.settings = async () => {
       <div class="field"><label>Path mapping</label><div id="plexMap"></div><div class="hint">How Plex's file paths translate to yours. Derived automatically from the first match; edit if Plex runs elsewhere.</div></div>
       <div class="field"><label></label><div class="inline"><button class="small" id="plexSync">Sync now</button><span class="muted small" id="plexSyncMsg"></span></div></div>
       <div class="field"><label></label><div class="status-line" id="plexStatus">Loading…</div></div>
+      <div class="field"><label>Webhook (Plex Pass)</label><div id="plexHook" class="muted small">Loading…</div><div class="hint">Plex calls this server the moment something is added, watched or rated: additions queue a scan two minutes later, watched and rated update the linked file at once. In Plex Web: Settings → Webhooks → Add webhook, paste the URL. LAN-only still applies and the key in the URL is the credential.</div></div>
 
       <div class="inline" style="margin-top:18px"><button class="primary" id="save">Save settings</button></div>
     </div>`;
@@ -1050,6 +1060,15 @@ views.settings = async () => {
   (s.plex.pathMap || []).forEach(addMap);
   mapBox.append(el('<button class="small" id="pmAdd">Add mapping</button>'));
   $('#pmAdd').onclick = () => { addMap({}); mapBox.append($('#pmAdd')); };
+  const refreshHook = async () => {
+    const box = $('#plexHook'); if (!box) return;
+    let h; try { h = await L.plex.webhookInfo(); } catch (e) { box.textContent = e.message; return; }
+    if (!h.available) { box.textContent = 'Webhooks need the always-on web server (the Pi); the desktop app cannot receive them.'; return; }
+    box.innerHTML = `<label class="inline"><input type="checkbox" id="hookOn" ${h.enabled ? 'checked' : ''}> Enabled</label>${h.enabled && h.url ? ` <span class="mono" style="user-select:all;word-break:break-all">${esc(h.url)}</span> <button class="small" id="hookRotate">New key</button>` : ''}${h.events.length ? `<div class="tiny" style="margin-top:6px">Last events: ${h.events.slice(0, 5).map(e => `${esc(e.event.replace('media.', '').replace('library.', ''))}${e.title ? ' · ' + esc(e.title) : ''}${e.updated ? ' ✓' : ''}`).join(' · ')}</div>` : ''}`;
+    $('#hookOn').onchange = async () => { try { await L.plex.webhookSet({ enabled: $('#hookOn').checked }); refreshHook(); } catch (e) { toast(e.message, true); } };
+    if ($('#hookRotate')) $('#hookRotate').onclick = async () => { if (confirm('Generate a new key? Update the URL in Plex afterwards.')) { await L.plex.webhookSet({ rotate: true }); refreshHook(); } };
+  };
+  refreshHook();
   const refreshPlex = async () => {
     const st = await L.plex.status();
     $('#plexStatus').innerHTML = st.last ? `Last sync ${fmtDate(st.last.ts)}: ${st.last.matched.toLocaleString()} of ${st.last.items.toLocaleString()} Plex items matched to files · ${st.linked.toLocaleString()} of ${st.total.toLocaleString()} files linked · ${st.watched.toLocaleString()} watched · ${st.rated} with your Plex rating${st.unlinked.length ? `<br><span class="muted">${st.unlinked.length}${st.unlinked.length === 300 ? '+' : ''} files not in Plex, e.g. ${esc(st.unlinked.slice(0, 3).map(u => u.rel_path).join(' · '))}</span>` : ''}` : 'Never synced.';

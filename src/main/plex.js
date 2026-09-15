@@ -170,4 +170,43 @@ async function syncLibrary(db, cfg, opts = {}) {
   return { ...stats, pathMap, mappingSuggested, synced_at: now };
 }
 
-module.exports = { testConnection, listSections, syncLibrary, mapPath, deriveMapping, matchItems, flattenVideo };
+// ---- webhooks ---------------------------------------------------------------------------
+// Plex Pass webhooks POST multipart/form-data with a JSON "payload" part. We act on:
+//   library.new                 something was added → a scan should run soon
+//   media.scrobble              watched past 90 % → play count + last viewed on the linked file
+//   media.rate                  the user rated it → plex_user_rating on the file or show
+// Returns what was done so the caller can log it and decide whether to scan.
+function applyWebhookEvent(db, payload) {
+  const ev = String((payload || {}).event || '');
+  const md = (payload || {}).Metadata || {};
+  const out = { event: ev, title: md.grandparentTitle ? `${md.grandparentTitle} – ${md.title}` : md.title || null, type: md.type || null, ratingKey: md.ratingKey ? String(md.ratingKey) : null, matched: false, scan: false, updated: null };
+  if (ev === 'library.new') { out.scan = true; return out; }
+  if (!out.ratingKey) return out;
+  const f = db.get('SELECT id, plex_view_count FROM files WHERE plex_rating_key=?', out.ratingKey);
+  if (ev === 'media.scrobble') {
+    if (f) { db.run('UPDATE files SET plex_view_count=COALESCE(plex_view_count,0)+1, plex_last_viewed=? WHERE id=?', new Date().toISOString(), f.id); out.matched = true; out.updated = 'watched'; }
+  } else if (ev === 'media.rate') {
+    const rating = md.rating != null ? Number(md.rating) : (payload.rating != null ? Number(payload.rating) : null);
+    if (f && rating != null) { db.run('UPDATE files SET plex_user_rating=? WHERE id=?', rating, f.id); out.matched = true; out.updated = 'rating'; }
+    else if (rating != null && md.type === 'show') { const n = db.run('UPDATE plex_shows SET user_rating=? WHERE rating_key=?', rating, out.ratingKey).changes; if (n) { out.matched = true; out.updated = 'show rating'; } }
+  }
+  return out;
+}
+
+/** Pull the JSON "payload" part out of a multipart/form-data body without a parser dependency. */
+function parseWebhookBody(contentType, body) {
+  const m = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType || '');
+  if (!m) { try { return JSON.parse(body.toString('utf8')); } catch { return null; } }
+  const boundary = '--' + (m[1] || m[2]).trim();
+  const text = body.toString('latin1');
+  for (const part of text.split(boundary)) {
+    const i = part.indexOf('\r\n\r\n'); if (i < 0) continue;
+    const head = part.slice(0, i);
+    if (!/name="payload"/i.test(head)) continue;
+    const raw = part.slice(i + 4).replace(/\r\n$/, '');
+    try { return JSON.parse(Buffer.from(raw, 'latin1').toString('utf8')); } catch { return null; }
+  }
+  return null;
+}
+
+module.exports = { testConnection, listSections, syncLibrary, mapPath, deriveMapping, matchItems, flattenVideo, applyWebhookEvent, parseWebhookBody };

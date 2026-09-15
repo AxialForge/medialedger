@@ -12,6 +12,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [1.2.0] - 2026-09-14
+
+### Added
+
+- **Selectable CSV exports.** The Export tab lists the five sets (TV, Anime,
+  Movies, Web videos, Change log) with checkboxes; tick what you need, or save
+  the selection as the default that automatic exports after scans also use.
+- **Zip option.** Tick *Zip the files as well* and every export also produces
+  `medialedger-<stamp>.zip` (plus `latest/medialedger-latest.zip`). No
+  dependency: a small built-in zip writer.
+- **Downloads in the browser.** On the web build the export history links each
+  CSV and zip for download (admin session).
+- **Plex webhook** (Plex Pass) on the web server. Settings → Plex → Webhook:
+  enable, copy the URL into Plex Web → Settings → Webhooks. Additions to a
+  Plex library queue a scan two minutes later; watched (scrobble) and rated
+  events update the linked file at once. The key in the URL is the credential
+  (rotate it with *New key*), LAN-only still applies, and the last events are
+  shown in Settings. The desktop app reports that webhooks need the server.
+
 ## [1.1.0] - 2026-09-14
 
 ### Added

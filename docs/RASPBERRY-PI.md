@@ -267,6 +267,23 @@ The server switches to `https://medialedger.local:8080` on restart. Browsers
 warn once about the self-signed certificate; accept it for this host. The
 Security tab shows HTTPS as active and cookies gain the `Secure` flag.
 
+## 7b. Plex webhook
+
+With Plex Pass, Plex can tell MediaLedger about events instead of waiting for
+a sync. On the Pi's Settings → Plex → **Webhook**, tick Enabled and copy the
+URL (it contains a random key). In Plex Web: Settings → Webhooks → Add
+webhook → paste. From then on:
+
+| Plex event | MediaLedger |
+|---|---|
+| something added to a library | a scan is queued two minutes later (batches several additions into one scan) |
+| an episode or movie watched past 90 % | play count and last-viewed on the linked file update immediately |
+| a rating set in Plex | the Plex rating on the linked file or show updates immediately |
+
+The last events appear under the switch. *New key* invalidates the old URL;
+update it in Plex afterwards. Plex must be able to reach the Pi on the LAN;
+the LAN-only rule allows it because Plex runs on the NAS.
+
 ## 8. Moving your desktop database to the Pi
 
 The database format is identical on both sides, and stored paths are relative
