@@ -25,6 +25,8 @@ const DEFAULTS = {
     animeSource: 'anilist',   // Anime → AniList
     refreshDays: 14,          // re-fetch series that are still airing after this many days
   },
+  rootCheckMinutes: 5,        // periodic reachability check of every enabled root; 0 = off (Settings badge + toast when one disappears)
+  rootCheckMinutes: 5,        // periodic reachability check of every enabled root; 0 = off (Settings badge + toast when one disappears)
   watchFolders: false,        // fs.watch on each root; triggers a scan after changes settle
   watchSettleSeconds: 90,
   renaming: { enabled: false, template: 'plex' }, // opt-in rename tool for TV/anime (writes to the share!)

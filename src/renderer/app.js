@@ -132,6 +132,9 @@ async function refreshBadges() {
   } catch { /* ignore */ }
 }
 L.plex.onProgress(p => { const box = $('#metaProgress'); box.hidden = !p.running && !p.message; $('#metaBar').className = p.running ? 'indeterminate' : ''; $('#metaMsg').textContent = p.message || ''; if (!p.running) { setTimeout(() => { box.hidden = true; }, 8000); if (['ratings', 'settings', 'tv', 'anime', 'movies'].includes(currentView)) route(); } });
+const paintRoots = (st) => { const pill = $('#rootsPill'); const n = (st && st.problems || []).length; pill.hidden = !n; pill.textContent = n; pill.title = n ? st.problems.map(p => `${p.label}: ${p.detail}`).join('\n') : ''; };
+L.roots.onStatus(st => { paintRoots(st); if (st.problems.length) toast(`Library root not reachable: ${st.problems.map(p => p.label).join(', ')}`, true); else toast('All library roots are reachable again'); if (currentView === 'settings') route(); });
+L.roots.last().then(paintRoots).catch(() => {});
 L.meta.onProgress(p => {
   const box = $('#metaProgress'); box.hidden = !p.running && !p.message;
   const bar = $('#metaBar'); if (p.total) { bar.className = ''; bar.style.width = Math.round(p.done / p.total * 100) + '%'; } else bar.className = 'indeterminate';
@@ -894,8 +897,9 @@ views.settings = async () => {
   view.innerHTML = `
     <h1>Settings</h1>
     <div class="form">
-      <h2>Library roots</h2>
-      <table class="roots-table"><thead><tr><th>On</th><th>Label</th><th>Path (UNC or local)</th><th>Type</th><th></th></tr></thead><tbody id="roots"></tbody></table>
+      <h2>Library roots <span class="right"><button class="small" id="checkRoots">Check reachability</button></span></h2>
+      <table class="roots-table"><thead><tr><th>On</th><th>Label</th><th>Path (UNC or local)</th><th>Type</th><th>Status</th><th></th></tr></thead><tbody id="roots"></tbody></table>
+      <div class="hint" id="rootDiag" hidden style="margin-top:6px"></div>
       <div class="inline" style="margin-top:8px"><button class="small" id="addRoot">Add root</button></div>
 
       <h2>Scanning</h2>
@@ -916,6 +920,7 @@ views.settings = async () => {
       <div class="field"><label>Look up episode counts</label><input type="checkbox" id="metaOn" ${s.metadata.enabled ? 'checked' : ''}><div class="hint">TV series are matched on <b>TVmaze</b>, anime on <b>AniList</b>. Both are free and need no account or key. Runs in the background after each scan for series not yet looked up; airing series are re-checked every <input type="number" id="metaDays" min="1" value="${s.metadata.refreshDays}" style="width:60px"> days.</div></div>
 
       <h2>Folder watch</h2>
+      <div class="field"><label>Check roots every</label><div class="inline"><input type="number" id="rootCheckMin" min="0" max="1440" value="${s.rootCheckMinutes ?? 5}" style="width:80px"> <span class="muted">minutes (0 = off)</span></div><div class="hint">Background reachability check of every enabled root. A red counter appears on Settings and a message pops up the moment a share drops out, and again when it is back. Scans already skip unreachable roots without marking anything missing.</div></div>
       <div class="field"><label>Watch roots for changes</label><div class="inline"><input type="checkbox" id="watchOn" ${s.watchFolders ? 'checked' : ''}> <span class="muted small">scan after changes settle for</span> <input type="number" id="watchSettle" min="15" value="${s.watchSettleSeconds}" style="width:70px"> <span class="muted small">seconds</span></div><div class="hint">Uses Windows change notifications on each root (works on UNC shares). A download that is still copying keeps pushing the timer back, so the scan starts once the folder is quiet. Status: ${info.watch.enabled ? `<span class="ok">watching ${info.watch.roots.length} root(s)</span>` : 'off'}.</div></div>
 
       <h2>Renaming <span class="badge warn">writes to the share</span></h2>
@@ -957,10 +962,32 @@ views.settings = async () => {
     </div>`;
 
   const rootsBody = $('#roots');
-  const rootRow = (r) => el(`<tr><td><input type="checkbox" class="r-on" ${r.enabled ? 'checked' : ''}></td><td><input type="text" class="r-label" value="${esc(r.label)}" style="width:110px"></td><td><div class="inline"><input type="text" class="r-path" value="${esc(r.path)}" style="flex:1"><button class="small r-pick">…</button></div></td><td><select class="r-type">${['tv', 'anime', 'movie', 'web', 'adult'].map(t => `<option value="${t}" ${r.type === t ? 'selected' : ''}>${t === 'adult' ? 'Adult (auto-detect anime / TV / movie)' : t === 'web' ? 'Web videos' : typeName(t)}</option>`).join('')}</select></td><td><button class="small r-del">✕</button></td></tr>`);
-  const addRow = (r) => { const tr = rootRow(r); tr.dataset.id = r.id || ''; rootsBody.append(tr); $('.r-del', tr).onclick = () => tr.remove(); $('.r-pick', tr).onclick = async () => { const p = await L.pickFolder($('.r-path', tr).value); if (p) $('.r-path', tr).value = p; }; };
+  const rootRow = (r) => el(`<tr><td><input type="checkbox" class="r-on" ${r.enabled ? 'checked' : ''}></td><td><input type="text" class="r-label" value="${esc(r.label)}" style="width:110px"></td><td><div class="inline"><input type="text" class="r-path" value="${esc(r.path)}" style="flex:1"><button class="small r-pick" title="${L.isWeb ? 'Browse folders on the server' : 'Browse…'}">…</button></div></td><td><select class="r-type">${['tv', 'anime', 'movie', 'web', 'adult'].map(t => `<option value="${t}" ${r.type === t ? 'selected' : ''}>${t === 'adult' ? 'Adult (auto-detect anime / TV / movie)' : t === 'web' ? 'Web videos' : typeName(t)}</option>`).join('')}</select></td><td class="r-status muted tiny">…</td><td><button class="small r-del">✕</button></td></tr>`);
+  const pickFolder = async (start) => L.isWeb ? browseServerFolder(start) : L.pickFolder(start);
+  const addRow = (r) => { const tr = rootRow(r); tr.dataset.id = r.id || ''; rootsBody.append(tr); $('.r-del', tr).onclick = () => tr.remove(); $('.r-pick', tr).onclick = async () => { const p = await pickFolder($('.r-path', tr).value); if (p) { $('.r-path', tr).value = p; checkRoots(); } }; $('.r-path', tr).onchange = () => checkRoots(); };
   s.roots.forEach(addRow);
   $('#addRoot').onclick = () => addRow({ id: '', label: 'New', path: '', type: 'tv', enabled: true });
+  // Live reachability per root: checks what is typed in the form, not only what is saved.
+  const STATUS = { ok: ['ok', 'Reachable'], unmounted: ['bad', 'Share not mounted'], nas_down: ['bad', 'NAS not answering'], unreachable: ['bad', 'Not reachable'] };
+  async function checkRoots() {
+    const rows = [...rootsBody.querySelectorAll('tr')];
+    rows.forEach(tr => { $('.r-status', tr).innerHTML = '<span class="muted">checking…</span>'; });
+    const res = await L.roots.check(rows.map(tr => ({ id: tr.dataset.id, label: $('.r-label', tr).value, path: $('.r-path', tr).value.trim() })));
+    rows.forEach((tr, i) => { const r = res[i]; if (!r) return; const [cls, text] = STATUS[r.status] || STATUS.unreachable; $('.r-status', tr).innerHTML = `<span class="${cls}">● ${text}</span><br><span class="muted">${esc(r.detail || '')}</span>`; $('.r-status', tr).title = r.path; });
+    const first = res.find(r => r.status !== 'ok');
+    const diag = $('#rootDiag');
+    if (!first) { diag.hidden = true; return; }
+    diag.hidden = false;
+    const lines = [];
+    if (first.nas) lines.push(`NAS ${esc(first.nas.host)} port 445: <b class="${first.nas.reachable ? 'ok' : 'bad'}">${first.nas.reachable ? 'answers' : 'no answer'}</b>${first.nas.reachable ? '' : ' — the network path between this machine and the NAS is broken (cable, switch port, VLAN, NAS off)'}`);
+    if (first.mount) lines.push(`Mount ${esc(first.mount.point)} ← ${esc(first.mount.source)}: ${first.mount.inFstab ? 'in fstab' : 'not in fstab'}, <b class="${first.mount.mounted ? 'ok' : 'bad'}">${first.mount.mounted ? 'mounted' : first.mount.automount ? 'automount armed but not mounted' : 'not mounted'}</b>`);
+    if (first.status === 'unmounted' && first.nas && first.nas.reachable) lines.push('The NAS answers, the share is just not mounted. On the Pi: <span class="mono">sudo mount ' + esc(first.mount ? first.mount.point : '/mnt/media') + '</span> (or reboot; the automount retries on access).');
+    if (first.status === 'nas_down') lines.push('Fix the network first; the mount will come back on its own once the NAS answers. Check from the Pi: <span class="mono">ping ' + esc(first.nas.host) + '</span>');
+    if (!first.mount && !first.nas && !first.exists) lines.push('The path does not exist on this machine. Check spelling and case (Linux paths are case-sensitive).');
+    diag.innerHTML = `<b>Diagnostics for ${esc(first.label || first.path)}</b><br>${lines.join('<br>')}`;
+  }
+  $('#checkRoots').onclick = checkRoots;
+  checkRoots();
 
   $('#pickFf').onclick = async () => { const p = await L.pickFile(); if (p) $('#ffprobePath').value = p; };
   $('#pickCsv').onclick = async () => { const p = await L.pickFolder($('#csvDir').value); if (p) $('#csvDir').value = p; };
@@ -985,7 +1012,7 @@ views.settings = async () => {
       schedule: { ...s.schedule, inAppEnabled: $('#inApp').checked, inAppIntervalHours: Number($('#inAppHours').value) || 24, taskTime: $('#taskTime').value || '03:00' },
       updates: { enabled: $('#updOn').checked }, githubToken: $('#ghToken').value.trim(),
       metadata: { ...s.metadata, enabled: $('#metaOn').checked, refreshDays: Number($('#metaDays').value) || 14 },
-      watchFolders: $('#watchOn').checked, watchSettleSeconds: Number($('#watchSettle').value) || 90,
+      watchFolders: $('#watchOn').checked, rootCheckMinutes: Number($('#rootCheckMin').value) || 0, watchSettleSeconds: Number($('#watchSettle').value) || 90,
       renaming: { ...s.renaming, enabled: $('#renOn').checked },
       adult: { exportCsv: $('#adultCsv').checked, defaultSubtype: $('#adultDefault').value },
       quality: { minKbps: Object.fromEntries([...document.querySelectorAll('#thr input[data-res]')].map(i => [i.dataset.res, Number(i.value) || 0])) },
@@ -1128,6 +1155,28 @@ views.security = async () => {
   });
   if ($('#totpOff')) $('#totpOff').onclick = () => act(() => L.security.totpDisable($('#totpPw').value), 'Two-factor codes are off');
 };
+
+// Server-side folder browser for the web build (the browser cannot open a native picker on the Pi).
+function browseServerFolder(start) {
+  return new Promise((resolve) => {
+    let current = start || '';
+    const card = openModal(`<h2>Choose a folder</h2><div class="inline" style="margin-bottom:8px"><button class="small" id="fbUp">↑ Up</button><input type="text" id="fbPath" style="flex:1" placeholder="/mnt/media"><button class="small" id="fbGo">Go</button></div><div id="fbList" class="preview" style="max-height:340px;overflow:auto"></div><div class="actions"><span class="muted tiny" id="fbHint">Folders only. Hidden folders are not shown.</span><span class="grow"></span><button id="fbCancel">Cancel</button><button class="primary" id="fbUse">Use this folder</button></div>`);
+    let parent = null;
+    const load = async (p) => {
+      const r = await L.roots.listDirs(p);
+      current = r.path; parent = r.parent; $('#fbPath', card).value = r.path;
+      $('#fbList', card).innerHTML = r.error ? `<div class="bad">Cannot list: ${esc(r.error)}</div>` : (r.dirs.map(d => `<div class="fb-item" data-p="${esc(d.path)}">📁 ${esc(d.name)}</div>`).join('') || '<div class="muted">No sub-folders</div>');
+      card.querySelectorAll('.fb-item').forEach(el => { el.style.cursor = 'pointer'; el.style.padding = '3px 4px'; el.onclick = () => load(el.dataset.p); });
+      $('#fbUp', card).disabled = parent == null;
+    };
+    $('#fbUp', card).onclick = () => load(parent == null ? '' : parent);
+    $('#fbGo', card).onclick = () => load($('#fbPath', card).value.trim());
+    $('#fbPath', card).onkeydown = e => { if (e.key === 'Enter') $('#fbGo', card).click(); };
+    $('#fbCancel', card).onclick = () => { closeModal(); resolve(null); };
+    $('#fbUse', card).onclick = () => { closeModal(); resolve(current); };
+    load(current);
+  });
+}
 
 views.about = async () => {
   const info = await L.appInfo();

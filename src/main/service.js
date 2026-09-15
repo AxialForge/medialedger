@@ -29,6 +29,7 @@ const { planMovieNames } = require('./movieNamer');
 const movieRename = require('./movieRename');
 const plex = require('./plex');
 const sysmon = require('./sysmon');
+const rootcheck = require('./rootcheck');
 
 function createService({ userData, log, send, host }) {
   let settings, db, scanner, scheduler, watcher;
@@ -164,6 +165,24 @@ function createService({ userData, log, send, host }) {
     return { thresholds: thr, mixed, perSeasonMixed, low: low.slice(0, 2000), lowTotal: low.length, undAudio, short, noAudio };
   }
 
+  // Background reachability check of the enabled roots. Emits 'roots:status' whenever the set of unreachable roots changes.
+  let rootsLast = { ts: null, roots: [], problems: [] };
+  let rootsTimer = null;
+  async function checkRootsNow() {
+    const enabled = (settings.get().roots || []).filter(r => r.enabled && r.path);
+    const roots = await rootcheck.checkRoots(enabled);
+    const problems = roots.filter(r => r.status !== 'ok').map(r => ({ id: r.id, label: r.label, status: r.status, detail: r.detail }));
+    const changed = JSON.stringify(problems.map(p => p.id + p.status)) !== JSON.stringify(rootsLast.problems.map(p => p.id + p.status));
+    rootsLast = { ts: new Date().toISOString(), roots, problems };
+    if (changed) { send('roots:status', rootsLast); log(problems.length ? `roots: ${problems.map(p => `${p.label} ${p.status} (${p.detail})`).join('; ')}` : 'roots: all reachable'); }
+    return rootsLast;
+  }
+  function scheduleRootChecks() {
+    clearInterval(rootsTimer); rootsTimer = null;
+    const min = Number(settings.get().rootCheckMinutes) || 0;
+    if (min > 0) { rootsTimer = setInterval(() => checkRootsNow().catch(() => {}), min * 60000); if (rootsTimer.unref) rootsTimer.unref(); }
+  }
+
   // Open settings and the database, wire the scanner and re-parse if the parser changed. Call once.
   function init() {
     settings = new Settings(userData);
@@ -173,6 +192,7 @@ function createService({ userData, log, send, host }) {
     watcher = new Watcher(settings, runScan, log);
     scanner.onProgress(p => send('scan:progress', p));
     sysmon.start({ settings, userData, get scanner() { return scanner; }, get db() { return db; } });
+    scheduleRootChecks(); setTimeout(() => checkRootsNow().catch(() => {}), 3000);
     if (settings.get().parserVersion !== PARSER_VERSION) {
       const n = scanner.reparseAll();
       settings.set({ parserVersion: PARSER_VERSION });
@@ -181,15 +201,19 @@ function createService({ userData, log, send, host }) {
   }
 
   function shutdown() {
-    sysmon.stop(); scheduler && scheduler.stop(); watcher && watcher.stop();
+    clearInterval(rootsTimer); sysmon.stop(); scheduler && scheduler.stop(); watcher && watcher.stop();
     try { db && db.close(); } catch { /* ignore */ }
   }
 
   // ---- handlers (shared by every shell) ----------------------------------------------
   h('sys:stats', () => sysmon.stats({ settings, userData, scanner, db }));
+  // Reachability of library roots (saved ones by default, or an unsaved list from the Settings form), the last background result, and a server-side folder browser.
+  h('roots:check', (roots) => rootcheck.checkRoots(roots && roots.length ? roots : settings.get().roots));
+  h('roots:last', () => rootsLast);
+  h('roots:listDirs', (p) => rootcheck.listDirs(p || ''));
   h('settings:get', () => settings.get());
-  h('settings:set', (patch) => { const s = settings.set(patch); watcher.apply(); return s; });
-  h('settings:replace', (next) => { const s = settings.replace(next); watcher.apply(); return s; });
+  h('settings:set', (patch) => { const s = settings.set(patch); watcher.apply(); scheduleRootChecks(); return s; });
+  h('settings:replace', (next) => { const s = settings.replace(next); watcher.apply(); scheduleRootChecks(); return s; });
 
   h('scan:start', (trigger) => runScan(trigger || 'manual'));
   h('scan:cancel', () => { scanner.cancel(); return true; });

@@ -29,6 +29,7 @@
   update: { check: 'update:check', install: 'update:install', status: 'update:status', onStatus: '!update:status' },
   db: { backup: 'db:backup', backups: 'db:backups', stats: 'db:stats' },
   sys: { stats: 'sys:stats' },
+  roots: { check: 'roots:check', listDirs: 'roots:listDirs', last: 'roots:last', onStatus: '!roots:status' },
   security: { status: 'security:status', changePassword: 'security:changePassword', totpSetup: 'security:totpSetup', totpEnable: 'security:totpEnable', totpDisable: 'security:totpDisable', setOptions: 'security:setOptions', revoke: 'security:revoke', revokeOthers: 'security:revokeOthers' },
   plexTest: 'plex:test',
   plex: { sync: 'plex:sync', status: 'plex:status', onProgress: '!plex:progress' },

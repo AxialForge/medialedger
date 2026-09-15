@@ -12,6 +12,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [1.0.2] - 2026-09-14
+
+### Added
+
+- **Library root status.** Settings → Library roots shows Reachable / Share
+  not mounted / NAS not answering / Not reachable per root, with entry count
+  and writability, a *Check reachability* button, and diagnostics: is the NAS
+  answering on the SMB port, is the share in fstab, is it mounted, and the
+  exact command to run.
+- **Background root check** (Settings → *Check roots every N minutes*,
+  default 5): a red counter on Settings and a message the moment a root drops
+  out, and again when it is back.
+- **Folder browser on the web build.** The "…" button next to a path now opens
+  a server-side folder picker instead of doing nothing.
+- **Pi mount watchdog.** The installer adds a root-owned timer that re-mounts
+  the share within a minute if it dropped and the NAS answers (NAS reboot, Pi
+  moved, network blip). Rerun the installer to get it.
+
 ## [1.0.1] - 2026-09-14
 
 ### Added

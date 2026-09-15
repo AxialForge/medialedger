@@ -11,7 +11,7 @@
 #   2. creates the `medialedger` system user and /var/lib/medialedger
 #   3. downloads the verified server-only release package into /opt/medialedger (--branch=<git branch> for development)
 #   4. mounts the NAS share at /mnt/media via fstab (asks once for credentials)
-#   5. installs a systemd service on port 8080 and the `medialedger` / `medialedger-update` commands
+#   5. installs a systemd service on port 8080, a one-minute mount watchdog timer, and the `medialedger` / `medialedger-update` commands
 #   6. asks for the web password if none is set
 set -euo pipefail
 
@@ -121,8 +121,40 @@ PrivateTmp=true
 [Install]
 WantedBy=multi-user.target
 EOF
+# Mount watchdog: the service has no privileges, so a root timer re-mounts the share if it drops (NAS reboot, Pi moved, network blip).
+cat > /usr/local/sbin/medialedger-mount-check <<EOF
+#!/usr/bin/env bash
+# Re-mount $MOUNT if it is not mounted and the NAS answers. Runs from medialedger-mount.timer every minute.
+mountpoint -q "$MOUNT" && exit 0
+HOST="\$(awk '\$2=="$MOUNT"{print \$1}' /etc/fstab | sed -E 's#^//([^/]+)/.*#\\1#')"
+if [[ -n "\$HOST" ]] && ! timeout 3 bash -c "exec 3<>/dev/tcp/\$HOST/445" 2>/dev/null; then exit 0; fi
+mount "$MOUNT" && logger -t medialedger "re-mounted $MOUNT"
+EOF
+chmod 755 /usr/local/sbin/medialedger-mount-check
+cat > /etc/systemd/system/medialedger-mount.service <<EOF
+[Unit]
+Description=Re-mount the MediaLedger share if it dropped
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/medialedger-mount-check
+EOF
+cat > /etc/systemd/system/medialedger-mount.timer <<EOF
+[Unit]
+Description=Check the MediaLedger share mount every minute
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=60s
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target
+EOF
 systemctl daemon-reload
 systemctl enable -q medialedger
+systemctl enable -q --now medialedger-mount.timer
 
 if [[ $HTTPS -eq 1 && ! -f "$DATA_DIR/tls/cert.pem" ]]; then
   say "Self-signed certificate"

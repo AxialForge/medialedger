@@ -297,7 +297,7 @@ Refreshes every 15 seconds and keeps an hour of history in memory:
 | Page does not load | `systemctl status medialedger`; `journalctl -u medialedger -n 50`. Is the PC on the same LAN? LAN-only refuses other ranges |
 | "Sign in required" loops | Cookies blocked for the site, or the Pi clock is far off. `timedatectl` |
 | "Too many failed attempts" | 15-minute lockout for that address. Wait, or restart the service |
-| Roots show "not reachable" | `ls /mnt/media`. If empty: `sudo mount /mnt/media`; wrong credentials → `sudo rm /etc/medialedger-cifs.cred` and rerun the installer |
+| Roots show "not reachable" | Settings → Library roots shows a status per root and diagnostics (NAS answering? share mounted?). The watchdog timer re-mounts a dropped share within a minute once the NAS answers; to force it: `sudo mount /mnt/media`. Wrong credentials → `sudo rm /etc/medialedger-cifs.cred` and rerun the installer. Watchdog log: `journalctl -t medialedger` |
 | Scan is slow | Ethernet, not Wi-Fi. Check System → Network during a scan; a Pi 3 tops out near 11 MB/s |
 | Files probed but no captions/languages | `ffprobe -version` on the Pi; the apt build supports everything the Windows build does |
 | Renames fail with "root is not writable" | The mount is `file_mode=0664,dir_mode=0775` owned by `medialedger`; check the NAS user has write permission |
@@ -320,6 +320,7 @@ Refreshes every 15 seconds and keeps an hour of history in memory:
 | `/var/lib/medialedger/tls/` | optional cert.pem + key.pem |
 | `/etc/medialedger-cifs.cred` | NAS share credentials (root, 0600) |
 | `/etc/systemd/system/medialedger.service` | the service |
+| `/etc/systemd/system/medialedger-mount.timer` + `.service`, `/usr/local/sbin/medialedger-mount-check` | the mount watchdog (every minute: not mounted and NAS answers → mount) |
 | `/mnt/media` | the share |
 
 ## 12. Uninstall
