@@ -12,6 +12,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [1.9.0] - 2026-09-16
+
+### Added
+
+- **Readable charts**: bar charts on a square-root scale with exact counts and
+  shares, hover details with the per-library split, and drill-down (click a bar
+  to open the list filtered to it). Donut cards for anime sub / dub and Plex
+  watched state. Trend cards (files, free space, missing episodes) fed by a
+  new **daily snapshot** taken after each finished scan or at 03:05. Schema v9.
+- **Colour rules on number tiles** with shipped defaults and a ⚙ per card;
+  an **editor level** (Simple / Standard / Advanced) per account decides how
+  much the card settings expose. Preferences live per account on the web
+  server (guests see the admin's) and once on the desktop.
+- **Phone layout for cards**: one column, number tiles two per row.
+### Changed
+
+### Fixed
+
 ## [1.8.0] - 2026-09-16
 
 ### Added

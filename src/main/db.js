@@ -305,6 +305,20 @@ const MIGRATIONS = [
       ALTER TABLE series_meta ADD COLUMN next_episode TEXT;  -- its label, e.g. S03E05 or E12
     `,
   },
+  {
+    version: 9, name: 'daily snapshots for trend cards',
+    sql: `
+      -- One row per day, written after the nightly scan (or at 03:05): what the library looked like. Trend cards read this.
+      CREATE TABLE IF NOT EXISTS snapshots (
+        day              TEXT PRIMARY KEY,   -- YYYY-MM-DD
+        ts               TEXT,
+        files            INTEGER, bytes INTEGER, free_bytes INTEGER,
+        series_tv        INTEGER, series_anime INTEGER, movies INTEGER,
+        missing_episodes INTEGER, watched_files INTEGER, linked_files INTEGER,
+        pending_requests INTEGER, tagged INTEGER, captioned INTEGER
+      );
+    `,
+  },
 ];
 
 class Db {
@@ -478,6 +492,8 @@ class Db {
   addExport(rec) { this.run('INSERT INTO exports (ts, scan_id, dir, files, rows, trigger) VALUES (?,?,?,?,?,?)', new Date().toISOString(), rec.scan_id ?? null, rec.dir, JSON.stringify(rec.zip ? [...rec.files, { zip: rec.zip }] : rec.files), rec.rows ?? null, rec.trigger || 'manual'); }
   listExports(limit = 50) { return this.all('SELECT * FROM exports ORDER BY id DESC LIMIT ?', limit); }
   // ---- media requests ----
+  saveSnapshot(r) { const cols = Object.keys(r); this.run(`INSERT INTO snapshots (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')}) ON CONFLICT(day) DO UPDATE SET ${cols.filter(c => c !== 'day').map(c => `${c}=excluded.${c}`).join(',')}`, ...cols.map(c => r[c])); }
+  snapshots(days = 365) { return this.all('SELECT * FROM snapshots WHERE day >= ? ORDER BY day', new Date(Date.now() - days * 86400000).toISOString().slice(0, 10)); }
   pendingRequests() { return this.get("SELECT COUNT(*) n FROM requests WHERE status='pending'").n; }
   listRequests(limit = 500) { return this.all('SELECT * FROM requests ORDER BY CASE status WHEN \'pending\' THEN 0 WHEN \'approved\' THEN 1 ELSE 2 END, id DESC LIMIT ?', limit); }
   addRequest(r) { const now = new Date().toISOString(); const info = this.run('INSERT INTO requests (created, title, kind, year, note, requested_by, status, updated) VALUES (?,?,?,?,?,?,?,?)', now, r.title, r.kind, r.year ?? null, r.note || null, r.requested_by || null, 'pending', now); return this.get('SELECT * FROM requests WHERE id=?', info.lastInsertRowid); }

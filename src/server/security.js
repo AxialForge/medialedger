@@ -83,6 +83,9 @@ function createSecurity({ dataDir, log = () => {} }) {
   // ---- users ----
   const userOf = (name) => state.users[normUser(name)] || null;
   const adminCount = () => Object.values(state.users).filter(u => u.role === 'admin').length;
+  // Per-account preferences (card colour rules, editor level, dashboard layouts). Guests read the first admin's.
+  function getPrefs(name) { const u = name ? state.users[normUser(name)] : null; const src = u || Object.values(state.users).find(x => x.role === 'admin'); return (src && src.prefs) || {}; }
+  function setPrefs(name, patch) { const u = state.users[normUser(name)]; if (!u) throw new Error('No such user'); u.prefs = { ...(u.prefs || {}), ...(patch || {}) }; for (const k of Object.keys(u.prefs)) if (u.prefs[k] === null) delete u.prefs[k]; save(); return u.prefs; }
   function listUsers() { return Object.entries(state.users).map(([name, u]) => ({ username: name, role: u.role, created: u.created, lastLogin: u.lastLogin || null, sessions: Object.values(state.sessions).filter(s => s.user === name).length })).sort((a, b) => a.username.localeCompare(b.username)); }
   function addUser(name, password, role, ip, by) {
     const u = normUser(name);
@@ -224,7 +227,7 @@ function createSecurity({ dataDir, log = () => {} }) {
   return {
     get state() { return state; }, audit, isBanned, isAllowedIp, login, logout, sessionOf, setSessionFlag, cookieFor, clearCookie,
     setPassword, hasPassword: hasUsers, changePassword, needsReauth, reauth, totpSetup, totpEnable, totpDisable, setOptions, status, revoke, revokeOthers,
-    listUsers, addUser, setRole, resetPassword, deleteUser, userOf, guestEnabled: () => state.guestEnabled, statusKey, statusOk,
+    listUsers, addUser, setRole, resetPassword, deleteUser, userOf, guestEnabled: () => state.guestEnabled, statusKey, statusOk, getPrefs, setPrefs,
     webhookSet, webhookOk, webhook: () => state.webhook,
   };
 }

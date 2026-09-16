@@ -44,6 +44,7 @@
   tags: { list: 'tags:list', all: 'tags:all', get: 'tags:get', add: 'tags:add', remove: 'tags:remove' },
   tonight: 'data:tonight', storage: 'data:storage', backupTo: 'db:backupTo', airing: 'data:airing', upgrades: 'data:upgrades', notifyTest: 'notify:test', statusJson: 'data:status',
   status: { info: 'status:info', rotate: 'status:rotate' },
+  prefs: { get: 'prefs:get', set: 'prefs:set' }, snapshots: 'data:snapshots', snapshotNow: 'data:snapshotNow',
   web: { channels: 'web:channels', videos: 'web:videos' },
   movie: { plan: 'movie:plan', run: 'movie:run', undo: 'movie:undo', batches: 'movie:batches', batchItems: 'movie:batchItems', onProgress: '!movie:progress' },
   data: {

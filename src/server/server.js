@@ -61,9 +61,9 @@ svc.init();
 
 // ---- roles ---------------------------------------------------------------------------------
 // What a guest (no account) may call: read-only library statistics, plus filing a media request.
-const GUEST = new Set(['app:info', 'security:me', 'data:dashboard', 'data:series', 'data:episodes', 'data:movies', 'data:movieFiles', 'data:search', 'web:channels', 'web:videos', 'ratings:list', 'meta:get', 'scan:status', 'scan:list', 'update:status', 'adult:status', 'requests:list', 'requests:add', 'roots:last', 'tags:list', 'tags:all', 'tags:get', 'data:tonight', 'data:storage', 'data:airing']);
+const GUEST = new Set(['app:info', 'security:me', 'data:dashboard', 'data:series', 'data:episodes', 'data:movies', 'data:movieFiles', 'data:search', 'web:channels', 'web:videos', 'ratings:list', 'meta:get', 'scan:status', 'scan:list', 'update:status', 'adult:status', 'requests:list', 'requests:add', 'roots:last', 'tags:list', 'tags:all', 'tags:get', 'data:tonight', 'data:storage', 'data:airing', 'prefs:get', 'data:snapshots']);
 // A standard user: everything a guest may, plus the review pages, own ratings, the adult switch for their own session.
-const STANDARD = new Set([...GUEST, 'data:problems', 'data:duplicates', 'data:missing', 'data:quality', 'data:changes', 'data:changeStats', 'movie:plan', 'movie:batches', 'movie:batchItems', 'rename:proposals', 'rename:history', 'export:list', 'override:list', 'override:suggest', 'meta:status', 'plex:status', 'watch:status', 'schedule:nextInApp', 'db:stats', 'settings:get', 'adult:toggle', 'ratings:setUser', 'security:changePassword', 'tags:add', 'tags:remove', 'data:upgrades', 'rename:dry']);
+const STANDARD = new Set([...GUEST, 'data:problems', 'data:duplicates', 'data:missing', 'data:quality', 'data:changes', 'data:changeStats', 'movie:plan', 'movie:batches', 'movie:batchItems', 'rename:proposals', 'rename:history', 'export:list', 'override:list', 'override:suggest', 'meta:status', 'plex:status', 'watch:status', 'schedule:nextInApp', 'db:stats', 'settings:get', 'adult:toggle', 'ratings:setUser', 'security:changePassword', 'tags:add', 'tags:remove', 'data:upgrades', 'rename:dry', 'prefs:set']);
 // Admins: every channel. Actions that write to the share or throw data away also need a fresh password (re-auth).
 const SENSITIVE = new Set(['security:tlsEnable', 'status:rotate', 'plex:webhookSet', 'movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']);
 const isSensitive = (ch, args) => ch === 'movie:run' ? !!(args[1] && args[1].live) : SENSITIVE.has(ch);
@@ -142,11 +142,13 @@ const webHandlers = new Map([
 const webhookEvents = []; // last 50 events received
 let webhookScanTimer = null;
 const webhookUrl = (req) => { const w = sec.webhook(); if (!w.key) return null; const host = req && req.headers.host ? req.headers.host : `${os.hostname()}.local:${port}`; return `${tls ? 'https' : 'http'}://${host}/api/plex/webhook?key=${w.key}`; };
+webHandlers.set('prefs:get', (ctx) => sec.getPrefs(ctx.session ? ctx.session.user : null));
+webHandlers.set('prefs:set', (ctx, patch) => { if (!ctx.session) throw new Error('Sign in to save preferences'); return sec.setPrefs(ctx.session.user, patch); });
 webHandlers.set('status:info', (ctx) => { const key = sec.statusKey(false, ctx.ip, ctx.session && ctx.session.user); const host = ctx.req && ctx.req.headers.host ? ctx.req.headers.host : `${os.hostname()}.local:${servePort}`; return { available: true, url: `${tls ? 'https' : 'http'}://${host}/api/status?key=${key}` }; });
 webHandlers.set('status:rotate', (ctx) => { sec.statusKey(true, ctx.ip, ctx.session.user); return webHandlers.get('status:info')(ctx); });
 webHandlers.set('plex:webhookInfo', (ctx) => ({ available: true, enabled: sec.webhook().enabled, url: webhookUrl(ctx.req), events: webhookEvents.slice().reverse() }));
 webHandlers.set('plex:webhookSet', (ctx, opts) => { sec.webhookSet(opts || {}, ctx.ip, ctx.session.user); return { enabled: sec.webhook().enabled, url: webhookUrl(ctx.req) }; });
-const CTX_HANDLERS = new Set([...webHandlers.keys()].filter(k => k.startsWith('security:') || ['settings:get', 'adult:status', 'adult:toggle', 'requests:add', 'plex:webhookInfo', 'plex:webhookSet', 'status:info', 'status:rotate'].includes(k)));
+const CTX_HANDLERS = new Set([...webHandlers.keys()].filter(k => k.startsWith('security:') || ['settings:get', 'adult:status', 'adult:toggle', 'requests:add', 'plex:webhookInfo', 'plex:webhookSet', 'status:info', 'status:rotate', 'prefs:get', 'prefs:set'].includes(k)));
 const handlers = new Map([...svc.handlers, ...webHandlers]);
 
 const hasOpenssl = () => { try { return require('child_process').spawnSync('openssl', ['version'], { encoding: 'utf8', timeout: 5000 }).status === 0; } catch { return false; } };

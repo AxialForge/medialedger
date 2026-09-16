@@ -71,6 +71,7 @@ function createService({ userData, log, send, host }) {
     if (result.status === 'done' && settings.get().plex.enabled && settings.get().plex.token) {
       try { await runPlexSync(trigger); } catch { /* logged */ }
     }
+    if (result.status === 'done') { try { takeSnapshot(); } catch (e) { log('snapshot failed: ' + e.message); } }
     if (settings.get().autoExportAfterScan && result.status === 'done') {
       try { const out = runExport(result.scanId, trigger); log('exported to ' + out.dir); result.export = out; }
       catch (e) { log('export failed: ' + e.message); }
@@ -636,6 +637,23 @@ function createService({ userData, log, send, host }) {
     const st = handlers.get('data:storage')();
     return { app: 'MediaLedger', files: c.files || 0, bytes: c.bytes || 0, free_bytes: st.free, months_left: st.monthsLeft != null ? Math.round(st.monthsLeft * 10) / 10 : null, pending_requests: db.pendingRequests(), missing_episodes: [...missingSummary('tv'), ...missingSummary('anime')].reduce((a, m) => a + m.missing_count, 0), airing_this_week: air.thisWeek, next_airing: air.upcoming[0] ? { show: air.upcoming[0].show_name, date: air.upcoming[0].next_airing, episode: air.upcoming[0].next_episode } : null, scanning: !!scanner.running, last_scan: last ? { finished: last.finished, status: last.status, added: last.added, removed: last.removed } : null, at: new Date().toISOString() };
   });
+
+  // ---- daily snapshot: one row per day for the trend cards (after a finished scan, or at 03:05 if none yet today) ----
+  function takeSnapshot() {
+    const st = handlers.get('data:status')();
+    const w = db.get(`SELECT SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) linked, SUM(CASE WHEN plex_view_count>0 THEN 1 ELSE 0 END) watched, SUM(CASE WHEN has_captions=1 THEN 1 ELSE 0 END) captioned FROM files WHERE missing=0 AND ignored=0 AND adult=0`);
+    const n = (t, col = 'show_name') => db.get(`SELECT COUNT(DISTINCT ${col}) n FROM files WHERE library_type=? AND missing=0 AND ignored=0 AND adult=0`, t).n;
+    const row = { day: new Date().toISOString().slice(0, 10), ts: new Date().toISOString(), files: st.files, bytes: st.bytes, free_bytes: st.free_bytes, series_tv: n('tv'), series_anime: n('anime'), movies: n('movie', 'group_key'), missing_episodes: st.missing_episodes, watched_files: w.watched || 0, linked_files: w.linked || 0, pending_requests: st.pending_requests, tagged: db.get('SELECT COUNT(DISTINCT library_type || title_key) n FROM title_tags').n, captioned: w.captioned || 0 };
+    db.saveSnapshot(row); return row;
+  }
+  h('data:snapshots', (days) => db.snapshots(Number(days) || 365));
+  h('data:snapshotNow', () => takeSnapshot());
+  const snapshotTick = () => { const today = new Date().toISOString().slice(0, 10); const now = new Date(); if (now.getHours() * 60 + now.getMinutes() < 185) return; if (scanner.running) return; if (db.get('SELECT 1 FROM snapshots WHERE day=?', today)) return; try { takeSnapshot(); } catch (e) { log('snapshot failed: ' + e.message); } };
+  const snapshotTimer = setInterval(snapshotTick, 60000); if (snapshotTimer.unref) snapshotTimer.unref();
+
+  // ---- preferences: card colour rules, editor level, layouts. Desktop: one set in settings.ui.prefs; web shell overrides per account.
+  h('prefs:get', () => (settings.get().ui || {}).prefs || {});
+  h('prefs:set', (patch) => { const ui = settings.get().ui || {}; const prefs = { ...(ui.prefs || {}), ...(patch || {}) }; for (const k of Object.keys(prefs)) if (prefs[k] === null) delete prefs[k]; settings.set({ ui: { ...ui, prefs } }); return prefs; });
 
   // ---- notifications ----
   const notifier = createNotifier(() => settings.get().notify, log);

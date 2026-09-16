@@ -67,7 +67,7 @@ const DEFAULTS = {
     token: '',
     pathMap: [],              // [{ plex: '/media', local: '\\\\nas\\share' }]; derived automatically on first sync
   },
-  ui: { theme: 'dark' },
+  ui: { theme: 'dark', prefs: {} }, // prefs: per-card colour rules, editor level, dashboard layouts (the web server keeps these per account instead)
 };
 
 class Settings {

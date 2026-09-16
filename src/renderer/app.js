@@ -100,18 +100,37 @@ function filterBar(rows, rebuild, { watched = true } = {}) {
 const chips = (list, cls = 'tag-genre', n = 3) => list.slice(0, n).map(x => `<span class="badge ${cls}">${esc(x)}</span>`).join('') || '<span class="muted">—</span>';
 const topOf = (rows, get) => { const m = new Map(); for (const r of rows) for (const x of (get(r) || [])) m.set(x, (m.get(x) || 0) + 1); return [...m].sort((a, b) => b[1] - a[1]); };
 const linkTile = (href, html) => `<a href="${href}" class="tilelink">${html}</a>`;
-const tile = (cls, label, value, sub = '') => `<div class="tile ${cls}"><div class="label">${label}</div><div class="value" title="${esc(String(value).replace(/<[^>]+>/g, ''))}">${value}</div><div class="sub">${sub}</div></div>`;
-function bars(rows, title, { order, legend = true, max: maxLimit = 10, keyLabel = k => k } = {}) {
-  const keys = [...new Set(rows.map(r => String(r.k ?? 'unknown')))];
-  const sum = k => rows.filter(r => String(r.k ?? 'unknown') === k).reduce((x, r) => x + r.n, 0);
-  if (order) keys.sort((a, b) => (order.indexOf(a) === -1 ? 99 : order.indexOf(a)) - (order.indexOf(b) === -1 ? 99 : order.indexOf(b)));
-  else keys.sort((a, b) => sum(b) - sum(a));
-  const max = Math.max(1, ...keys.map(sum));
-  return `<div class="card"><h3>${title}</h3>${legend ? '<div class="legend"><span><i class="tv"></i>TV</span><span><i class="anime"></i>Anime</span><span><i class="movie"></i>Movies</span></div>' : ''}<div class="bars">${keys.slice(0, maxLimit).map(k => {
-    const parts = rows.filter(r => String(r.k ?? 'unknown') === k); const n = sum(k);
-    return `<div class="row"><span title="${esc(k)}">${esc(keyLabel(k))}</span><div class="track" style="width:${Math.round(n / max * 100)}%">${parts.map(p => `<div class="seg ${p.library_type || ''}" style="width:${p.n / n * 100}%" title="${typeName(p.library_type)}: ${p.n.toLocaleString()}"></div>`).join('')}</div><span class="num muted">${n.toLocaleString()}</span></div>`;
-  }).join('') || '<div class="empty">—</div>'}</div></div>`;
+// Number card with an id: colour comes from the rule saved in prefs (or the shipped default), the gear edits it.
+const DEFAULT_RULES = { health: { higher: true, warn: 97, bad: 90 }, missing: { higher: false, warn: 1, bad: 100 }, pending: { higher: false, warn: 1, bad: 5 }, upgrades: { higher: false, warn: 1, bad: 20 }, ended: { higher: false, warn: 1, bad: 10 }, dups: { higher: false, warn: 1, bad: 50 }, lowbit: { higher: false, warn: 1, bad: 1000 }, lowres: { higher: false, warn: 1, bad: 500 }, storage: { higher: true, warn: 12, bad: 3 } };
+const ruleFor = (id) => (prefs.cards && prefs.cards[id] && prefs.cards[id].rule) || DEFAULT_RULES[id] || null;
+function ncard(id, label, num, value, sub = '', opts = {}) { return window.Cards.number(label, { id, num, value, sub, rule: opts.rule !== undefined ? opts.rule : ruleFor(id), href: opts.href, gear: opts.gear !== false && me.role !== 'guest', tip: opts.tip }); }
+async function openCardSettings(id) {
+  const level = prefs.editorLevel || 'standard'; const rule = ruleFor(id) || { higher: false, warn: '', bad: '' }; const def = DEFAULT_RULES[id];
+  const card = openModal(`<h2>Card settings <span class="muted tiny">${esc(id)}</span></h2>
+    <div class="field"><label>Editor level</label><select id="csLevel"><option value="simple" ${level === 'simple' ? 'selected' : ''}>Simple: ready-made cards, no knobs</option><option value="standard" ${level === 'standard' ? 'selected' : ''}>Standard: pick what a card shows</option><option value="advanced" ${level === 'advanced' ? 'selected' : ''}>Advanced: colour rules, switches, labels</option></select><div class="hint">Applies to every card editor for your account. The dashboard builder (next release) shows more or fewer options depending on this.</div></div>
+    <div id="csRule" ${level === 'advanced' ? '' : 'hidden'}>
+      <div class="field"><label>Colour rule</label><div class="inline" style="flex-wrap:wrap;gap:8px"><label class="inline"><input type="radio" name="csDir" value="lower" ${!rule.higher ? 'checked' : ''}> lower is better</label><label class="inline"><input type="radio" name="csDir" value="higher" ${rule.higher ? 'checked' : ''}> higher is better</label></div></div>
+      <div class="field"><label>Amber from</label><input type="number" id="csWarn" value="${rule.warn ?? ''}" placeholder="none" style="width:120px"><div class="hint">Green until this value${rule.higher ? ' (counting down)' : ''}.</div></div>
+      <div class="field"><label>Red from</label><input type="number" id="csBad" value="${rule.bad ?? ''}" placeholder="none" style="width:120px"></div>
+      ${def ? `<p class="muted tiny">Shipped default: ${def.higher ? 'higher is better' : 'lower is better'}, amber ${def.warn}, red ${def.bad}.</p>` : ''}
+    </div>
+    <div id="csNote" class="muted" ${level === 'advanced' ? 'hidden' : ''}>Switch to <b>Advanced</b> to set this card's colour thresholds. Standard keeps the shipped defaults.</div>
+    <div class="actions">${def ? '<button id="csReset">Use default</button>' : ''}<span class="grow"></span><button id="csCancel">Cancel</button><button class="primary" id="csSave">Save</button></div>`);
+  $('#csLevel', card).onchange = () => { const adv = $('#csLevel', card).value === 'advanced'; $('#csRule', card).hidden = !adv; $('#csNote', card).hidden = adv; };
+  $('#csCancel', card).onclick = closeModal;
+  const persist = async (patch) => { try { prefs = await L.prefs.set(patch); closeModal(); route(); } catch (e) { toast(e.message, true); } };
+  if ($('#csReset', card)) $('#csReset', card).onclick = () => { const cards = { ...(prefs.cards || {}) }; delete cards[id]; persist({ editorLevel: $('#csLevel', card).value, cards }); };
+  $('#csSave', card).onclick = () => {
+    const lvl = $('#csLevel', card).value;
+    const cards = { ...(prefs.cards || {}) };
+    if (lvl === 'advanced') { const w = $('#csWarn', card).value, b = $('#csBad', card).value; cards[id] = { ...(cards[id] || {}), rule: { higher: $('input[name=csDir]:checked', card).value === 'higher', warn: w === '' ? null : Number(w), bad: b === '' ? null : Number(b) } }; }
+    persist({ editorLevel: lvl, cards });
+  };
 }
+document.addEventListener('click', e => { const g = e.target.closest && e.target.closest('.card-gear'); if (g) { e.preventDefault(); e.stopPropagation(); openCardSettings(g.dataset.card); } });
+const tile = (cls, label, value, sub = '') => `<div class="tile ${cls}"><div class="label">${label}</div><div class="value" title="${esc(String(value).replace(/<[^>]+>/g, ''))}">${value}</div><div class="sub">${sub}</div></div>`;
+// Horizontal bar chart: square-root scale, exact counts and shares, stacked by library, drill-down on click. See cards.js.
+function bars(rows, title, opts = {}) { return window.Cards.bars(rows, title, opts); }
 
 // ---------- scan UI -----------------------------------------------------------
 async function refreshScanUi() {
@@ -184,6 +203,10 @@ function applyTheme(name) {
 const currentTheme = () => { try { return localStorage.getItem('medialedger.theme') || ''; } catch { return ''; } };
 
 let me = { role: 'admin', guest: false, username: null, available: false, guestEnabled: false };
+let routeQuery = {};   // ?q=… on a list hash pre-fills the filter box (drill-down from a chart)
+let prefs = {};        // per-account preferences: card colour rules, editor level
+const loadPrefs = async () => { try { prefs = (await L.prefs.get()) || {}; } catch { prefs = {}; } return prefs; };
+const applyQuery = (tb, table) => { if (routeQuery.q) { const inp = $('input[type=search]', tb); if (inp) { inp.value = routeQuery.q; table.setQuery(routeQuery.q); } } };
 async function loadMe() {
   try { me = await L.security.me(); } catch { /* desktop or pre-login */ }
   document.body.classList.remove('role-admin', 'role-standard', 'role-guest');
@@ -359,7 +382,7 @@ function storagePanel(st) {
 const views = {};
 
 views.dashboard = async () => {
-  const d = await L.data.dashboard();
+  const [d, snaps] = await Promise.all([L.data.dashboard(), L.snapshots(365).catch(() => [])]); await loadPrefs();
   L.storage().then(st => { const t = $('#storageTile'); if (!t) return; t.outerHTML = storageTile(st); view.append(el(storagePanel(st))); }).catch(() => {});
   const t = Object.fromEntries(d.byType.map(r => [r.library_type, r]));
   const tot = d.byType.reduce((a, r) => ({ files: a.files + r.files, bytes: a.bytes + (r.bytes || 0), seconds: a.seconds + (r.seconds || 0), probed: a.probed + r.probed, captioned: a.captioned + r.captioned }), { files: 0, bytes: 0, seconds: 0, probed: 0, captioned: 0 });
@@ -378,9 +401,9 @@ views.dashboard = async () => {
     </div>
     <div class="tiles compact">
       ${tile(d.multiples.n ? 'warnt' : '', 'Movie multiples', `${d.multiples.n} titles`, `${d.multiples.extra} extra file(s) · ${fmtBytes(d.multiples.bytes)}`)}
-      ${tile(health > 97 ? 'okt' : 'warnt', 'Library health', `${health}%`, `${d.byType.reduce((a, r) => a + r.unparsed, 0)} unparsed · ${d.byType.reduce((a, r) => a + r.probe_errors, 0)} probe errors · ${d.missingFiles} missing`)}
+      ${ncard('health', 'Library health', health, `${health}%`, `${d.byType.reduce((a, r) => a + r.unparsed, 0)} unparsed · ${d.byType.reduce((a, r) => a + r.probe_errors, 0)} probe errors · ${d.missingFiles} missing`)}
       ${tile('', 'Captions', `${pct(tot.captioned, tot.files)}%`, `${tot.captioned.toLocaleString()} of ${tot.files.toLocaleString()} files have subtitles`)}
-      ${tile(lowRes ? 'warnt' : 'okt', 'Below 720p', lowRes.toLocaleString(), d.lowRes.map(r => `${typeName(r.library_type)} ${r.n}`).join(' · ') || 'nothing SD')}
+      ${ncard('lowres', 'Below 720p', lowRes, lowRes.toLocaleString(), d.lowRes.map(r => `${typeName(r.library_type)} ${r.n}`).join(' · ') || 'nothing SD')}
       ${tile('', 'Avg bitrate', t.tv || t.movie ? `${Math.round(d.byType.reduce((a, r) => a + (r.avg_kbps || 0) * r.files, 0) / Math.max(1, tot.files)).toLocaleString()} kbps` : '—', d.byType.map(r => `${typeName(r.library_type)} ${Math.round(r.avg_kbps || 0).toLocaleString()}`).join(' · '))}
       ${tile('', 'Last scan', last ? fmtAgo(last.started) : 'never', last ? `${last.status} in ${fmtMs(last.duration_ms)} · +${last.added} −${last.removed} ~${last.modified}` : 'Run a scan to populate the library')}
       ${tile('', 'Manual fixes', d.overrides, d.overrides ? 'applied on every scan' : 'none needed yet')}
@@ -388,19 +411,19 @@ views.dashboard = async () => {
       <div id="storageTile"></div>
     </div>
     <div class="tiles compact">
-      ${linkTile('#requests', tile(d.pending ? 'warnt' : 'okt', 'Pending requests', d.pending, d.pending ? 'waiting for a decision' : 'nothing asked for'))}
+      ${ncard('pending', 'Pending requests', d.pending, d.pending, d.pending ? 'waiting for a decision' : 'nothing asked for', { href: '#requests' })}
       ${linkTile('#missing', tile(d.airingWeek ? 'okt' : '', 'Airing this week', d.airingWeek, d.nextAiring ? `next: ${esc(d.nextAiring.show_name)} ${esc(d.nextAiring.next_episode || '')} on ${esc(d.nextAiring.next_airing)}` : 'no dates from the lookups yet'))}
       ${linkTile('#tonight', tile('', 'Watched', d.watched.linked ? `${pct(d.watched.watched, d.watched.linked)}%` : '—', d.watched.linked ? `${d.watched.watched.toLocaleString()} of ${d.watched.linked.toLocaleString()} Plex-linked files · Watch tonight →` : 'sync Plex to see play counts'))}
       ${tile('', 'Genres known', d.genresTitles, d.genres.length ? `${d.genres.reduce((a, r) => a + r.n, 0).toLocaleString()} genre tags across the library` : 'from TVmaze / AniList / Plex')}
       ${tile('', 'Your tags', d.tagged ? `${d.tagged} titles` : '—', d.tags.slice(0, 4).map(t => `${esc(t.tag)} ${t.n}`).join(' · ') || 'type one on any title page')}
-      ${linkTile('#upgrades', tile(d.upgrades ? 'warnt' : '', 'Upgrade candidates', d.upgrades || '—', d.upgrades ? 'worth a better copy' : 'ranking not tuned yet (upgrades.js)'))}
-      ${linkTile('#missing', tile(d.finishedIncomplete ? 'warnt' : 'okt', 'Ended but incomplete', d.finishedIncomplete, 'finished airing, still have gaps'))}
+      ${ncard('upgrades', 'Upgrade candidates', d.upgrades, d.upgrades || '—', d.upgrades ? 'worth a better copy' : 'ranking not tuned yet (upgrades.js)', { href: '#upgrades' })}
+      ${ncard('ended', 'Ended but incomplete', d.finishedIncomplete, d.finishedIncomplete, 'finished airing, still have gaps', { href: '#missing' })}
     </div>
     <div class="tiles compact">
-      ${tile(d.missingEpisodes.episodes ? 'badt' : 'okt', 'Missing episodes', d.missingEpisodes.episodes.toLocaleString(), `${d.missingEpisodes.series} series · ${d.missingEpisodes.matched} matched · ${d.missingEpisodes.unmatched} unmatched${d.missingEpisodes.pending ? ` · ${d.missingEpisodes.pending} pending` : ''}`)}
-      ${tile(d.duplicates ? 'warnt' : 'okt', 'Duplicate episodes', d.duplicates, 'same season/episode, several files')}
+      ${ncard('missing', 'Missing episodes', d.missingEpisodes.episodes, d.missingEpisodes.episodes.toLocaleString(), `${d.missingEpisodes.series} series · ${d.missingEpisodes.matched} matched · ${d.missingEpisodes.unmatched} unmatched${d.missingEpisodes.pending ? ` · ${d.missingEpisodes.pending} pending` : ''}`)}
+      ${ncard('dups', 'Duplicate episodes', d.duplicates, d.duplicates, 'same season/episode, several files', { href: '#issues/duplicates' })}
       ${tile(d.quality.mixedSeries ? 'warnt' : 'okt', 'Mixed-quality series', d.quality.mixedSeries, 'more than one resolution')}
-      ${tile(d.quality.lowBitrate ? 'warnt' : 'okt', 'Low-bitrate files', d.quality.lowBitrate.toLocaleString(), 'below the threshold for their resolution')}
+      ${ncard('lowbit', 'Low-bitrate files', d.quality.lowBitrate, d.quality.lowBitrate.toLocaleString(), 'below the threshold for their resolution', { href: '#quality' })}
       ${tile('', 'Undefined audio language', d.quality.undAudio.toLocaleString(), 'no language tag on the audio track')}
       ${tile(d.watch.enabled ? 'okt' : '', 'Folder watch', d.watch.enabled ? `${d.watch.roots.length} roots` : 'off', d.watch.enabled ? (d.watch.lastEvent ? `last change ${fmtAgo(d.watch.lastEvent.ts)}` : 'no changes seen yet') : 'enable in Settings')}
     </div>
@@ -416,10 +439,16 @@ views.dashboard = async () => {
       ${bars(d.fps, 'Frame rate', { keyLabel: k => k === 'unknown' ? k : k + ' fps' })}
       ${bars(d.hdr, 'Dynamic range')}
     </div>
-    <div class="grid3" style="margin-top:14px">
+    <div class="grid4" style="margin-top:14px">
       ${bars(d.genres, 'Genres', { max: 12, legend: true })}
-      ${bars([{ k: 'Subbed', n: d.anime_audio.sub, library_type: 'anime' }, { k: 'Dubbed', n: d.anime_audio.dub, library_type: 'anime' }, { k: 'Dual audio', n: d.anime_audio.dual, library_type: 'anime' }, { k: 'Mixed', n: d.anime_audio.mixed, library_type: 'anime' }, { k: 'Raw', n: d.anime_audio.raw, library_type: 'anime' }].filter(x => x.n), 'Anime sub / dub', { legend: false, order: ['Subbed', 'Dubbed', 'Dual audio', 'Mixed', 'Raw'] })}
-      ${bars(d.tags.map(t => ({ k: t.tag, n: t.n, library_type: '' })), 'Your tags', { legend: false, max: 12 })}
+      ${window.Cards.donut([{ k: 'Subbed', n: d.anime_audio.sub, color: 'var(--anime)', href: '#anime?q=sub' }, { k: 'Dubbed', n: d.anime_audio.dub, color: 'var(--movie)', href: '#anime?q=dub' }, { k: 'Dual audio', n: d.anime_audio.dual, color: 'var(--accent2)', href: '#anime?q=dual' }, { k: 'Mixed', n: d.anime_audio.mixed, color: 'var(--warn)', href: '#anime?q=mixed' }, { k: 'Raw', n: d.anime_audio.raw, color: 'var(--muted)' }], 'Anime sub / dub', { sub: 'series' })}
+      ${window.Cards.donut([{ k: 'Watched', n: d.watched.watched, color: 'var(--accent2)' }, { k: 'Not yet', n: Math.max(0, d.watched.linked - d.watched.watched), color: 'var(--line)' }], 'Watched (Plex)', { center: d.watched.linked ? pct(d.watched.watched, d.watched.linked) + '%' : '—', sub: d.watched.linked ? 'of linked files' : 'sync Plex' })}
+      ${bars(d.tags.map(t => ({ k: t.tag, n: t.n, library_type: '' })), 'Your tags', { legend: false, max: 12, drill: false })}
+    </div>
+    <div class="grid3" style="margin-top:14px">
+      ${window.Cards.trend(snaps.map(x => ({ x: x.day, y: x.files })), 'Files over time', { note: 'Daily snapshots start tonight; the line appears after the second one.' })}
+      ${window.Cards.trend(snaps.map(x => ({ x: x.day, y: x.free_bytes })), 'Free space over time', { fmt: fmtBytes, upIsGood: true, note: 'Daily snapshots start tonight; the line appears after the second one.' })}
+      ${window.Cards.trend(snaps.map(x => ({ x: x.day, y: x.missing_episodes })), 'Missing episodes over time', { upIsGood: false, note: 'Daily snapshots start tonight; the line appears after the second one.' })}
     </div>
     <div class="grid3" style="margin-top:14px">
       <div class="card"><h3>Recently added <a class="right" href="#changes">change log →</a></h3><div id="recentAdded"></div></div>
@@ -458,7 +487,7 @@ async function seriesView(type) {
     { key: 'unparsed', label: 'Issues', num: true, render: r => (r.unparsed ? `<span class="badge warn">${r.unparsed} unparsed</span>` : '') + (r.probed < r.episodes ? `<span class="badge">${r.episodes - r.probed} unprobed</span>` : '') },
   ];
   rows.forEach(r => { r.unwatched = r.plex_linked ? r.episodes - r.watched : null; });
-  const build = (list) => makeTable(list, cols, { search: r => `${r.show_name} ${tagText(r)}`, defaultSort: { key: 'show_name' }, onRow: r => { location.hash = `#${type}/${encodeURIComponent(r.show_name)}`; } });
+  const build = (list) => makeTable(list, cols, { search: r => `${r.show_name} ${tagText(r)} ${r.resolutions || ''} ${r.codecs || ''} ${r.audio_langs || ''}`, defaultSort: { key: 'show_name' }, onRow: r => { location.hash = `#${type}/${encodeURIComponent(r.show_name)}`; } });
   let table = build(rows);
   const eps = rows.reduce((a, r) => a + r.episodes, 0), bytes = rows.reduce((a, r) => a + (r.bytes || 0), 0), secs = rows.reduce((a, r) => a + (r.seconds || 0), 0);
     const linked = rows.filter(r => r.plex_linked), watchedEps = linked.reduce((a, r) => a + r.watched, 0), linkedEps = linked.reduce((a, r) => a + r.episodes, 0);
@@ -474,7 +503,7 @@ async function seriesView(type) {
     ${tile('', 'Full captions', rows.filter(r => r.probed && r.captioned === r.episodes).length + ' series')}${linkTile('#issues', tile(rows.filter(r => r.unparsed).length ? 'warnt' : '', 'With issues', rows.filter(r => r.unparsed).length + ' series'))}</div>`;
   const tb = searchToolbar(table, rows.length, '<span class="muted tiny">Filter also matches genres, sub/dub and your tags</span>');
   const fb = filterBar(rows, (list) => { const q = $('input[type=search]', tb).value; const nt = build(list); table.node.replaceWith(nt.node); table = nt; nt.node.addEventListener('count', ev => $('.count', tb).textContent = `${ev.detail} of ${rows.length}`); nt.setQuery(q); if (!q) $('.count', tb).textContent = `${list.length} of ${rows.length}`; });
-  view.append(tb, fb, table.node);
+  view.append(tb, fb, table.node); applyQuery(tb, table);
 }
 views.tv = () => seriesView('tv');
 
@@ -615,7 +644,7 @@ views.movies = async () => {
   ];
   rows.forEach(r => { r.watched = r.watched_count > 0 ? 1 : 0; r.unwatched = r.plex_linked ? (r.watched_count > 0 ? 0 : 1) : null; });
   let onlyMulti = false, filtered = rows;
-  const build = () => makeTable((onlyMulti ? filtered.filter(r => r.files > 1) : filtered), cols, { search: r => `${r.title} ${r.year || ''} ${tagText(r)}`, defaultSort: { key: 'title' }, onRow: r => { location.hash = '#movies/' + encodeURIComponent(r.group_key); } });
+  const build = () => makeTable((onlyMulti ? filtered.filter(r => r.files > 1) : filtered), cols, { search: r => `${r.title} ${r.year || ''} ${tagText(r)} ${r.resolutions || ''} ${r.codecs || ''} ${r.hdr || ''}`, defaultSort: { key: 'title' }, onRow: r => { location.hash = '#movies/' + encodeURIComponent(r.group_key); } });
   let table = build();
   const multi = rows.filter(r => r.files > 1);
     const mLinked = rows.filter(r => r.plex_linked), mWatched = mLinked.filter(r => r.watched_count > 0);
@@ -630,7 +659,7 @@ views.movies = async () => {
   const tb = searchToolbar(table, rows.length, '<label class="inline small"><input type="checkbox" id="multi"> Only titles with multiple files</label>');
   const swap = () => { const q = $('input[type=search]', tb).value; const nt = build(); table.node.replaceWith(nt.node); table = nt; nt.node.addEventListener('count', ev => $('.count', tb).textContent = `${ev.detail} of ${rows.length}`); nt.setQuery(q); };
   const fb = filterBar(rows, (list) => { filtered = list; swap(); });
-  view.append(tb, fb, table.node);
+  view.append(tb, fb, table.node); applyQuery(tb, table);
   $('#multi', tb).onchange = e => { onlyMulti = e.target.checked; swap(); };
 };
 
@@ -1640,7 +1669,9 @@ views.about = async () => {
 let currentView = 'dashboard';
 async function route() {
   const hash = location.hash.slice(1) || 'dashboard';
-  let [name, arg] = hash.split('/');
+  const qIdx = hash.indexOf('?'); const query = Object.fromEntries(new URLSearchParams(qIdx >= 0 ? hash.slice(qIdx + 1) : '')); const path = qIdx >= 0 ? hash.slice(0, qIdx) : hash;
+  routeQuery = query;
+  let [name, arg] = path.split('/');
   if (name === 'problems') { name = 'issues'; arg = arg || 'problems'; }
   if (name === 'duplicates') { name = 'issues'; arg = 'duplicates'; }
   currentView = name;
