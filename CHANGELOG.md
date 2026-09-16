@@ -12,6 +12,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+## [1.8.0] - 2026-09-16
+
+### Added
+
+- **Dashboard and list tiles for the new data.** Dashboard: Pending requests,
+  Airing this week (next episode named), Watched, Genres known, Your tags,
+  Upgrade candidates, Ended but incomplete, plus Genres, Anime sub / dub and
+  Your tags charts. TV, Anime and Movies lists: Watched, Complete, Sub / dub,
+  Top genres and Your tags tiles. Tiles that summarise a page link to it.
+### Changed
+
+### Fixed
+
 ## [1.7.0] - 2026-09-15
 
 ### Added

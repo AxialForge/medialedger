@@ -48,7 +48,7 @@ const TOC_ENTRIES = [
   '1. What MediaLedger is', '1.1 What it never does', '1.2 Core concepts',
   '2. Installing and first run', '2.1 Install', '2.2 First launch', '2.3 Where your data lives', '2.4 Updates',
   '3. The window',
-  '4. Dashboard', '4.1 Top tiles', '4.2 Charts', '4.3 Panels', '4.4 Storage forecast',
+  '4. Dashboard', '4.1 Top tiles', '4.2 Charts', '4.3 Panels', '4.4 What the new data adds', '4.5 Storage forecast',
   '5. TV Shows and Anime', '5.1 Episode detail', '5.2 Tags: genres, sub/dub and your own',
   '6. Movies', '7. Web videos', '8. Adult library',
   '9. Missing episodes', '9.1 The Match dialog', '9.2 Airing next',
@@ -175,7 +175,9 @@ add(H1('4. Dashboard'), ...img('dashboard', 'The Dashboard after a full scan.'),
 );
 
 // ---------------- 5 TV & Anime ----------------
-  H2('4.4 Storage forecast'),
+  H2('4.4 What the new data adds'),
+  P('A third row of tiles covers what arrived with tags and lookups: **Pending requests**, **Airing this week** with the next episode named, **Watched** (Plex play counts across linked files, a click away from Watch tonight), **Genres known**, **Your tags**, **Upgrade candidates** and **Ended but incomplete**. Below the codec charts, three panels chart **Genres** by library, **Anime sub / dub**, and **Your tags**. The TV, Anime and Movies lists open with the same idea: Watched, Complete, Sub / dub, Top genres and Your tags tiles next to the size and runtime.'),
+  H2('4.5 Storage forecast'),
   P('The **Free on the share** tile and the Storage panel at the bottom use the date each file was first seen to work out how much the library grows per month, average the last three complete months, and divide the free space on your roots by it. The tile turns amber under a year and red under three months. It is an estimate from your own history, so a one-off bulk import skews it for a quarter.'),
 
 add(H1('5. TV Shows and Anime'), ...img('anime', 'The Anime list. TV Shows looks the same.'),

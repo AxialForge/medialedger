@@ -480,8 +480,31 @@ function createService({ userData, log, send, host }) {
       duplicates: dups,
       lastExport: db.listExports(1)[0] || null,
       watch: watcher.status(),
+      ...newData(),
     };
   });
+  // Tags, genres, sub/dub, watched state, requests, airing and upgrades: the data added in 1.4–1.7, summarised for the tiles.
+  function newData() {
+    const genreRows = [];
+    const bump = (map, type, g) => { const k = type + '|' + g; map.set(k, (map.get(k) || 0) + 1); };
+    const gm = new Map();
+    for (const type of ['tv', 'anime']) { const plexShows = new Map(db.all('SELECT rating_key, genres FROM plex_shows').map(x => [x.rating_key, x])); const metas = db.allSeriesMeta(type); for (const r of db.all(`SELECT show_name, MAX(plex_show_key) pk FROM files WHERE library_type=? AND missing=0 AND ignored=0${AF()} GROUP BY show_name`, type)) { const sm = metas.get(r.show_name); const ps = r.pk ? plexShows.get(r.pk) : null; const gs = onlineTags(sm).length ? onlineTags(sm) : onlineTags({ genres: ps && ps.genres }); for (const g of gs.slice(0, 4)) bump(gm, type, g); } }
+    for (const r of db.all(`SELECT group_key, MAX(plex_genres) g FROM files WHERE library_type='movie' AND missing=0 AND ignored=0${AF()} GROUP BY group_key`)) for (const g of onlineTags({ genres: r.g }).slice(0, 4)) bump(gm, 'movie', g);
+    for (const [k, n] of gm) { const [library_type, g] = k.split('|'); genreRows.push({ library_type, k: g, n }); }
+    const audio = { sub: 0, dub: 0, dual: 0, mixed: 0, raw: 0 };
+    for (const r of db.all(`SELECT show_name, ${AUDIO_COUNTS} FROM files WHERE library_type='anime' AND missing=0 AND ignored=0${AF()} GROUP BY show_name`)) { const t = titleAudioType({ files: r.probed_audio, jpn: r.jpn_files, eng: r.eng_files, dual: r.dual_files }, { anime: true }); if (t && audio[t] != null) audio[t]++; }
+    const watched = db.get(`SELECT SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) linked, SUM(CASE WHEN plex_view_count>0 THEN 1 ELSE 0 END) watched FROM files WHERE missing=0 AND ignored=0${AF()}`);
+    const air = airingReport();
+    let upgrades = 0; try { upgrades = handlers.get('data:upgrades')().filter(u => u.score > 0).length; } catch { /* ranking not written yet */ }
+    return {
+      genres: genreRows, genresTitles: gm.size ? [...new Set([...gm.keys()].map(k => k.split('|')[1]))].length : 0,
+      anime_audio: audio,
+      tags: db.allTags().slice(0, 12), tagged: db.get('SELECT COUNT(DISTINCT library_type || title_key) n FROM title_tags').n,
+      watched: { linked: watched.linked || 0, watched: watched.watched || 0 },
+      pending: db.pendingRequests(), airingWeek: air.thisWeek, nextAiring: air.upcoming[0] || null, finishedIncomplete: air.finished.length,
+      upgrades,
+    };
+  }
 
   h('data:series', (type) => {
     const rows = db.all(`SELECT show_name, COUNT(*) episodes, COUNT(DISTINCT season) seasons, MIN(season) min_season, MAX(season) max_season,

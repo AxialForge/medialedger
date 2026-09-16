@@ -97,6 +97,9 @@ function filterBar(rows, rebuild, { watched = true } = {}) {
   $('#fClear', bar).onclick = () => { bar.querySelectorAll('select').forEach(x => { x.value = ''; }); apply(); };
   return bar;
 }
+const chips = (list, cls = 'tag-genre', n = 3) => list.slice(0, n).map(x => `<span class="badge ${cls}">${esc(x)}</span>`).join('') || '<span class="muted">—</span>';
+const topOf = (rows, get) => { const m = new Map(); for (const r of rows) for (const x of (get(r) || [])) m.set(x, (m.get(x) || 0) + 1); return [...m].sort((a, b) => b[1] - a[1]); };
+const linkTile = (href, html) => `<a href="${href}" class="tilelink">${html}</a>`;
 const tile = (cls, label, value, sub = '') => `<div class="tile ${cls}"><div class="label">${label}</div><div class="value" title="${esc(String(value).replace(/<[^>]+>/g, ''))}">${value}</div><div class="sub">${sub}</div></div>`;
 function bars(rows, title, { order, legend = true, max: maxLimit = 10, keyLabel = k => k } = {}) {
   const keys = [...new Set(rows.map(r => String(r.k ?? 'unknown')))];
@@ -385,6 +388,15 @@ views.dashboard = async () => {
       <div id="storageTile"></div>
     </div>
     <div class="tiles compact">
+      ${linkTile('#requests', tile(d.pending ? 'warnt' : 'okt', 'Pending requests', d.pending, d.pending ? 'waiting for a decision' : 'nothing asked for'))}
+      ${linkTile('#missing', tile(d.airingWeek ? 'okt' : '', 'Airing this week', d.airingWeek, d.nextAiring ? `next: ${esc(d.nextAiring.show_name)} ${esc(d.nextAiring.next_episode || '')} on ${esc(d.nextAiring.next_airing)}` : 'no dates from the lookups yet'))}
+      ${linkTile('#tonight', tile('', 'Watched', d.watched.linked ? `${pct(d.watched.watched, d.watched.linked)}%` : '—', d.watched.linked ? `${d.watched.watched.toLocaleString()} of ${d.watched.linked.toLocaleString()} Plex-linked files · Watch tonight →` : 'sync Plex to see play counts'))}
+      ${tile('', 'Genres known', d.genresTitles, d.genres.length ? `${d.genres.reduce((a, r) => a + r.n, 0).toLocaleString()} genre tags across the library` : 'from TVmaze / AniList / Plex')}
+      ${tile('', 'Your tags', d.tagged ? `${d.tagged} titles` : '—', d.tags.slice(0, 4).map(t => `${esc(t.tag)} ${t.n}`).join(' · ') || 'type one on any title page')}
+      ${linkTile('#upgrades', tile(d.upgrades ? 'warnt' : '', 'Upgrade candidates', d.upgrades || '—', d.upgrades ? 'worth a better copy' : 'ranking not tuned yet (upgrades.js)'))}
+      ${linkTile('#missing', tile(d.finishedIncomplete ? 'warnt' : 'okt', 'Ended but incomplete', d.finishedIncomplete, 'finished airing, still have gaps'))}
+    </div>
+    <div class="tiles compact">
       ${tile(d.missingEpisodes.episodes ? 'badt' : 'okt', 'Missing episodes', d.missingEpisodes.episodes.toLocaleString(), `${d.missingEpisodes.series} series · ${d.missingEpisodes.matched} matched · ${d.missingEpisodes.unmatched} unmatched${d.missingEpisodes.pending ? ` · ${d.missingEpisodes.pending} pending` : ''}`)}
       ${tile(d.duplicates ? 'warnt' : 'okt', 'Duplicate episodes', d.duplicates, 'same season/episode, several files')}
       ${tile(d.quality.mixedSeries ? 'warnt' : 'okt', 'Mixed-quality series', d.quality.mixedSeries, 'more than one resolution')}
@@ -403,6 +415,11 @@ views.dashboard = async () => {
       ${bars(d.subLang, 'Subtitle languages', { keyLabel: k => k.replace(/;/g, '+') })}
       ${bars(d.fps, 'Frame rate', { keyLabel: k => k === 'unknown' ? k : k + ' fps' })}
       ${bars(d.hdr, 'Dynamic range')}
+    </div>
+    <div class="grid3" style="margin-top:14px">
+      ${bars(d.genres, 'Genres', { max: 12, legend: true })}
+      ${bars([{ k: 'Subbed', n: d.anime_audio.sub, library_type: 'anime' }, { k: 'Dubbed', n: d.anime_audio.dub, library_type: 'anime' }, { k: 'Dual audio', n: d.anime_audio.dual, library_type: 'anime' }, { k: 'Mixed', n: d.anime_audio.mixed, library_type: 'anime' }, { k: 'Raw', n: d.anime_audio.raw, library_type: 'anime' }].filter(x => x.n), 'Anime sub / dub', { legend: false, order: ['Subbed', 'Dubbed', 'Dual audio', 'Mixed', 'Raw'] })}
+      ${bars(d.tags.map(t => ({ k: t.tag, n: t.n, library_type: '' })), 'Your tags', { legend: false, max: 12 })}
     </div>
     <div class="grid3" style="margin-top:14px">
       <div class="card"><h3>Recently added <a class="right" href="#changes">change log →</a></h3><div id="recentAdded"></div></div>
@@ -444,7 +461,17 @@ async function seriesView(type) {
   const build = (list) => makeTable(list, cols, { search: r => `${r.show_name} ${tagText(r)}`, defaultSort: { key: 'show_name' }, onRow: r => { location.hash = `#${type}/${encodeURIComponent(r.show_name)}`; } });
   let table = build(rows);
   const eps = rows.reduce((a, r) => a + r.episodes, 0), bytes = rows.reduce((a, r) => a + (r.bytes || 0), 0), secs = rows.reduce((a, r) => a + (r.seconds || 0), 0);
-  view.innerHTML = `<h1>${typeName(type)}</h1><div class="tiles compact"><div class="tile ${type}"><div class="label">Series</div><div class="value">${rows.length}</div></div>${tile('', 'Episodes', eps.toLocaleString())}${tile('', 'Size', fmtBytes(bytes))}${tile('', 'Runtime', fmtHours(secs))}${tile('', 'Full captions', rows.filter(r => r.probed && r.captioned === r.episodes).length + ' series')}${tile('', 'With issues', rows.filter(r => r.unparsed).length + ' series')}</div>`;
+    const linked = rows.filter(r => r.plex_linked), watchedEps = linked.reduce((a, r) => a + r.watched, 0), linkedEps = linked.reduce((a, r) => a + r.episodes, 0);
+  const matched = rows.filter(r => r.expected > 0), complete = matched.filter(r => !r.missing_count);
+  const topG = topOf(rows, r => r.genres), topT = topOf(rows, r => r.tags), tagged = rows.filter(r => r.tags && r.tags.length).length;
+  const au = { sub: 0, dub: 0, dual: 0, mixed: 0 }; rows.forEach(r => { if (au[r.audio_type] != null) au[r.audio_type]++; });
+  view.innerHTML = `<h1>${typeName(type)}</h1><div class="tiles compact"><div class="tile ${type}"><div class="label">Series</div><div class="value">${rows.length}</div><div class="sub">${eps.toLocaleString()} episodes · ${fmtBytes(bytes)} · ${fmtHours(secs)}</div></div>
+    ${tile(linked.length ? (watchedEps === linkedEps ? 'okt' : '') : '', 'Watched', linked.length ? `${pct(watchedEps, linkedEps)}%` : '—', linked.length ? `${linked.filter(r => r.watched === r.episodes).length} series finished · ${linked.filter(r => !r.watched).length} untouched` : 'sync Plex to see play counts')}
+    ${linkTile('#missing', tile(matched.length ? (complete.length === matched.length ? 'okt' : 'warnt') : '', 'Complete', matched.length ? `${complete.length} of ${matched.length}` : '—', matched.length ? `${matched.length - complete.length} with gaps` : 'episode lookups off or pending'))}
+    ${type === 'anime' || au.sub + au.dub + au.dual + au.mixed ? tile('', 'Sub / dub', `${au.sub} subbed`, `${au.dub} dubbed · ${au.dual} dual · ${au.mixed} mixed`) : ''}
+    ${tile('', 'Top genres', chips(topG.map(x => x[0])), topG.slice(3, 7).map(x => `${x[0]} ${x[1]}`).join(' · ') || (topG.length ? '' : 'from TVmaze / AniList / Plex'))}
+    ${tile('', 'Your tags', tagged ? `${tagged} series` : '—', topT.slice(0, 4).map(x => `${x[0]} ${x[1]}`).join(' · ') || 'type one on any series page')}
+    ${tile('', 'Full captions', rows.filter(r => r.probed && r.captioned === r.episodes).length + ' series')}${linkTile('#issues', tile(rows.filter(r => r.unparsed).length ? 'warnt' : '', 'With issues', rows.filter(r => r.unparsed).length + ' series'))}</div>`;
   const tb = searchToolbar(table, rows.length, '<span class="muted tiny">Filter also matches genres, sub/dub and your tags</span>');
   const fb = filterBar(rows, (list) => { const q = $('input[type=search]', tb).value; const nt = build(list); table.node.replaceWith(nt.node); table = nt; nt.node.addEventListener('count', ev => $('.count', tb).textContent = `${ev.detail} of ${rows.length}`); nt.setQuery(q); if (!q) $('.count', tb).textContent = `${list.length} of ${rows.length}`; });
   view.append(tb, fb, table.node);
@@ -591,7 +618,15 @@ views.movies = async () => {
   const build = () => makeTable((onlyMulti ? filtered.filter(r => r.files > 1) : filtered), cols, { search: r => `${r.title} ${r.year || ''} ${tagText(r)}`, defaultSort: { key: 'title' }, onRow: r => { location.hash = '#movies/' + encodeURIComponent(r.group_key); } });
   let table = build();
   const multi = rows.filter(r => r.files > 1);
-  view.innerHTML = `<h1>Movies</h1><div class="tiles compact"><div class="tile movie"><div class="label">Titles</div><div class="value">${rows.length}</div></div>${tile('', 'Files', rows.reduce((a, r) => a + r.files, 0))}${tile('', 'Size', fmtBytes(rows.reduce((a, r) => a + (r.bytes || 0), 0)))}${tile(multi.length ? 'warnt' : '', 'Multiples', multi.length + ' titles', fmtBytes(multi.reduce((a, r) => a + (r.bytes || 0), 0)))}${tile('', 'With captions', rows.filter(r => r.has_captions === 1).length)}</div>`;
+    const mLinked = rows.filter(r => r.plex_linked), mWatched = mLinked.filter(r => r.watched_count > 0);
+  const mTopG = topOf(rows, r => r.genres), mTopT = topOf(rows, r => r.tags), mTagged = rows.filter(r => r.tags && r.tags.length).length;
+  const mAu = { sub: 0, dub: 0, dual: 0, mixed: 0 }; rows.forEach(r => { if (mAu[r.audio_type] != null) mAu[r.audio_type]++; });
+  view.innerHTML = `<h1>Movies</h1><div class="tiles compact"><div class="tile movie"><div class="label">Titles</div><div class="value">${rows.length}</div><div class="sub">${rows.reduce((a, r) => a + r.files, 0).toLocaleString()} files · ${fmtBytes(rows.reduce((a, r) => a + (r.bytes || 0), 0))}</div></div>
+    ${tile(mLinked.length && mWatched.length === mLinked.length ? 'okt' : '', 'Watched', mLinked.length ? `${pct(mWatched.length, mLinked.length)}%` : '—', mLinked.length ? `${mWatched.length} seen · ${mLinked.length - mWatched.length} not yet` : 'sync Plex to see play counts')}
+    ${tile('', 'Top genres', chips(mTopG.map(x => x[0])), mTopG.slice(3, 7).map(x => `${x[0]} ${x[1]}`).join(' · ') || (mTopG.length ? '' : 'from Plex once synced'))}
+    ${tile('', 'Your tags', mTagged ? `${mTagged} titles` : '—', mTopT.slice(0, 4).map(x => `${x[0]} ${x[1]}`).join(' · ') || 'type one on any movie page')}
+    ${mAu.sub + mAu.dub + mAu.dual + mAu.mixed ? tile('', 'Sub / dub', `${mAu.sub} subbed`, `${mAu.dual} dual · ${mAu.mixed} mixed`) : ''}
+    ${linkTile('#issues/duplicates', tile(multi.length ? 'warnt' : '', 'Multiples', multi.length + ' titles', fmtBytes(multi.reduce((a, r) => a + (r.bytes || 0), 0))))}${tile('', 'With captions', rows.filter(r => r.has_captions === 1).length)}</div>`;
   const tb = searchToolbar(table, rows.length, '<label class="inline small"><input type="checkbox" id="multi"> Only titles with multiple files</label>');
   const swap = () => { const q = $('input[type=search]', tb).value; const nt = build(); table.node.replaceWith(nt.node); table = nt; nt.node.addEventListener('count', ev => $('.count', tb).textContent = `${ev.detail} of ${rows.length}`); nt.setQuery(q); };
   const fb = filterBar(rows, (list) => { filtered = list; swap(); });
