@@ -319,6 +319,22 @@ const MIGRATIONS = [
       );
     `,
   },
+  {
+    version: 10, name: 'plex play history per account',
+    sql: `
+      -- One row per play, for every Plex account on the server. Filled from Plex's history endpoint on each
+      -- sync and from media.scrobble webhooks in between. history_key is Plex's own id (or wh-… for webhooks).
+      CREATE TABLE IF NOT EXISTS plex_history (
+        history_key  TEXT PRIMARY KEY,
+        rating_key   TEXT, account_id INTEGER, account_name TEXT, device TEXT,
+        type         TEXT, title TEXT, show_title TEXT, season INTEGER, episode INTEGER, section TEXT,
+        viewed_at    TEXT, duration_s REAL, file_id INTEGER, library_type TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_plex_history_viewed ON plex_history(viewed_at);
+      CREATE INDEX IF NOT EXISTS idx_plex_history_key ON plex_history(rating_key, account_id);
+      CREATE TABLE IF NOT EXISTS plex_accounts (id INTEGER PRIMARY KEY, name TEXT, synced_at TEXT);
+    `,
+  },
 ];
 
 class Db {

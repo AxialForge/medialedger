@@ -53,7 +53,7 @@ const TOC_ENTRIES = [
   '6. Movies', '7. Web videos', '8. Adult library',
   '9. Missing episodes', '9.1 The Match dialog', '9.2 Airing next',
   '10. Issues', '10.1 Problems', '10.2 The Fix dialog', '10.3 Duplicates',
-  '11. Quality', '11.1 Upgrade candidates', '12. Ratings', '12.1 Watch tonight',
+  '11. Quality', '11.1 Upgrade candidates', '12. Ratings', '12.1 Watch tonight', '12.2 Watched: who watched what',
   '13. Media requests', '13.1 The phone page and notifications',
   '14. Change log',
   '15. Movie names (the naming engine)', '15.1 The pattern', '15.2 Ready, flagged, blocked', '15.3 Batch settings', '15.4 Running a batch', '15.5 Undo', '15.6 Bulk source, collisions, placeholders',
@@ -304,6 +304,10 @@ add(H1('12. Ratings'), ...img('ratings', 'Online averages beside your own stars.
   P('Filters narrow the list to one library, to titles you have rated, to titles you have not, or to titles with a Plex rating of yours. Your stars and notes are exported in the series and movie CSVs.'),
   H2('12.1 Watch tonight'),
   P('One list across every series and movie, made for the "what shall we watch" moment. Narrow it by kind, **unwatched only** (from Plex play counts; titles Plex does not have stay in), **complete series only** (no missing episodes), a length limit in minutes (episode length for series), your minimum star rating, and the genre, sub/dub and tag dropdowns. **Pick for me** chooses one at random from what is left and shows it in a card with an Open button; **Pick another** rerolls. Your last settings are remembered in the browser.'),
+  H2('12.2 Watched: who watched what'), ...img('watched', 'The Watched tab: plays by person, library, weekday, hour and device, most watched titles, and the recent plays list.'),
+  P('**Watched** is the play history of the whole Plex server, one row per play for every account, not just yours. Each Plex sync pulls Plex\'s own history (Plex keeps it as long as its settings allow), and the scrobble webhook adds plays as they finish, so the list is current between syncs. Pick a period (7 days to all time) and a person at the top; the tiles count plays, hours (from the files\' lengths), distinct titles and people.'),
+  P('The charts break plays down **by person**, **by library**, **by weekday**, **by hour of day** and **by device**, with **plays per day** as a trend. **Most watched series** and **movies** list who watched each and when it was last played. **Binges** picks out sittings of three or more episodes of one show by one person. **Recent plays** is searchable and sortable; a row opens the series or movie when MediaLedger has matched it.'),
+  note('Plays are attributed by Plex account. Shared accounts show as one person. Adult titles follow the same visibility rule as everywhere else.'),
 );
 
 // ---------------- 13 Media requests ----------------

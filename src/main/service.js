@@ -32,6 +32,7 @@ const renamer = require('./renamer');
 const { planMovieNames } = require('./movieNamer');
 const movieRename = require('./movieRename');
 const plex = require('./plex');
+const watched = require('./watched');
 const sysmon = require('./sysmon');
 const rootcheck = require('./rootcheck');
 
@@ -90,6 +91,7 @@ function createService({ userData, log, send, host }) {
     try {
       const r = await plex.syncLibrary(db, cfg, { log, onProgress: p => { plexJob = { running: true, ...p }; send('plex:progress', plexJob); } });
       if (r.mappingSuggested && !(cfg.pathMap || []).length) settings.set({ plex: { pathMap: [r.mappingSuggested] } });
+      try { r.history = await plex.syncHistory(db, cfg, { log, onProgress: p => { plexJob = { running: true, ...p }; send('plex:progress', plexJob); } }); } catch (e) { log('plex history failed: ' + e.message); r.historyError = e.message; }
       db.run('INSERT INTO plex_syncs (ts, sections, items, matched, unmatched, note) VALUES (?,?,?,?,?,?)', r.synced_at, r.sections, r.items, r.matched, r.unmatched, trigger);
       plexJob = { running: false, message: `Plex sync: ${r.matched.toLocaleString()} of ${r.items.toLocaleString()} items matched`, result: r }; send('plex:progress', plexJob);
       log(`plex sync (${trigger}): ${r.matched}/${r.items} matched, ${r.unmatched} unmatched, ${r.shows} shows`);
@@ -647,6 +649,7 @@ function createService({ userData, log, send, host }) {
     db.saveSnapshot(row); return row;
   }
   h('data:snapshots', (days) => db.snapshots(Number(days) || 365));
+  h('data:watched', (opts) => watched.report(db, { ...(opts || {}), adultFilter: AF() }));
   h('data:snapshotNow', () => takeSnapshot());
   const snapshotTick = () => { const today = new Date().toISOString().slice(0, 10); const now = new Date(); if (now.getHours() * 60 + now.getMinutes() < 185) return; if (scanner.running) return; if (db.get('SELECT 1 FROM snapshots WHERE day=?', today)) return; try { takeSnapshot(); } catch (e) { log('snapshot failed: ' + e.message); } };
   const snapshotTimer = setInterval(snapshotTick, 60000); if (snapshotTimer.unref) snapshotTimer.unref();

@@ -413,7 +413,7 @@ views.dashboard = async () => {
     <div class="tiles compact">
       ${ncard('pending', 'Pending requests', d.pending, d.pending, d.pending ? 'waiting for a decision' : 'nothing asked for', { href: '#requests' })}
       ${linkTile('#missing', tile(d.airingWeek ? 'okt' : '', 'Airing this week', d.airingWeek, d.nextAiring ? `next: ${esc(d.nextAiring.show_name)} ${esc(d.nextAiring.next_episode || '')} on ${esc(d.nextAiring.next_airing)}` : 'no dates from the lookups yet'))}
-      ${linkTile('#tonight', tile('', 'Watched', d.watched.linked ? `${pct(d.watched.watched, d.watched.linked)}%` : '—', d.watched.linked ? `${d.watched.watched.toLocaleString()} of ${d.watched.linked.toLocaleString()} Plex-linked files · Watch tonight →` : 'sync Plex to see play counts'))}
+      ${linkTile('#watched', tile('', 'Watched', d.watched.linked ? `${pct(d.watched.watched, d.watched.linked)}%` : '—', d.watched.linked ? `${d.watched.watched.toLocaleString()} of ${d.watched.linked.toLocaleString()} Plex-linked files · who watched what →` : 'sync Plex to see play counts'))}
       ${tile('', 'Genres known', d.genresTitles, d.genres.length ? `${d.genres.reduce((a, r) => a + r.n, 0).toLocaleString()} genre tags across the library` : 'from TVmaze / AniList / Plex')}
       ${tile('', 'Your tags', d.tagged ? `${d.tagged} titles` : '—', d.tags.slice(0, 4).map(t => `${esc(t.tag)} ${t.n}`).join(' · ') || 'type one on any title page')}
       ${ncard('upgrades', 'Upgrade candidates', d.upgrades, d.upgrades || '—', d.upgrades ? 'worth a better copy' : 'ranking not tuned yet (upgrades.js)', { href: '#upgrades' })}
@@ -526,6 +526,64 @@ views.upgrades = async () => {
   ];
   const t = makeTable(all, cols, { search: r => `${r.title} ${r.reasons.join(' ')}`, defaultSort: { key: 'score', asc: false }, onRow: r => { location.hash = r.kind === 'movie' ? '#movies/' + encodeURIComponent(r.key) : `#${r.type}/${encodeURIComponent(r.key)}`; } });
   $('#uTable').append(searchToolbar(t, all.length), t.node);
+};
+
+// ---- Watched: who watched what, from Plex play history (every account on the server) ----
+views.watched = async () => {
+  const pref = (() => { try { return JSON.parse(localStorage.getItem('medialedger.watched') || '{}'); } catch { return {}; } })();
+  let days = pref.days != null ? pref.days : 30, account = pref.account || '';
+  const titleOf = r => r.show_title ? `${esc(r.show_title)} <span class="muted">${r.season != null ? `S${String(r.season).padStart(2, '0')}` : ''}${r.episode != null ? `E${String(r.episode).padStart(2, '0')}` : ''}</span> <span class="muted tiny">${esc(r.title || '')}</span>` : esc(r.title || '?');
+  const linkOf = r => r.library_type === 'movie' && r.group_key ? '#movies/' + encodeURIComponent(r.group_key) : (r.library_type === 'tv' || r.library_type === 'anime') && r.show_name ? `#${r.library_type}/${encodeURIComponent(r.show_name)}` : null;
+  const whenFull = iso => iso ? new Date(iso).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+  const load = async () => {
+    const w = await L.watched({ days: days || 'all', account: account || null });
+    try { localStorage.setItem('medialedger.watched', JSON.stringify({ days, account })); } catch { /* ignore */ }
+    const t = w.totals, hours = t.seconds / 3600;
+    const periodLabel = days ? `last ${days} days` : 'all time';
+    view.innerHTML = `<h1>Watched</h1>
+      <p class="lead">Every play Plex has recorded, for every account on the server: who watched what, when, and on which device. Refreshed by each Plex sync; scrobble webhooks fill in between.</p>
+      <div class="toolbar">
+        <select id="wDays" class="small">${[[7, 'last 7 days'], [30, 'last 30 days'], [90, 'last 90 days'], [365, 'last year'], [0, 'all time']].map(([v, l]) => `<option value="${v}" ${v === days ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        <select id="wWho" class="small"><option value="">everyone</option>${w.accounts.map(a => `<option value="${a.id}" ${String(a.id) === String(account) ? 'selected' : ''}>${esc(a.name)} (${a.plays.toLocaleString()})</option>`).join('')}</select>
+        <span class="muted tiny">${t.last ? `latest play ${fmtAgo(t.last)}` : 'no plays recorded yet'}</span>
+      </div>
+      ${!t.plays ? `<div class="card"><h3>Nothing here yet</h3><p class="muted">Run a Plex sync (Settings → Plex) and the play history for every account comes across. Plex keeps history for as long as its own settings allow, so older plays may be gone already. For plays between syncs, point the Plex webhook at MediaLedger.</p></div>` : `
+      <div class="tiles compact">
+        ${tile('', 'Plays', t.plays.toLocaleString(), periodLabel)}
+        ${tile('', 'Hours', hours >= 100 ? Math.round(hours).toLocaleString() : hours.toFixed(1), 'from file lengths')}
+        ${tile('', 'Titles', t.titles.toLocaleString(), 'distinct shows and movies')}
+        ${tile('', 'People', t.people.toLocaleString(), 'Plex accounts that played')}
+        ${tile('', 'Per day', (t.plays / Math.max(1, days || Math.ceil((Date.now() - new Date(t.first)) / 86400000))).toFixed(1), 'average plays')}
+      </div>
+      <div class="grid2" style="margin-top:12px">
+        ${bars(w.byPerson, 'By person', { max: 12, drill: false })}
+        ${bars(w.byLibrary, 'By library', { keyLabel: typeName, drill: false })}
+        ${bars(w.byWeekday, 'By weekday', { order: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], scale: 'linear', drill: false })}
+        ${bars(w.byHour, 'By hour of day', { order: Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0') + ':00'), max: 24, scale: 'linear', legend: false, drill: false })}
+        ${bars(w.byDevice, 'By device', { max: 8, drill: false })}
+        ${window.Cards.trend(w.perDay.map(d => ({ x: d.day, y: d.plays })), 'Plays per day', { note: 'Appears once there are plays on two different days.' })}
+      </div>
+      <div class="grid2" style="margin-top:12px">
+        <div class="card"><h3>Most watched series</h3>${w.top.series.length ? `<table>${w.top.series.slice(0, 15).map(s => `<tr><td class="wrap"><span class="badge ${s.library_type}">${typeName(s.library_type)}</span> ${esc(s.title)}<span class="sub">${esc(s.who || '')}</span></td><td class="num"><b>${s.plays}</b><span class="sub">${fmtDur(s.seconds)}</span></td><td class="muted tiny nowrap">${fmtAgo(s.last)}</td></tr>`).join('')}</table>` : '<p class="muted">No episodes played.</p>'}</div>
+        <div class="card"><h3>Most watched movies</h3>${w.top.movies.length ? `<table>${w.top.movies.slice(0, 15).map(s => `<tr><td class="wrap">${esc(s.title)}<span class="sub">${esc(s.who || '')}</span></td><td class="num"><b>${s.plays}</b><span class="sub">${s.people > 1 ? s.people + ' people' : ''}</span></td><td class="muted tiny nowrap">${fmtAgo(s.last)}</td></tr>`).join('')}</table>` : '<p class="muted">No movies played.</p>'}</div>
+      </div>
+      ${w.binge.length ? `<div class="card" style="margin-top:12px"><h3>Binges <span class="muted tiny">three or more episodes of one show in a sitting</span></h3><table>${w.binge.map(b => `<tr><td class="wrap"><b>${esc(b.who)}</b> · ${esc(b.show)}</td><td class="num">${b.episodes} episodes</td><td class="muted tiny nowrap">${whenFull(b.start)} → ${new Date(b.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td></tr>`).join('')}</table></div>` : ''}
+      <h2 style="margin-top:16px">Recent plays <span class="muted tiny">newest ${w.recent.length.toLocaleString()}</span></h2><div id="wTable"></div>`}`;
+    if (t.plays) {
+      const cols = [
+        { key: 'viewed_at', label: 'When', render: r => `<span title="${esc(whenFull(r.viewed_at))}">${fmtAgo(r.viewed_at)}</span>` },
+        { key: 'who', label: 'Who', render: r => `<b>${esc(r.who)}</b>` },
+        { key: 'title', label: 'Title', cls: 'wrap', render: r => `<span class="badge ${r.library_type}">${typeName(r.library_type)}</span> ${titleOf(r)}` },
+        { key: 'device', label: 'Device', render: r => esc(r.device || '') },
+        { key: 'duration_s', label: 'Length', num: true, render: r => fmtDur(r.duration_s) },
+      ];
+      const tb = makeTable(w.recent, cols, { search: r => `${r.who} ${r.show_title || ''} ${r.title || ''} ${r.device || ''}`, defaultSort: { key: 'viewed_at', asc: false }, onRow: r => { const h = linkOf(r); if (h) location.hash = h; } });
+      $('#wTable').append(tb.node);
+    }
+    $('#wDays').onchange = () => { days = Number($('#wDays').value); load(); };
+    $('#wWho').onchange = () => { account = $('#wWho').value; load(); };
+  };
+  await load();
 };
 
 // ---- Watch tonight: one list across series and movies, filtered by what you have not seen, how long you have, and your tags ----

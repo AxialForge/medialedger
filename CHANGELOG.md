@@ -8,6 +8,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [1.9.1] - 2026-09-16
+
+### Added
+
+- **Watched tab**: who watched what, from Plex's server-wide play history
+  (every account, not just the token owner's). Period and person filters,
+  plays / hours / titles / people tiles, charts by person, library, weekday,
+  hour and device, plays-per-day trend, most watched series and movies with
+  who watched them, binge sittings, and a searchable recent-plays list that
+  opens the matched title. Each Plex sync pulls new history; scrobble
+  webhooks add plays in between, with the account name. Schema v10.
+- **Upgrade candidates are ranked**: shortfall from 1080p (plus low bitrate)
+  weighted by plays, your stars and the online rating; 4K and HDR copies and
+  never-played unrated titles score 0.
+
+### Changed
+
+- The dashboard "Watched" tile opens the Watched tab.
+
 ### Changed
 
 ### Fixed
