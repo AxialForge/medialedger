@@ -253,6 +253,15 @@ function createService({ userData, log, send, host }) {
   h('db:backups', () => db.listBackups());
   h('db:stats', () => db.stats());
 
+  // Timed Plex sync, independent of scans (Settings → Schedules).
+  const plexTick = () => {
+    const cfg = settings.get().plex || {}; const every = Number(cfg.everyHours) || 0;
+    if (!every || !cfg.token || plexJob.running || scanner.running) return;
+    const last = db.get('SELECT ts FROM plex_syncs ORDER BY id DESC LIMIT 1');
+    if (last && Date.now() - new Date(last.ts).getTime() < every * 3600000) return;
+    runPlexSync('timer').catch(() => {});
+  };
+  const plexTimer = setInterval(plexTick, 60000); if (plexTimer.unref) plexTimer.unref();
   h('plex:test', (cfg) => plex.testConnection(cfg || settings.get().plex));
   h('plex:sync', () => runPlexSync('manual'));
   h('plex:status', () => {
@@ -651,7 +660,7 @@ function createService({ userData, log, send, host }) {
   h('data:snapshots', (days) => db.snapshots(Number(days) || 365));
   h('data:watched', (opts) => watched.report(db, { ...(opts || {}), adultFilter: AF() }));
   h('data:snapshotNow', () => takeSnapshot());
-  const snapshotTick = () => { const today = new Date().toISOString().slice(0, 10); const now = new Date(); if (now.getHours() * 60 + now.getMinutes() < 185) return; if (scanner.running) return; if (db.get('SELECT 1 FROM snapshots WHERE day=?', today)) return; try { takeSnapshot(); } catch (e) { log('snapshot failed: ' + e.message); } };
+  const snapshotTick = () => { const today = new Date().toISOString().slice(0, 10); const now = new Date(); const [sh, sm] = String((settings.get().snapshot || {}).time || '03:05').split(':').map(Number); if (now.getHours() * 60 + now.getMinutes() < sh * 60 + sm) return; if (scanner.running) return; if (db.get('SELECT 1 FROM snapshots WHERE day=?', today)) return; try { takeSnapshot(); } catch (e) { log('snapshot failed: ' + e.message); } };
   const snapshotTimer = setInterval(snapshotTick, 60000); if (snapshotTimer.unref) snapshotTimer.unref();
 
   // ---- preferences: card colour rules, editor level, layouts. Desktop: one set in settings.ui.prefs; web shell overrides per account.
@@ -662,13 +671,16 @@ function createService({ userData, log, send, host }) {
   const notifier = createNotifier(() => settings.get().notify, log);
   h('notify:test', async () => { const r = await notifier.send('test', 'MediaLedger test', `This is a test from ${os.hostname()}. If you can read it, notifications work.`); if (r.skipped) throw new Error(r.skipped); if (!r.webhook && !r.email) throw new Error('Nothing configured: set a webhook URL or e-mail first, then Save settings'); const bad = [r.webhook, r.email].find(x => x && !x.ok); if (bad) throw new Error(bad.error || `HTTP ${bad.status}`); return r; });
   let lastSummaryDay = null;
-  const summaryTick = () => {
+  const summaryTick = (force = false) => {
     const n = settings.get().notify || {};
-    if (!(n.webhookUrl || (n.email && n.email.enabled)) || (n.events && n.events.dailySummary === false)) return;
+    if (!(n.webhookUrl || (n.email && n.email.enabled))) { if (force) throw new Error('No webhook or e-mail configured (Settings → Notifications)'); return; }
+    if (!force && n.events && n.events.dailySummary === false) return;
     const now = new Date(); const [hh, mm] = String(n.dailyTime || '08:00').split(':').map(Number);
     const today = now.toISOString().slice(0, 10);
-    if (lastSummaryDay === today || (n.lastSummary || '').slice(0, 10) === today) { lastSummaryDay = today; return; }
-    if (now.getHours() < hh || (now.getHours() === hh && now.getMinutes() < mm)) return;
+    if (!force) {
+      if (lastSummaryDay === today || (n.lastSummary || '').slice(0, 10) === today) { lastSummaryDay = today; return; }
+      if (now.getHours() < hh || (now.getHours() === hh && now.getMinutes() < mm)) return;
+    }
     lastSummaryDay = today;
     try {
       const st = handlers.get('data:status')(); const air = airingReport();
@@ -678,9 +690,47 @@ function createService({ userData, log, send, host }) {
       if (air.finished.length) lines.push('', `Finished airing but incomplete: ${air.finished.slice(0, 10).map(f => `${f.show_name} (${f.missing_count} missing)`).join(', ')}${air.finished.length > 10 ? '…' : ''}`);
       notifier.send('dailySummary', `Daily summary: ${st.pending_requests} request${st.pending_requests === 1 ? '' : 's'}, ${air.thisWeek} airing this week`, lines.join('\n'), { pending_requests: st.pending_requests, airing_this_week: air.thisWeek, free_bytes: st.free_bytes }).catch(() => {});
       settings.set({ notify: { ...n, lastSummary: new Date().toISOString() } });
-    } catch (e) { log('daily summary failed: ' + e.message); }
+    } catch (e) { log('daily summary failed: ' + e.message); if (force) throw e; }
   };
-  const summaryTimer = setInterval(summaryTick, 60000); if (summaryTimer.unref) summaryTimer.unref();
+  const summaryTimer = setInterval(() => summaryTick(false), 60000); if (summaryTimer.unref) summaryTimer.unref();
+
+  // ---- schedules: every timed job in one list (Settings → Schedules), with last / next run and a Run now ----
+  const nextDaily = (hhmm, lastIso) => {
+    const [hh, mm] = String(hhmm || '00:00').split(':').map(Number); const now = new Date();
+    const t = new Date(now); t.setHours(hh, mm, 0, 0);
+    const doneToday = lastIso && new Date(lastIso).toDateString() === now.toDateString();
+    if (t <= now || doneToday) t.setDate(t.getDate() + 1);
+    return t.toISOString();
+  };
+  h('jobs:list', () => {
+    const s = settings.get();
+    const lastScan = db.get("SELECT finished, status FROM scans WHERE finished IS NOT NULL ORDER BY id DESC LIMIT 1");
+    const lastPlex = db.get('SELECT ts, note FROM plex_syncs ORDER BY id DESC LIMIT 1');
+    const lastMeta = db.get('SELECT MAX(fetched_at) t FROM series_meta');
+    const lastSnap = db.get('SELECT MAX(ts) t FROM snapshots');
+    const plexEvery = Number((s.plex || {}).everyHours) || 0;
+    const nextPlex = plexEvery && (s.plex || {}).token ? new Date((lastPlex ? new Date(lastPlex.ts).getTime() : 0) + plexEvery * 3600000).toISOString() : null;
+    const scanWhen = [s.schedule.inAppEnabled ? `every ${s.schedule.inAppIntervalHours} h while open` : null, s.schedule.taskSchedulerEnabled ? `daily at ${s.schedule.taskTime} (Task Scheduler)` : null].filter(Boolean).join(' · ');
+    return [
+      { id: 'scan', label: 'Library scan', enabled: !!(s.schedule.inAppEnabled || s.schedule.taskSchedulerEnabled), when: scanWhen || 'manual only', last: lastScan ? lastScan.finished : null, lastNote: lastScan ? lastScan.status : null, next: s.schedule.inAppEnabled ? scheduler.nextInAppRun() : null, running: !!scanner.running },
+      { id: 'plex', label: 'Plex sync', enabled: !!((s.plex.enabled || plexEvery) && s.plex.token), when: [s.plex.enabled ? 'after each scan' : null, plexEvery ? `every ${plexEvery} h` : null].filter(Boolean).join(' · ') || (s.plex.token ? 'manual only' : 'no token'), last: lastPlex ? lastPlex.ts : null, lastNote: lastPlex ? lastPlex.note : null, next: nextPlex && new Date(nextPlex) > new Date() ? nextPlex : (nextPlex ? 'soon' : null), running: !!plexJob.running },
+      { id: 'metadata', label: 'Episode counts and airing dates', enabled: !!s.metadata.enabled, when: s.metadata.enabled ? `after each scan · airing series re-checked every ${s.metadata.refreshDays} days` : 'off', last: lastMeta ? lastMeta.t : null, next: null },
+      { id: 'backup', label: 'Backup to folder', enabled: !!(s.backup.enabled && s.backup.dir), when: s.backup.enabled && s.backup.dir ? `daily at ${s.backup.time} · keep ${s.backup.keep}` : 'off', last: s.backup.lastRun || null, lastNote: s.backup.lastError ? 'failed: ' + s.backup.lastError : (s.backup.lastFile || null), next: s.backup.enabled && s.backup.dir ? nextDaily(s.backup.time, s.backup.lastRun) : null },
+      { id: 'snapshot', label: 'Daily snapshot (trend cards)', enabled: true, when: `after each scan, else at ${(s.snapshot || {}).time || '03:05'}`, last: lastSnap ? lastSnap.t : null, next: nextDaily((s.snapshot || {}).time || '03:05', lastSnap ? lastSnap.t : null) },
+      { id: 'summary', label: 'Daily summary notification', enabled: !!((s.notify.webhookUrl || (s.notify.email && s.notify.email.enabled)) && !(s.notify.events && s.notify.events.dailySummary === false)), when: `daily at ${s.notify.dailyTime || '08:00'}`, last: s.notify.lastSummary || null, next: (s.notify.webhookUrl || (s.notify.email && s.notify.email.enabled)) ? nextDaily(s.notify.dailyTime || '08:00', s.notify.lastSummary) : null },
+    ];
+  });
+  h('jobs:run', async (id) => {
+    switch (id) {
+      case 'scan': runScan('manual').catch(() => {}); return { started: true, message: 'Scan started' };
+      case 'plex': runPlexSync('manual').catch(() => {}); return { started: true, message: 'Plex sync started' };
+      case 'metadata': refreshMetadata({ onlyNew: false }).catch(e => log('metadata failed: ' + e.message)); return { started: true, message: 'Metadata refresh started' };
+      case 'backup': { const b = settings.get().backup || {}; const p = backupTo(b.dir, b.keep, 'manual'); return { done: true, message: 'Backup copied to ' + p }; }
+      case 'snapshot': takeSnapshot(); return { done: true, message: 'Snapshot taken' };
+      case 'summary': summaryTick(true); return { done: true, message: 'Summary sent' };
+      default: throw new Error('Unknown job ' + id);
+    }
+  });
 
   // ---- tags: your own words per title; genres come with the online match / Plex, sub/dub from the probe ----
   h('tags:list', (type) => Object.fromEntries(db.tagsFor(type)));

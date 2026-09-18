@@ -61,8 +61,10 @@ const DEFAULTS = {
     taskTime: '03:00',        // HH:MM local, daily
     taskName: 'MediaLedger Scan',
   },
+  snapshot: { time: '03:05' }, // daily snapshot for the trend cards when no scan has taken one yet
   plex: {
     enabled: false,           // sync after every scan
+    everyHours: 0,            // also sync on a timer this often (0 = off); the Watched tab and play counts stay current without a scan
     baseUrl: 'http://192.168.1.204:32400',
     token: '',
     pathMap: [],              // [{ plex: '/media', local: '\\\\nas\\share' }]; derived automatically on first sync

@@ -8,6 +8,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [1.9.2] - 2026-09-17
+
+### Added
+
+- **Settings → Schedules**: every timed job in one table (scan, Plex sync,
+  metadata, backup, snapshot, daily summary) with when it runs, last and next
+  run, and a **Run now** button. The timing controls for backup, snapshot and
+  summary moved here.
+- **Timed Plex sync**: an hourly interval independent of scans, so the Watched
+  tab and play counts stay current on days without a scan.
+
+### Changed
+
+- The daily snapshot time is configurable (was fixed at 03:05).
+
 ## [1.9.1] - 2026-09-16
 
 ### Added
