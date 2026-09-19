@@ -1337,7 +1337,7 @@ views.settings = async () => {
 
       <h2>Schedules</h2>
       <div class="field"><label>All timed jobs</label><div id="jobsBox" class="muted small">Loading…</div><div class="hint">Everything MediaLedger does on its own, with the last and next run. <b>Run now</b> starts a job straight away. Change the timing below and press Save.</div></div>
-      <div class="field"><label>Plex sync</label><div class="inline">every <input type="number" id="plexEvery" min="0" step="0.5" value="${(s.plex && s.plex.everyHours) || 0}" style="width:70px"> hours (0 = only after scans)</div><div class="hint">Pulls ratings, watched state and the play history for every account. A timer keeps the Watched tab current on days without a scan; 6 hours is a sensible value.</div></div>
+      <div class="field"><label>Plex sync</label><div class="inline">every <input type="number" id="plexEvery" min="0" step="0.5" value="${s.plex && s.plex.everyHours != null ? s.plex.everyHours : 6}" style="width:70px"> hours (0 = only after scans)</div><div class="hint">Pulls ratings, watched state and the play history for every account. A timer keeps the Watched tab current on days without a scan; 6 hours is a sensible value.</div></div>
       <div class="field"><label>Backup</label><div class="inline">daily at <input type="time" id="bkTime" value="${esc((s.backup && s.backup.time) || '03:30')}"> keep <input type="number" id="bkKeep" min="1" max="60" value="${(s.backup && s.backup.keep) || 7}" style="width:60px"> newest</div><div class="hint">Turn it on and choose the folder under Data.</div></div>
       <div class="field"><label>Daily snapshot</label><div class="inline">at <input type="time" id="snapTime" value="${esc((s.snapshot && s.snapshot.time) || '03:05')}"> if no scan has taken one that day</div></div>
       <div class="field"><label>Daily summary</label><div class="inline">at <input type="time" id="nfTime" value="${esc((s.notify && s.notify.dailyTime) || '08:00')}"></div><div class="hint">Sent by webhook or e-mail as set under Notifications.</div></div>
@@ -1366,7 +1366,7 @@ views.settings = async () => {
       <div class="field"><label>Paste the XML address</label><input type="text" id="plexXmlUrl" placeholder="http://192.168.1.204:32400/library/metadata/1234?…&X-Plex-Token=…" autocomplete="off"><div class="hint">The easy way to get the token. In Plex Web open any movie or episode, click <b>⋯</b> → <b>Get Info</b> → <b>View XML</b>. A new tab opens: copy its whole address from the browser's address bar and paste it here. The token (and the server address, when the page came from your LAN) are filled in above; the pasted text itself is not kept. Then press <b>Test</b> and <b>Save settings</b>.</div></div>
       <div class="field"><label>Sync after every scan</label><input type="checkbox" id="plexOn" ${s.plex.enabled ? 'checked' : ''}><div class="hint">Pulls every movie and show section, links each Plex item to a file by path, and stores Plex's title, year, ids, your Plex rating, audience rating and watched state. Read-only against Plex.</div></div>
       <div class="field"><label>Path mapping</label><div id="plexMap"></div><div class="hint">How Plex's file paths translate to yours. Derived automatically from the first match; edit if Plex runs elsewhere.</div></div>
-      <div class="field"><label></label><div class="inline"><button class="small" id="plexSync">Sync now</button><span class="muted small" id="plexSyncMsg"></span></div></div>
+      <div class="field"><label></label><div class="inline"><button class="small" id="plexSync">Sync now</button><span class="muted small" id="plexSyncMsg"></span></div><div class="hint">Syncs run after each scan when enabled above, and on a timer: <b>${(s.plex && s.plex.everyHours) ? `every ${s.plex.everyHours} hours` : 'timer off'}</b>. Set the interval under <a href="#settings" id="toSchedules">Schedules</a> further up this page.</div></div>
       <div class="field"><label></label><div class="status-line" id="plexStatus">Loading…</div></div>
       <div class="field"><label>Webhook (Plex Pass)</label><div id="plexHook" class="muted small">Loading…</div><div class="hint">Plex calls this server the moment something is added, watched or rated: additions queue a scan two minutes later, watched and rated update the linked file at once. In Plex Web: Settings → Webhooks → Add webhook, paste the URL. LAN-only still applies and the key in the URL is the credential.</div></div>
 
@@ -1436,7 +1436,7 @@ views.settings = async () => {
       renaming: { ...s.renaming, enabled: $('#renOn').checked },
       adult: { exportCsv: $('#adultCsv').checked, defaultSubtype: $('#adultDefault').value },
       quality: { minKbps: Object.fromEntries([...document.querySelectorAll('#thr input[data-res]')].map(i => [i.dataset.res, Number(i.value) || 0])) },
-      plex: { enabled: $('#plexOn').checked, everyHours: Number($('#plexEvery').value) || 0, baseUrl: $('#plexUrl').value.trim(), token: $('#plexToken').value.trim(), pathMap: [...document.querySelectorAll('#plexMap .inline')].map(r => ({ plex: $('.pm-plex', r).value.trim(), local: $('.pm-local', r).value.trim() })).filter(m => m.plex && m.local) },
+      plex: { enabled: $('#plexOn').checked, everyHours: Math.max(0, Number($('#plexEvery').value) || 0), baseUrl: $('#plexUrl').value.trim(), token: $('#plexToken').value.trim(), pathMap: [...document.querySelectorAll('#plexMap .inline')].map(r => ({ plex: $('.pm-plex', r).value.trim(), local: $('.pm-local', r).value.trim() })).filter(m => m.plex && m.local) },
       ui: s.ui,
     };
   };
@@ -1447,6 +1447,7 @@ views.settings = async () => {
     document.querySelectorAll('#jobsBox .job-run').forEach(b => { b.onclick = async () => { b.disabled = true; try { const r = await L.jobs.run(b.dataset.job); toast(r.message || 'Started'); } catch (e) { toast(e.message, true); } setTimeout(refreshJobs, 1500); }; });
   };
   refreshJobs();
+  { const a = $('#toSchedules'); if (a) a.onclick = (e) => { e.preventDefault(); const h = [...document.querySelectorAll('h2')].find(x => x.textContent.trim() === 'Schedules'); if (h) h.scrollIntoView({ behavior: 'smooth' }); }; }
   const refreshTask = async () => {
     const t = await L.schedule.taskStatus();
     $('#taskStatus').innerHTML = t.exists ? `Task installed · status ${esc(t.status)} · next run ${esc(t.nextRun)} · last run ${esc(t.lastRun)} (result ${esc(t.lastResult)})<br><span class="mono tiny">${esc(t.command || '')}</span>` : 'No scheduled task installed.';

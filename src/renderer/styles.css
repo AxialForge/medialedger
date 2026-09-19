@@ -311,3 +311,11 @@ body.role-guest .starwidget { pointer-events: none; opacity: .6; }
 .jobs td { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
 .jobs tr.muted td { opacity: .6; }
 @media (max-width: 820px) { .jobs th:nth-child(4), .jobs td:nth-child(4) { display: none; } }
+
+/* Tables inside cards must fit the card: the title column gives way, the badge column never clips. */
+.card table { width: 100%; }
+.card table td.wrap { min-width: 0; overflow-wrap: anywhere; }
+.card table td.num, .card table td.nowrap { white-space: nowrap; }
+.card table td.num { padding-right: 0; }
+/* Two cards side by side need room; between phone and wide desktop they stack instead of squeezing. */
+@media (max-width: 1180px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }

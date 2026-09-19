@@ -8,6 +8,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [1.9.3] - 2026-09-18
+
+### Changed
+
+- The timed Plex sync defaults to every 6 hours (it only runs when a token is
+  set); the Plex section shows the current interval and links to Schedules.
+
+### Fixed
+
+- Tables inside cards no longer overflow: on the Missing page the "N missing"
+  badges were cut off by the neighbouring card on mid-width windows. Cards in
+  two-column rows now stack below 1180 px instead of squeezing.
+
 ## [1.9.2] - 2026-09-17
 
 ### Added
