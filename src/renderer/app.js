@@ -391,8 +391,13 @@ views.dashboard = async () => {
   const lowRes = d.lowRes.reduce((a, r) => a + r.n, 0);
   const health = tot.files ? Math.max(0, 100 - pct(d.byType.reduce((a, r) => a + r.unparsed + r.probe_errors, 0) + d.missingFiles, tot.files)) : 0;
 
+  let notices = '';
+  if (me.role === 'admin' || !L.isWeb) {
+    try { const od = await L.jobs.overdue(); if (od.length) notices += `<div class="warnbox">${od.map(j => `<b>${esc(j.label)}</b> is overdue: ${esc(j.why)}.`).join('<br>')} <a href="#settings">Open Settings → Schedules</a> · <a href="#log">Log</a></div>`; } catch { /* older server */ }
+    if (L.isWeb) { try { const u = await webUpdateInfo(); if (u && u.state === 'available') notices += `<div class="warnbox">MediaLedger <b>${esc(u.version)}</b> is available (this server runs ${esc((await L.appInfo()).version)}). On the Pi run <span class="mono">sudo medialedger-update</span>, or install with <span class="mono">--auto-update</span> to have it update itself every night.</div>`; } catch { /* offline */ } }
+  }
   view.innerHTML = `
-    <h1>Dashboard</h1>
+    <h1>Dashboard</h1>${notices}
     <div class="tiles">
       ${tile('', 'Library', `${tot.files.toLocaleString()} files`, `${fmtBytes(tot.bytes)} · ${fmtHours(tot.seconds)} of video`)}
       ${tile('tv', 'TV Shows', `${d.titles.tv} series`, `${(t.tv?.files || 0).toLocaleString()} episodes · ${fmtBytes(t.tv?.bytes)} · ${capPct(t.tv)}`)}
@@ -526,6 +531,39 @@ views.upgrades = async () => {
   ];
   const t = makeTable(all, cols, { search: r => `${r.title} ${r.reasons.join(' ')}`, defaultSort: { key: 'score', asc: false }, onRow: r => { location.hash = r.kind === 'movie' ? '#movies/' + encodeURIComponent(r.key) : `#${r.type}/${encodeURIComponent(r.key)}`; } });
   $('#uTable').append(searchToolbar(t, all.length), t.node);
+};
+
+// The web server cannot update itself from the page; it can say when a newer release exists. Cached for six hours.
+async function webUpdateInfo() {
+  try { const c = JSON.parse(sessionStorage.getItem('medialedger.upd') || 'null'); if (c && Date.now() - c.t < 6 * 3600000) return c.v; } catch { /* ignore */ }
+  const v = await L.update.check();
+  try { sessionStorage.setItem('medialedger.upd', JSON.stringify({ t: Date.now(), v })); } catch { /* ignore */ }
+  return v;
+}
+
+// ---- Log: the tail of medialedger.log with a filter, so diagnosing the server does not need SSH ----
+let logTimer = null;
+views.log = async () => {
+  view.innerHTML = `<h1>Log</h1>
+    <p class="lead">What MediaLedger has been doing: scans, Plex syncs, backups, migrations, failures. Newest at the bottom.</p>
+    <div class="toolbar"><input type="search" id="lgQ" placeholder="Filter, e.g. plex, backup, migrate…"><select id="lgLevel" class="small"><option value="">everything</option><option value="error">problems only</option></select><select id="lgN" class="small"><option>300</option><option>1000</option><option>2000</option></select><label class="inline small"><input type="checkbox" id="lgAuto" checked> refresh every 5 s</label><button class="small" id="lgCopy">Copy</button><span class="muted tiny" id="lgInfo"></span></div>
+    <pre class="logview" id="lgBox">Loading…</pre>`;
+  const load = async () => {
+    if (currentView !== 'log') { clearInterval(logTimer); return; }
+    const box = $('#lgBox'); if (!box) return;
+    try {
+      const r = await L.logTail({ lines: Number($('#lgN').value), q: $('#lgQ').value.trim(), level: $('#lgLevel').value });
+      const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 30;
+      box.innerHTML = r.lines.map(l => `<span class="${/error|fail|denied|rejected|could not/i.test(l) ? 'bad' : /warn|overdue|skipped/i.test(l) ? 'warn' : ''}">${esc(l)}</span>`).join('\n') || '<span class="muted">Nothing matches.</span>';
+      $('#lgInfo').textContent = `${r.lines.length} lines · ${fmtBytes(r.size)} · ${r.file}`;
+      if (atBottom) box.scrollTop = box.scrollHeight;
+    } catch (e) { box.textContent = e.message; }
+  };
+  await load(); $('#lgBox').scrollTop = $('#lgBox').scrollHeight;
+  let deb = null; $('#lgQ').oninput = () => { clearTimeout(deb); deb = setTimeout(load, 250); };
+  $('#lgLevel').onchange = load; $('#lgN').onchange = load;
+  $('#lgCopy').onclick = async () => { try { await navigator.clipboard.writeText($('#lgBox').innerText); toast('Copied'); } catch { toast('Select the text and copy it by hand', true); } };
+  clearInterval(logTimer); logTimer = setInterval(() => { if ($('#lgAuto') && $('#lgAuto').checked) load(); }, 5000);
 };
 
 // ---- Watched: who watched what, from Plex play history (every account on the server) ----
@@ -968,7 +1006,7 @@ views.rename = async () => {
     <div class="warnbox">This page <b>renames files on your share</b>. Proposals come from the parsed details plus your manual fixes, so fix anything wrong under Issues first. Files are renamed in place (same folder), never overwritten. Every run is a batch: pre-flighted as a whole, each rename verified, journaled below, and undoable.</div>
     <div class="card" style="margin-bottom:12px"><div class="inline" style="align-items:center;flex-wrap:wrap"><span class="small">Name parts</span><span class="chip fixed" title="Always present: Plex matches on it">Show - S01E02</span><span id="rParts"></span><span class="muted tiny">Click a part to leave it out or put it back. Preview: <span class="mono" id="rPreview"></span></span></div></div>
     <div class="tiles compact">${tile(list.length ? 'warnt' : 'okt', 'Proposed renames', list.length)}${tile('', 'From manual fixes', list.filter(p => p.has_override).length)}${tile('', 'Renamed so far', okHist, `${hist.length - okHist} failed`)}</div>
-    <div class="toolbar" style="margin-top:12px"><input type="search" id="rq" placeholder="Filter…"><select id="rtype"><option value="">all libraries</option><option value="tv">TV</option><option value="anime">Anime</option><option value="movie">Movies</option></select><label class="inline small"><input type="checkbox" id="rfixed"> Only files with manual fixes</label><span class="muted small" id="rcount"></span><span class="grow"></span><button class="small" id="selAll">Select shown</button><button class="small" id="selNone">Clear</button><button id="rDry" disabled>Dry run 0</button><button class="primary" id="apply" disabled>Rename 0 files</button><button id="stepApply" disabled title="Walk through the ticked files one by one, confirming each">One at a time</button></div>
+    <div class="toolbar" style="margin-top:12px"><input type="search" id="rq" placeholder="Filter…"><select id="rtype"><option value="">all libraries</option><option value="tv">TV</option><option value="anime">Anime</option><option value="movie">Movies</option></select><label class="inline small"><input type="checkbox" id="rfixed"> Only files with manual fixes</label><span class="muted small" id="rcount"></span><span class="grow"></span><button class="small" id="selNext" title="Clear the selection and tick only the next few shown files">Select next</button><input type="number" id="selN" min="1" max="200" value="${Number(localStorage.getItem('medialedger.renameN')) || 10}" style="width:64px" title="How many to select at a time"><button class="small" id="selAll">Select shown</button><button class="small" id="selNone">Clear</button><button id="rDry" disabled>Dry run 0</button><button class="primary" id="apply" disabled>Rename 0 files</button><button id="stepApply" disabled title="Walk through the ticked files one by one, confirming each">One at a time</button></div>
     <div class="table-wrap" id="rtable"></div>
     <h2>Batches</h2><div id="rbatches"></div>
     <details style="margin-top:12px"><summary class="muted">Older history (before batches)</summary><div id="rhist"></div></details>`;
@@ -1001,7 +1039,8 @@ views.rename = async () => {
   $('#rtable').addEventListener('click', e => { const b = e.target.closest('.rOne'); if (b) { const p = list.find(x => x.id === Number(b.dataset.id)); if (p) stepFiles([p]); } });
   ['#rq', '#rtype', '#rfixed'].forEach(id => { $(id).oninput = render; $(id).onchange = render; });
   $('#rtable').addEventListener('change', e => { const c = e.target.closest('.rsel'); if (c) { c.checked ? selected.add(Number(c.dataset.id)) : selected.delete(Number(c.dataset.id)); $('#apply').textContent = `Rename ${selected.size} file${selected.size === 1 ? '' : 's'}`; $('#apply').disabled = !selected.size || !!lock; $('#stepApply').disabled = !selected.size || !!lock; $('#rDry').textContent = `Dry run ${selected.size}`; $('#rDry').disabled = !selected.size; } });
-  $('#selAll').onclick = () => { shown.forEach(p => selected.add(p.id)); render(); };
+  $('#selNext').onclick = () => { const n = Math.max(1, Math.min(200, Number($('#selN').value) || 10)); try { localStorage.setItem('medialedger.renameN', String(n)); } catch { /* ignore */ } selected.clear(); shown.slice(0, n).forEach(p => selected.add(p.id)); render(); toast(`${selected.size} selected; the rest stay untouched`); };
+  $('#selAll').onclick = () => { if (shown.length > 50 && !confirm(`Select all ${shown.length} shown files? "Select next" ticks a smaller group.`)) return; shown.forEach(p => selected.add(p.id)); render(); };
   $('#selNone').onclick = () => { selected.clear(); render(); };
   $('#apply').onclick = async () => {
     const ids = [...selected];
@@ -1070,7 +1109,7 @@ views.movienames = async () => {
       <select id="mstatus"><option value="ready">ready</option><option value="flagged">flagged only</option><option value="placeholders">placeholders only</option><option value="blocked">blocked</option><option value="unchanged">already correct</option><option value="all">all</option></select>
       <select id="mflag"><option value="">any flag</option>${Object.keys(flagCounts).map(k => `<option value="${k}">${k} (${flagCounts[k]})</option>`).join('')}</select>
       <span class="muted small" id="mcount"></span><span class="grow"></span>
-      <button class="small" id="mSelAll">Select shown</button><button class="small" id="mSelNone">Clear</button>
+      <button class="small" id="mSelNext" title="Clear the selection and tick only the next few shown titles">Select next</button><input type="number" id="mSelN" min="1" max="200" value="${Number(localStorage.getItem('medialedger.renameN')) || 10}" style="width:64px"><button class="small" id="mSelAll">Select shown</button><button class="small" id="mSelNone">Clear</button>
       <select id="mBulkSrc" title="Set the source for every selected file"><option value="">Set source for selected…</option><option value="web">Web (download)</option><option value="rip">Rip (disc)</option><option value="clear">clear manual source</option></select>
       <button id="mDry" disabled>Dry run 0</button>
       <button class="danger" id="mLive" disabled>Rename 0 live</button>
@@ -1111,7 +1150,8 @@ views.movienames = async () => {
   render();
   ['#mq', '#mstatus', '#mflag'].forEach(id => { $(id).oninput = render; $(id).onchange = render; });
   $('#mtable').addEventListener('change', e => { const c = e.target.closest('.msel'); if (c) { c.checked ? selected.add(Number(c.dataset.id)) : selected.delete(Number(c.dataset.id)); syncButtons(); } });
-  $('#mSelAll').onclick = () => { shown.filter(p => p.ok && !p.unchanged).forEach(p => selected.add(p.id)); render(); };
+  $('#mSelNext').onclick = () => { const n = Math.max(1, Math.min(200, Number($('#mSelN').value) || 10)); try { localStorage.setItem('medialedger.renameN', String(n)); } catch { /* ignore */ } selected.clear(); shown.filter(p => p.ok && !p.unchanged).slice(0, n).forEach(p => selected.add(p.id)); render(); toast(`${selected.size} selected; the rest stay untouched`); };
+  $('#mSelAll').onclick = () => { const c = shown.filter(p => p.ok && !p.unchanged); if (c.length > 50 && !confirm(`Select all ${c.length} shown titles? "Select next" ticks a smaller group.`)) return; c.forEach(p => selected.add(p.id)); render(); };
   $('#mBulkSrc').onchange = async e => {
     const v = e.target.value; e.target.value = ''; if (!v) return;
     const ids = selected.size ? [...selected] : shown.filter(p => p.ok && !p.unchanged).map(p => p.id);
@@ -1348,7 +1388,7 @@ views.settings = async () => {
       <h2>Data</h2>
       <div class="field"><label>Database</label><div class="status-line"><span class="mono">${esc(info.dbFile)}</span><br><span class="muted">${fmtBytes(info.db.size)} · schema v${info.db.version} · ${info.db.files.toLocaleString()} files · ${info.db.scans} scans · ${info.db.changes.toLocaleString()} changes · ${info.db.overrides} fixes · ${info.db.backups} backups</span></div><div class="hint">Everything MediaLedger knows lives in this one file plus <span class="mono">settings.json</span> next to it. Both sit in your user profile, outside the install folder, so closing the app, reinstalling, or updating never loses them. A backup copy is taken automatically before any schema upgrade.</div></div>
       <div class="field"><label></label><div class="inline"><button class="small" id="backupNow">Back up database now</button><button class="small" id="openBackups">Open backups folder</button><button class="small" id="openData">Open data folder</button><button class="small" id="openLog">Open log</button></div></div>
-      <div class="field"><label>Nightly backup to a folder</label><div class="inline"><input type="checkbox" id="bkOn" ${s.backup && s.backup.enabled ? 'checked' : ''}> <input type="text" id="bkDir" style="flex:1" placeholder="${L.isWeb ? '/mnt/media/Backups/MediaLedger' : '\\\\192.168.1.204\\Apocrypha_Media_Pool\\Backups\\MediaLedger'}" value="${esc((s.backup && s.backup.dir) || '')}"><button class="small" id="pickBk">Browse…</button> <button class="small" id="bkNow">Back up there now</button></div><div class="hint">Copies the database (every fix, rating, tag, match and the change log) to that folder once a day, dated, keeping the newest N. Put it on the NAS so a dead SD card or PC costs nothing. ${s.backup && s.backup.lastRun ? `Last: ${esc(fmtDate(s.backup.lastRun))} → <span class="mono">${esc(s.backup.lastFile || '')}</span>` : 'Never run yet.'}${s.backup && s.backup.lastError ? ` <span class="bad">Last error: ${esc(s.backup.lastError)}</span>` : ''}</div></div>
+      <div class="field"><label>Nightly backup to a folder</label><div class="inline"><input type="checkbox" id="bkOn" ${s.backup && s.backup.enabled ? 'checked' : ''}> <input type="text" id="bkDir" style="flex:1" placeholder="${L.isWeb ? '/mnt/media/Backups/MediaLedger' : '\\\\192.168.1.204\\Apocrypha_Media_Pool\\Backups\\MediaLedger'}" value="${esc((s.backup && s.backup.dir) || '')}"><button class="small" id="pickBk">Browse…</button> <button class="small" id="bkNow">Back up there now</button> <button class="small" id="bkRestore">Restore…</button></div><div class="hint">Copies the database (every fix, rating, tag, match and the change log), the settings and, on the web server, the accounts file to that folder once a day, dated, keeping the newest N sets. <b>Restore…</b> brings one back. Put it on the NAS so a dead SD card or PC costs nothing. ${s.backup && s.backup.lastRun ? `Last: ${esc(fmtDate(s.backup.lastRun))} → <span class="mono">${esc(s.backup.lastFile || '')}</span>` : 'Never run yet.'}${s.backup && s.backup.lastError ? ` <span class="bad">Last error: ${esc(s.backup.lastError)}</span>` : ''}</div></div>
 
       <h2>Updates</h2>
       <div class="field"><label>Automatic updates</label><input type="checkbox" id="updOn" ${s.updates.enabled ? 'checked' : ''}><div class="hint">Installed builds check GitHub Releases on launch and every 6 hours, download silently and apply on the next restart. Your database and settings are untouched by updates.</div></div>
@@ -1357,7 +1397,7 @@ views.settings = async () => {
       <h2>Notifications</h2>
       <div class="field"><label>Webhook URL</label><input type="text" id="nfHook" value="${esc((s.notify && s.notify.webhookUrl) || '')}" placeholder="https://homeassistant.local:8123/api/webhook/medialedger"><div class="hint">MediaLedger POSTs a small JSON body (<span class="mono">event, title, message, …</span>) here for every event below. Works with a Home Assistant webhook trigger, ntfy (<span class="mono">https://ntfy.sh/your-topic</span>), Discord or anything that accepts a POST.</div></div>
       <div class="field"><label>E-mail</label><div class="inline" style="flex-wrap:wrap;gap:6px"><label class="inline"><input type="checkbox" id="nfMailOn" ${s.notify && s.notify.email && s.notify.email.enabled ? 'checked' : ''}> on</label><input type="text" id="nfHost" placeholder="smtp.gmail.com" value="${esc((s.notify && s.notify.email && s.notify.email.host) || '')}" style="width:170px"><input type="number" id="nfPort" placeholder="587" value="${(s.notify && s.notify.email && s.notify.email.port) || 587}" style="width:80px"><label class="inline"><input type="checkbox" id="nfSecure" ${s.notify && s.notify.email && s.notify.email.secure ? 'checked' : ''}> TLS on 465</label><input type="text" id="nfUser" placeholder="user" value="${esc((s.notify && s.notify.email && s.notify.email.user) || '')}" style="width:160px" autocomplete="off"><input type="password" id="nfPass" placeholder="password / app password" value="${esc((s.notify && s.notify.email && s.notify.email.pass) || '')}" style="width:160px" autocomplete="new-password"><input type="text" id="nfTo" placeholder="to@example.com" value="${esc((s.notify && s.notify.email && s.notify.email.to) || '')}" style="width:180px"></div><div class="hint">Any ordinary mailbox. Gmail: host smtp.gmail.com, port 587, your address as user and an <b>app password</b> (Google account → Security → App passwords). The password stays in settings.json on this machine.</div></div>
-      <div class="field"><label>Send for</label><div class="inline" style="flex-wrap:wrap;gap:10px">${[['request', 'new media request'], ['dailySummary', 'daily summary'], ['backupFailed', 'backup failed'], ['airing', 'episodes airing (in the summary)']].map(([k, l]) => `<label class="inline"><input type="checkbox" class="nfEv" data-ev="${k}" ${!s.notify || !s.notify.events || s.notify.events[k] !== false ? 'checked' : ''}> ${l}</label>`).join('')}<button class="small" id="nfTest">Send a test</button><span class="muted tiny" id="nfMsg"></span></div></div>
+      <div class="field"><label>Send for</label><div class="inline" style="flex-wrap:wrap;gap:10px">${[['request', 'new media request'], ['dailySummary', 'daily summary'], ['backupFailed', 'backup failed'], ['jobStale', 'a scheduled job is overdue'], ['airing', 'episodes airing (in the summary)']].map(([k, l]) => `<label class="inline"><input type="checkbox" class="nfEv" data-ev="${k}" ${!s.notify || !s.notify.events || s.notify.events[k] !== false ? 'checked' : ''}> ${l}</label>`).join('')}<button class="small" id="nfTest">Send a test</button><span class="muted tiny" id="nfMsg"></span></div></div>
       <div class="field"><label>Home Assistant status</label><div id="statusBox" class="muted small">Loading…</div><div class="hint">A read-only JSON summary (files, free space, pending requests, missing episodes, what airs this week, last scan) at a URL with its own key. In Home Assistant add a <b>RESTful sensor</b> with that URL and pick values with <span class="mono">value_template</span>, e.g. <span class="mono">{{ value_json.pending_requests }}</span>.</div></div>
 
       <h2>Plex</h2>
@@ -1412,6 +1452,22 @@ views.settings = async () => {
   const refreshStatusBox = async () => { const box = $('#statusBox'); if (!box) return; let st; try { st = await L.status.info(); } catch (e) { box.textContent = e.message; return; } if (!st.available) { box.textContent = 'The status URL is served by the web server (the Pi); the desktop app has none.'; return; } box.innerHTML = `<span class="mono" style="user-select:all;word-break:break-all">${esc(st.url)}</span> <button class="small" id="stRotate">New key</button>`; $('#stRotate').onclick = async () => { if (confirm('Generate a new key? Update Home Assistant afterwards.')) { await L.status.rotate(); refreshStatusBox(); } }; };
   refreshStatusBox();
   $('#pickBk').onclick = async () => { const p = await pickFolder($('#bkDir').value); if (p) $('#bkDir').value = p; };
+  $('#bkRestore').onclick = async () => {
+    const dir = $('#bkDir').value.trim(); if (!dir) return toast('Set the backup folder first', true);
+    let sets; try { sets = await L.restoreList(dir); } catch (e) { return toast(e.message, true); }
+    if (!sets.length) return toast('No backups found in that folder', true);
+    const card = openModal(`<h2>Restore from a backup</h2><p class="muted">The current database is moved aside, not deleted, into a <span class="mono">pre-restore-…</span> folder next to it. MediaLedger restarts to put the backup in place.</p>
+      <div class="field"><label>Backup</label><select id="rsSet">${sets.map(x => `<option value="${x.stamp}">${esc(fmtDate(x.when))} · ${fmtBytes(x.bytes)}${x.files.settings ? ' · settings' : ''}${x.files.web ? ' · accounts' : ''}</option>`).join('')}</select></div>
+      <div class="field"><label>Also restore</label><div class="inline"><label class="inline"><input type="checkbox" id="rsSettings"> settings</label> <label class="inline"><input type="checkbox" id="rsWeb"> web accounts and 2FA</label></div><div class="hint">Leave both off to bring back only the library data. Restoring accounts signs everyone out and brings back the passwords from that day.</div></div>
+      <div class="inline" style="justify-content:flex-end"><button id="rsCancel">Cancel</button><button class="danger" id="rsGo">Restore and restart</button></div>`);
+    $('#rsCancel', card).onclick = closeModal;
+    $('#rsGo', card).onclick = async () => {
+      if (!confirm('Replace the current database with this backup?')) return;
+      $('#rsGo', card).disabled = true; $('#rsGo', card).textContent = 'Checking the backup…';
+      try { const r = await L.restoreStage($('#rsSet', card).value, { settings: $('#rsSettings', card).checked, web: $('#rsWeb', card).checked }, dir); closeModal(); toast(`Backup verified (${r.files.toLocaleString()} files, schema v${r.version}). Restarting…`); setTimeout(() => location.reload(), 6000); }
+      catch (e) { $('#rsGo', card).disabled = false; $('#rsGo', card).textContent = 'Restore and restart'; toast(e.message, true); }
+    };
+  };
   $('#bkNow').onclick = async () => { try { const p = await L.backupTo($('#bkDir').value.trim(), Number($('#bkKeep').value) || 7); toast('Backup copied to ' + p); } catch (e) { toast(e.message, true); } };
   $('#dlFf').onclick = () => downloadFfmpeg($('#dlMsg'), $('#dlProg'), $('#dlBar'), () => views.settings());
 
@@ -1443,7 +1499,7 @@ views.settings = async () => {
   $('#save').onclick = async () => { await L.settings.replace(collect()); toast('Settings saved'); refreshTask(); refreshJobs(); };
   const refreshJobs = async () => {
     const jobs = await L.jobs.list();
-    $('#jobsBox').innerHTML = `<table class="jobs"><tr><th>Job</th><th>When</th><th>Last run</th><th>Next</th><th></th></tr>${jobs.map(j => `<tr class="${j.enabled ? '' : 'muted'}"><td class="nowrap"><b>${esc(j.label)}</b></td><td class="wrap">${esc(j.when)}</td><td class="wrap">${j.running ? '<span class="badge warn">running</span>' : j.last ? `<span title="${esc(fmtDate(j.last))}">${fmtAgo(j.last)}</span>${j.lastNote ? `<span class="sub">${esc(String(j.lastNote)).slice(0, 80)}</span>` : ''}` : '<span class="muted">never</span>'}</td><td class="nowrap">${j.next ? (j.next === 'soon' ? 'soon' : fmtDate(j.next)) : '<span class="muted">—</span>'}</td><td><button class="small job-run" data-job="${j.id}" ${j.running ? 'disabled' : ''}>Run now</button></td></tr>`).join('')}</table>`;
+    $('#jobsBox').innerHTML = `<table class="jobs"><tr><th>Job</th><th>When</th><th>Last run</th><th>Next</th><th></th></tr>${jobs.map(j => `<tr class="${j.enabled ? '' : 'muted'}"><td class="nowrap"><b>${esc(j.label)}</b></td><td class="wrap">${esc(j.when)}</td><td class="wrap">${j.overdue ? `<span class="badge bad" title="${esc(j.overdueWhy || '')}">overdue</span> ` : ''}${j.running ? '<span class="badge warn">running</span>' : j.last ? `<span title="${esc(fmtDate(j.last))}">${fmtAgo(j.last)}</span>${j.lastNote ? `<span class="sub">${esc(String(j.lastNote)).slice(0, 80)}</span>` : ''}` : '<span class="muted">never</span>'}</td><td class="nowrap">${j.next ? (j.next === 'soon' ? 'soon' : fmtDate(j.next)) : '<span class="muted">—</span>'}</td><td><button class="small job-run" data-job="${j.id}" ${j.running ? 'disabled' : ''}>Run now</button></td></tr>`).join('')}</table>`;
     document.querySelectorAll('#jobsBox .job-run').forEach(b => { b.onclick = async () => { b.disabled = true; try { const r = await L.jobs.run(b.dataset.job); toast(r.message || 'Started'); } catch (e) { toast(e.message, true); } setTimeout(refreshJobs, 1500); }; });
   };
   refreshJobs();

@@ -42,7 +42,7 @@
   adult: { status: 'adult:status', toggle: 'adult:toggle', dashboard: 'adult:dashboard' },
   ratings: { list: 'ratings:list', setUser: 'ratings:setUser' },
   tags: { list: 'tags:list', all: 'tags:all', get: 'tags:get', add: 'tags:add', remove: 'tags:remove' },
-  tonight: 'data:tonight', storage: 'data:storage', backupTo: 'db:backupTo', airing: 'data:airing', upgrades: 'data:upgrades', notifyTest: 'notify:test', statusJson: 'data:status', watched: 'data:watched', jobs: { list: 'jobs:list', run: 'jobs:run' },
+  tonight: 'data:tonight', storage: 'data:storage', backupTo: 'db:backupTo', airing: 'data:airing', upgrades: 'data:upgrades', notifyTest: 'notify:test', statusJson: 'data:status', watched: 'data:watched', jobs: { list: 'jobs:list', run: 'jobs:run', overdue: 'jobs:overdue' }, logTail: 'log:tail', restoreList: 'db:restoreList', restoreStage: 'db:restoreStage',
   status: { info: 'status:info', rotate: 'status:rotate' },
   prefs: { get: 'prefs:get', set: 'prefs:set' }, snapshots: 'data:snapshots', snapshotNow: 'data:snapshotNow',
   web: { channels: 'web:channels', videos: 'web:videos' },

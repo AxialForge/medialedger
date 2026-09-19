@@ -33,6 +33,7 @@ const { planMovieNames } = require('./movieNamer');
 const movieRename = require('./movieRename');
 const plex = require('./plex');
 const watched = require('./watched');
+const restore = require('./restore');
 const sysmon = require('./sysmon');
 const rootcheck = require('./rootcheck');
 
@@ -584,8 +585,9 @@ function createService({ userData, log, send, host }) {
     const dest = path.join(dir, `medialedger-${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}.db`);
     fs.copyFileSync(local, dest);
     const st = fs.statSync(dest); if (!st.size) throw new Error('Copied backup is empty');
-    const olds = fs.readdirSync(dir).filter(f => /^medialedger-.*\.db$/.test(f)).sort().reverse().slice(Math.max(1, Number(keep) || 7));
-    for (const f of olds) { try { fs.unlinkSync(path.join(dir, f)); } catch { /* ignore */ } }
+    const stamp = path.basename(dest).replace(/^medialedger-|\.db$/g, '');
+    try { restore.copyCompanions(userData, dir, stamp); } catch (e) { log('backup: settings/accounts not copied: ' + e.message); }
+    restore.pruneSets(dir, keep);
     settings.set({ backup: { ...(settings.get().backup || {}), lastRun: new Date().toISOString(), lastFile: dest, lastError: null } });
     log(`backup: ${dest} (${(st.size / 1048576).toFixed(1)} MB)`);
     return dest;
@@ -603,6 +605,34 @@ function createService({ userData, log, send, host }) {
     try { backupTo(b.dir, b.keep); } catch (e) { log('backup failed: ' + e.message); settings.set({ backup: { ...b, lastError: e.message } }); notifier.send('backupFailed', 'Nightly backup failed', `${e.message}\nFolder: ${b.dir}`).catch(() => {}); }
   };
   const backupTimer = setInterval(backupTick, 60000); if (backupTimer.unref) backupTimer.unref();
+  // ---- restore: list the sets in the backup folder, stage one, restart; the shell swaps the files in on startup ----
+  const restartShell = () => { if (host && typeof host.restart === 'function') host.restart(); else if (host && typeof host.relaunch === 'function') { host.relaunch(); setTimeout(() => host.exit(0), 800); } };
+  h('db:restoreList', (dir) => restore.listSets(dir || (settings.get().backup || {}).dir));
+  h('db:restoreStage', (stamp, what, dir) => {
+    if (scanner.running) throw new Error('A scan is running; restore when it has finished');
+    const { MIGRATIONS } = require('./db');
+    const r = restore.stageRestore(userData, dir || (settings.get().backup || {}).dir, String(stamp), what || {}, MIGRATIONS[MIGRATIONS.length - 1].version);
+    log(`restore: staged backup ${r.stamp} (schema v${r.version}, ${r.files} files); restarting`);
+    restartShell();
+    return r;
+  });
+
+  // ---- log viewer: the tail of medialedger.log, filtered ----
+  h('log:tail', (opts) => {
+    const o = opts || {}; const want = Math.min(2000, Math.max(10, Number(o.lines) || 300));
+    const file = path.join(userData, 'medialedger.log');
+    if (!fs.existsSync(file)) return { file, size: 0, lines: [] };
+    const size = fs.statSync(file).size; const chunk = Math.min(size, 2 * 1024 * 1024);
+    const fd = fs.openSync(file, 'r'); const buf = Buffer.alloc(chunk);
+    try { fs.readSync(fd, buf, 0, chunk, size - chunk); } finally { fs.closeSync(fd); }
+    let lines = buf.toString('utf8').split('\n'); if (chunk < size) lines.shift();
+    lines = lines.filter(Boolean);
+    const q = String(o.q || '').toLowerCase();
+    if (q) lines = lines.filter(l => l.toLowerCase().includes(q));
+    if (o.level === 'error') lines = lines.filter(l => /error|fail|denied|rejected|could not|HTTP [45]\d\d/i.test(l));
+    return { file, size, lines: lines.slice(-want) };
+  });
+
   h('db:backupTo', (dir, keep) => backupTo(dir || (settings.get().backup || {}).dir, keep || (settings.get().backup || {}).keep, 'manual'));
 
   // ---- airing: what the online match says comes next, and series that finished but are still incomplete ----
@@ -711,7 +741,7 @@ function createService({ userData, log, send, host }) {
     const plexEvery = Number((s.plex || {}).everyHours) || 0;
     const nextPlex = plexEvery && (s.plex || {}).token ? new Date((lastPlex ? new Date(lastPlex.ts).getTime() : 0) + plexEvery * 3600000).toISOString() : null;
     const scanWhen = [s.schedule.inAppEnabled ? `every ${s.schedule.inAppIntervalHours} h while open` : null, s.schedule.taskSchedulerEnabled ? `daily at ${s.schedule.taskTime} (Task Scheduler)` : null].filter(Boolean).join(' · ');
-    return [
+    const jobs = [
       { id: 'scan', label: 'Library scan', enabled: !!(s.schedule.inAppEnabled || s.schedule.taskSchedulerEnabled), when: scanWhen || 'manual only', last: lastScan ? lastScan.finished : null, lastNote: lastScan ? lastScan.status : null, next: s.schedule.inAppEnabled ? scheduler.nextInAppRun() : null, running: !!scanner.running },
       { id: 'plex', label: 'Plex sync', enabled: !!((s.plex.enabled || plexEvery) && s.plex.token), when: [s.plex.enabled ? 'after each scan' : null, plexEvery ? `every ${plexEvery} h` : null].filter(Boolean).join(' · ') || (s.plex.token ? 'manual only' : 'no token'), last: lastPlex ? lastPlex.ts : null, lastNote: lastPlex ? lastPlex.note : null, next: nextPlex && new Date(nextPlex) > new Date() ? nextPlex : (nextPlex ? 'soon' : null), running: !!plexJob.running },
       { id: 'metadata', label: 'Episode counts and airing dates', enabled: !!s.metadata.enabled, when: s.metadata.enabled ? `after each scan · airing series re-checked every ${s.metadata.refreshDays} days` : 'off', last: lastMeta ? lastMeta.t : null, next: null },
@@ -719,7 +749,31 @@ function createService({ userData, log, send, host }) {
       { id: 'snapshot', label: 'Daily snapshot (trend cards)', enabled: true, when: `after each scan, else at ${(s.snapshot || {}).time || '03:05'}`, last: lastSnap ? lastSnap.t : null, next: nextDaily((s.snapshot || {}).time || '03:05', lastSnap ? lastSnap.t : null) },
       { id: 'summary', label: 'Daily summary notification', enabled: !!((s.notify.webhookUrl || (s.notify.email && s.notify.email.enabled)) && !(s.notify.events && s.notify.events.dailySummary === false)), when: `daily at ${s.notify.dailyTime || '08:00'}`, last: s.notify.lastSummary || null, next: (s.notify.webhookUrl || (s.notify.email && s.notify.email.enabled)) ? nextDaily(s.notify.dailyTime || '08:00', s.notify.lastSummary) : null },
     ];
+    // Overdue: an enabled job that has not run for twice its interval (daily jobs: 48 h), or whose last run failed.
+    const age = (iso) => iso ? (Date.now() - new Date(iso).getTime()) / 3600000 : Infinity;
+    const limit = { scan: s.schedule.inAppEnabled ? 2 * (Number(s.schedule.inAppIntervalHours) || 24) : null, plex: plexEvery ? Math.max(2 * plexEvery, 2) : null, backup: 48, snapshot: 48, summary: 48 };
+    for (const j of jobs) {
+      const lim = limit[j.id];
+      j.overdue = !!(j.enabled && !j.running && lim && age(j.last) > lim);
+      if (j.id === 'backup' && j.enabled && s.backup.lastError) { j.overdue = true; j.overdueWhy = 'last run failed: ' + s.backup.lastError; }
+      else if (j.overdue) j.overdueWhy = j.last ? `last ran ${Math.round(age(j.last))} h ago, expected within ${lim} h` : 'has never run';
+    }
+    return jobs;
   });
+  h('jobs:overdue', () => handlers.get('jobs:list')().filter(j => j.overdue).map(j => ({ id: j.id, label: j.label, why: j.overdueWhy })));
+  // Tell the owner once a day per job; the dashboard shows it the whole time.
+  const staleTold = new Map();
+  const staleTick = () => {
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      for (const j of handlers.get('jobs:overdue')()) {
+        if (staleTold.get(j.id) === today) continue; staleTold.set(j.id, today);
+        log(`schedule: ${j.label} is overdue (${j.why})`);
+        notifier.send('jobStale', `${j.label} is overdue`, `${j.label}: ${j.why}.\nOpen Settings → Schedules to run it or check the log.`).catch(() => {});
+      }
+    } catch (e) { log('stale check failed: ' + e.message); }
+  };
+  const staleTimer = setInterval(staleTick, 3600000); if (staleTimer.unref) staleTimer.unref();
   h('jobs:run', async (id) => {
     switch (id) {
       case 'scan': runScan('manual').catch(() => {}); return { started: true, message: 'Scan started' };

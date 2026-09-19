@@ -36,6 +36,7 @@ fs.mkdirSync(dataDir, { recursive: true });
 
 const logFile = path.join(dataDir, 'medialedger.log');
 const log = (...a) => { const line = `[${new Date().toISOString()}] ${a.join(' ')}\n`; try { fs.appendFileSync(logFile, line); } catch { /* ignore */ } process.stdout.write(line); };
+require('../main/restore').applyPendingRestore(dataDir, log);
 const sec = createSecurity({ dataDir, log });
 
 if (process.argv.includes('--set-password')) {
@@ -56,7 +57,7 @@ const servePort = tls && port === 80 ? 443 : port;
 // ---- core ------------------------------------------------------------------------------
 const clients = new Set(); // SSE responses
 const send = (channel, payload) => { const data = `data: ${JSON.stringify({ channel, payload })}\n\n`; for (const res of clients) { try { res.write(data); } catch { clients.delete(res); } } };
-const svc = createService({ userData: dataDir, log, send, host: { isPackaged: true, getAppPath: () => path.join(__dirname, '..', '..') } });
+const svc = createService({ userData: dataDir, log, send, host: { isPackaged: true, getAppPath: () => path.join(__dirname, '..', '..'), restart: () => setTimeout(() => process.exit(0), 1500) } });
 svc.init();
 
 // ---- roles ---------------------------------------------------------------------------------
@@ -65,7 +66,7 @@ const GUEST = new Set(['app:info', 'security:me', 'data:dashboard', 'data:series
 // A standard user: everything a guest may, plus the review pages, own ratings, the adult switch for their own session.
 const STANDARD = new Set([...GUEST, 'data:watched', 'data:problems', 'data:duplicates', 'data:missing', 'data:quality', 'data:changes', 'data:changeStats', 'movie:plan', 'movie:batches', 'movie:batchItems', 'rename:proposals', 'rename:history', 'export:list', 'override:list', 'override:suggest', 'meta:status', 'plex:status', 'watch:status', 'schedule:nextInApp', 'db:stats', 'settings:get', 'adult:toggle', 'ratings:setUser', 'security:changePassword', 'tags:add', 'tags:remove', 'data:upgrades', 'rename:dry', 'prefs:set']);
 // Admins: every channel. Actions that write to the share or throw data away also need a fresh password (re-auth).
-const SENSITIVE = new Set(['security:tlsEnable', 'status:rotate', 'plex:webhookSet', 'movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']);
+const SENSITIVE = new Set(['db:restoreStage', 'security:tlsEnable', 'status:rotate', 'plex:webhookSet', 'movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']);
 const isSensitive = (ch, args) => ch === 'movie:run' ? !!(args[1] && args[1].live) : SENSITIVE.has(ch);
 const allowed = (role, ch) => role === 'admin' || (role === 'standard' ? STANDARD.has(ch) : GUEST.has(ch));
 // Settings hold secrets (Plex token, GitHub token); a standard user sees them blanked.

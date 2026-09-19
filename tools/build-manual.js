@@ -54,12 +54,12 @@ const TOC_ENTRIES = [
   '9. Missing episodes', '9.1 The Match dialog', '9.2 Airing next',
   '10. Issues', '10.1 Problems', '10.2 The Fix dialog', '10.3 Duplicates',
   '11. Quality', '11.1 Upgrade candidates', '12. Ratings', '12.1 Watch tonight', '12.2 Watched: who watched what',
-  '13. Media requests', '13.1 The phone page and notifications',
+  '13. Media requests', '13.1 The phone page and notifications', '13.2 Schedules',
   '14. Change log',
   '15. Movie names (the naming engine)', '15.1 The pattern', '15.2 Ready, flagged, blocked', '15.3 Batch settings', '15.4 Running a batch', '15.5 Undo', '15.6 Bulk source, collisions, placeholders',
   '16. Rename TV / anime', '17. CSV export', '17.1 Choosing what to export', '17.2 The files', '18. Settings reference', '18.1 Appearance',
   '19. Plex integration', '19.1 Setup', '19.2 What a sync stores', '19.3 Plex webhook',
-  '20. System (health and hardware)',
+  '20. System (health and hardware)', '20.1 Log',
   '21. Security', '21.1 Accounts and roles', '21.2 Always on', '21.3 Controls', '21.4 Two-factor codes with a phone', '21.5 HTTPS',
   '22. Running MediaLedger on a Raspberry Pi', '22.1 Requirements', '22.2 Install, step by step', '22.3 First run on the Pi', '22.3a Your own name for the Pi', '22.4 Command reference', '22.5 Security on the Pi', '22.6 Moving the desktop database to the Pi', '22.7 File locations', '22.8 Pi troubleshooting',
   '23. Troubleshooting', '24. Glossary',
@@ -321,6 +321,7 @@ add(H1('13. Media requests'), ...img('requests', 'The Requests tab as an admin s
   P('**Home Assistant status** is a read-only JSON summary at a URL with its own key (New key rotates it). Add it as a RESTful sensor and pick values with a template such as `{{ value_json.pending_requests }}`; fields include files, bytes, free space, months left, pending requests, missing episodes, airing this week, the next airing episode, whether a scan is running and the last scan result.'),
   H2('13.2 Schedules'),
   P('Settings → **Schedules** lists every job MediaLedger runs on its own, in one table: the library scan, the Plex sync, episode counts and airing dates, the backup, the daily snapshot and the daily summary. Each row shows when it runs, the last run and its result, the next run, and a **Run now** button. The timing controls sit underneath: the **Plex sync** interval (a timer keeps the Watched tab and play counts current on days without a scan; 0 means only after scans), the backup time and how many copies to keep, the snapshot time and the summary time. The scan timers and the Windows scheduled task follow.'),
+  P('A job is **overdue** when it is enabled but has not run for twice its interval (48 hours for the daily ones), or when the last backup failed. Overdue jobs get a red badge in the table, a notice at the top of the Dashboard for admins, a line in the log and, once a day, a notification if **a scheduled job is overdue** is ticked under Notifications.'),
 
 );
 
@@ -361,7 +362,7 @@ add(H1('15. Movie names (the naming engine)'), ...img('movienames', 'Proposed na
   ], [2200, 7160]),
   H2('15.4 Running a batch'),
   steps([
-    'Filter and tick the files you want. **Select shown** ticks every ready file currently listed.',
+    'Filter and tick the files you want. **Select next** with the number beside it clears the selection and ticks only that many of the listed files (10 unless you change it; the number is remembered), so a run never covers more than you meant. After the batch those files leave the list and **Select next** picks up the following group. **Select shown** ticks every ready file currently listed and asks first when that is more than 50.',
     'Press **Dry run N**. Nothing is touched; the result window lists exactly what would happen and the batch is recorded as a dry run in the Batches table.',
     'When satisfied, tick **Allow live renames**, press **Save**, then **Rename N live**.',
     'A confirmation lists the renames and asks you to type `RENAME`.',
@@ -385,6 +386,7 @@ add(H1('15. Movie names (the naming engine)'), ...img('movienames', 'Proposed na
 // ---------------- 16 Rename TV/anime ----------------
 add(H1('16. Rename TV / anime'), ...img('rename', 'The episode rename tool, shown here while disabled.'),
   P('Episodes use the same engine as movies: every run is a batch that is pre-flighted as a whole (file still there, size unchanged, target free, root writable), each rename verified, journaled in the **Batches** table and undoable from it. **Dry run N** records what would happen without touching anything. Name parts work as on the movie tab: `Show - S01E02` is fixed, the **Episode title** is on by default, and **Resolution**, **Codec** and **Sub/Dub** are opt-in, written in square brackets. The same one-at-a-time scheme applies: a **Rename** button per row and **One at a time** for the ticked files, each confirmed separately. It is **off** until you enable it under Settings → Renaming. When on, it lists every episode file whose name differs from `Show - S01E02 - Title.ext`, built from the parsed details and your fixes. Tick files, press **Rename**, confirm. Files are renamed in place, never moved or overwritten, and every attempt is logged in the History table. Fix anything wrong under Problems first, because the proposal is only as good as the parse.'),
+  P('**Select next** works here as it does for movies: set how many episodes to take at a time, press it, check the ticked rows, run the batch, repeat. It is the comfortable middle between one file at a time and everything shown.'),
 );
 
 // ---------------- 17 CSV ----------------
@@ -431,7 +433,8 @@ add(H1('18. Settings reference'), ...img('settings', 'The top of the Settings pa
     '**In-app timer** – scans every N hours while the window is open.',
     '**Windows Task Scheduler** – installs a daily task that launches MediaLedger with `--scan`, which scans, exports and exits even when the app is closed. If the app is already open, the open window runs the scan instead. Re-install the task after upgrading so it points at the current program.',
   ]),
-  H2('Data'), P('Database path and size, schema version, counts, and buttons to back up now, open the backups folder, the data folder and the log. **Nightly backup to a folder** copies the database to a folder of your choice once a day at the time you set, dated, keeping the newest N. Point it at the NAS: the database holds every fix, rating, tag, match and the whole change log, and this is the only copy that survives a dead SD card or PC. **Back up there now** tests the folder.'),
+  H2('Data'), P('Database path and size, schema version, counts, and buttons to back up now, open the backups folder, the data folder and the log. **Nightly backup to a folder** copies the database to a folder of your choice once a day at the time you set, dated, keeping the newest N. Point it at the NAS: the database holds every fix, rating, tag, match and the whole change log, and this is the only copy that survives a dead SD card or PC. Each backup is a **set** with one date stamp: the database, `settings.json` and, on the web server, `web.json` (accounts, password hashes and 2FA secrets, so keep the folder private). Sets are pruned together. **Back up there now** tests the folder.'),
+  P('**Restore…** lists the sets in the folder. Pick one and choose whether to bring back the settings and the web accounts as well as the library data. The backup is opened read-only and checked (integrity, schema no newer than this build) before anything happens; then MediaLedger restarts and swaps the files in before opening them. The files it replaces are not deleted: they are moved into a `pre-restore-<date>` folder next to the database. On the web server a restore asks for your password again and is written to the security log.'),
   H2('Updates'), P('Automatic updates on/off, and the GitHub token needed only while the repository is private.'),
   H2('Plex'), P('Server, token, path mapping and sync options: see chapter 19. The **Webhook** row belongs to the web server (19.3); on the desktop it explains that webhooks need the always-on server.'),
 );
@@ -482,6 +485,8 @@ add(H1('20. System (health and hardware)'),
     ['Storage', 'Free space and fill percentage of the data folder and of every enabled root, measured through the share.'],
   ], [2600, 6760]),
   note('The thresholds live at the top of `healthOf()` in `src/main/sysmon.js` if you want to tune them for a different case or fan.'),
+  H2('20.1 Log'), ...img('log', 'The Log page filtered to Plex lines.'),
+  P('**Log** shows the tail of `medialedger.log`: scans, Plex syncs and the play-history pull, backups, schema migrations, restores and every failure, newest at the bottom. Type in the filter to narrow it (`plex`, `backup`, `migrate`), switch to **problems only**, load up to 2,000 lines, and copy the result. It refreshes every five seconds while the box is ticked. On the web server only admins see it, so diagnosing the Pi no longer needs SSH.'),
 );
 
 // ---------------- 21 Security ----------------
@@ -582,6 +587,7 @@ add(H1('22. Running MediaLedger on a Raspberry Pi'),
   H2('22.4 Command reference'),
   table(['Command (run on the Pi)', 'Does'], [
     ['`sudo medialedger-update`', 'Download the newest release package, verify it, install it and restart. Data is untouched.'],
+    ['`sudo bash install.sh --auto-update`', 'Rerun the installer with this flag to add a systemd timer that runs the update every night at about 04:30. `--no-auto-update` removes it. Without it, admins see a notice on the Dashboard when a newer release exists.'],
     ['`sudo medialedger --set-password`', 'Set or reset the **admin** account\'s password. Signs everyone out. Other accounts are reset from Security → Users.'],
     ['`systemctl status medialedger`', 'Is the service running, since when, last log lines.'],
     ['`journalctl -u medialedger -f`', 'Follow the application log live.'],

@@ -8,6 +8,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [1.10.0] - 2026-09-18
+
+### Added
+
+- **Select next N** on both rename tabs: clears the selection and ticks only
+  the next few listed files (10 by default, remembered). "Select shown" asks
+  first above 50.
+- **Log page**: the tail of the log with a filter, a problems-only switch,
+  auto-refresh and copy. Admin-only on the web server.
+- **Full backups and restore**: each nightly backup is a set (database,
+  settings and, on the web server, the accounts file), pruned together.
+  **Restore…** validates a set read-only, restarts and swaps it in; the files
+  it replaces are kept in a `pre-restore-…` folder. Re-authentication and an
+  audit entry on the web server.
+- **Overdue jobs**: a scheduled job that has not run for twice its interval,
+  or a failed backup, is flagged in Schedules, on the Dashboard, in the log and
+  by a daily notification (new event "a scheduled job is overdue").
+- **Update notice on the web server**: admins see on the Dashboard when a newer
+  release exists. The installer gains `--auto-update` (nightly systemd timer)
+  and `--no-auto-update`.
+
 ## [1.9.3] - 2026-09-18
 
 ### Changed

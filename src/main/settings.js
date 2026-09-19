@@ -50,7 +50,7 @@ const DEFAULTS = {
   notify: {                   // see notify.js: a JSON webhook (Home Assistant, ntfy, Discord…) and/or plain e-mail
     webhookUrl: '',
     email: { enabled: false, host: '', port: 587, secure: false, user: '', pass: '', from: '', to: '' },
-    events: { request: true, dailySummary: true, backupFailed: true, airing: true },
+    events: { request: true, dailySummary: true, backupFailed: true, airing: true, jobStale: true },
     dailyTime: '08:00',       // when the daily summary goes out
   }, // nightly copy of the database to a folder (the NAS), newest `keep` kept
   autoExportAfterScan: true,

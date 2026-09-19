@@ -255,8 +255,8 @@ td .sub { display: block; color: var(--muted); font-size: 11px; line-height: 1.2
 
 /* ---- Roles (web build). Guests: statistics only. Standard: no settings/system/security, no controls that change files. */
 body.role-guest [data-view="issues"], body.role-guest [data-view="missing"], body.role-guest [data-view="quality"], body.role-guest [data-view="changes"], body.role-guest [data-view="movienames"], body.role-guest [data-view="rename"], body.role-guest [data-view="export"],
-body.role-guest [data-view="system"], body.role-guest [data-view="security"], body.role-guest [data-view="settings"], body.role-guest .scanbox, body.role-guest #topScan, body.role-guest #adultSwitch, body.role-guest .navgroup:nth-of-type(3),
-body.role-standard [data-view="system"], body.role-standard [data-view="security"], body.role-standard [data-view="settings"], body.role-standard [data-view="export"], body.role-standard .scanbox, body.role-standard #topScan,
+body.role-guest [data-view="system"], body.role-guest [data-view="log"], body.role-guest [data-view="security"], body.role-guest [data-view="settings"], body.role-guest .scanbox, body.role-guest #topScan, body.role-guest #adultSwitch, body.role-guest .navgroup:nth-of-type(3),
+body.role-standard [data-view="system"], body.role-standard [data-view="log"], body.role-standard [data-view="security"], body.role-standard [data-view="settings"], body.role-standard [data-view="export"], body.role-standard .scanbox, body.role-standard #topScan,
 body.role-standard .fixbtn, body.role-standard #purge, body.role-guest .fixbtn, body.role-guest #purge,
 body.role-standard .adminonly, body.role-guest .adminonly { display: none !important; }
 body.role-guest .starwidget { pointer-events: none; opacity: .6; }
@@ -319,3 +319,7 @@ body.role-guest .starwidget { pointer-events: none; opacity: .6; }
 .card table td.num { padding-right: 0; }
 /* Two cards side by side need room; between phone and wide desktop they stack instead of squeezing. */
 @media (max-width: 1180px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+
+/* Log viewer */
+.logview { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px; height: calc(100vh - 250px); min-height: 300px; overflow: auto; font: 12px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-word; margin: 0; }
+.logview .bad { color: var(--bad); } .logview .warn { color: var(--warn); }

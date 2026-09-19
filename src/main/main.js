@@ -27,6 +27,7 @@ if (!gotLock) {
   const send = (ch, payload) => { if (win && !win.isDestroyed()) win.webContents.send(ch, payload); };
 
   // Everything that is not window management lives in the shared core (also used by the web server).
+  require('./restore').applyPendingRestore(userData, log);
   const svc = createService({ userData, log, send, host: app });
   const runScan = (trigger) => svc.runScan(trigger);
   const refreshMetadata = (opts) => svc.refreshMetadata(opts);
@@ -111,7 +112,7 @@ function createWindow() {
       ['dashboard', '#dashboard'], ['tv', '#tv'], ['anime', '#anime'], ['movies', '#movies'],
       ['episodes', '#anime/' + encodeURIComponent('One Piece')], ['movie-versions', '#movies/' + encodeURIComponent('pacificrim|2013')],
       ['missing', '#missing'], ['duplicates', '#duplicates'], ['movienames', '#movienames'], ['web', '#web'], ['ratings', '#ratings'], ['quality', '#quality'], ['rename', '#rename'],
-      ['changes', '#changes'], ['issues', '#issues/problems'], ['problems', '#problems'], ['requests', '#requests'], ['tonight', '#tonight'], ['watched', '#watched'], ['upgrades', '#upgrades'], ['export', '#export'], ['system', '#system'], ['settings', '#settings'], ['about', '#about'],
+      ['changes', '#changes'], ['issues', '#issues/problems'], ['problems', '#problems'], ['requests', '#requests'], ['tonight', '#tonight'], ['watched', '#watched'], ['upgrades', '#upgrades'], ['export', '#export'], ['system', '#system'], ['log', '#log'], ['settings', '#settings'], ['about', '#about'],
     ];
     await new Promise(r => win.webContents.once('did-finish-load', r));
     await sleep(1500);

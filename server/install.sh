@@ -26,8 +26,8 @@ SHARE="//192.168.1.204/Apocrypha_Media_Pool"
 CREDS="/etc/medialedger-cifs.cred"
 PORT="${MEDIALEDGER_PORT:-8080}"
 BRANCH=""
-UPDATE_ONLY=0; HTTPS=0; DOMAIN=""
-for a in "$@"; do case "$a" in --branch=*) BRANCH="${a#--branch=}";; --share=*) SHARE="${a#--share=}";; --port=*) PORT="${a#--port=}";; --domain=*) DOMAIN="${a#--domain=}";; --update-only) UPDATE_ONLY=1;; --https) HTTPS=1;; esac; done
+UPDATE_ONLY=0; HTTPS=0; DOMAIN=""; AUTO_UPDATE=0
+for a in "$@"; do case "$a" in --branch=*) BRANCH="${a#--branch=}";; --share=*) SHARE="${a#--share=}";; --port=*) PORT="${a#--port=}";; --domain=*) DOMAIN="${a#--domain=}";; --update-only) UPDATE_ONLY=1;; --https) HTTPS=1;; --auto-update) AUTO_UPDATE=1;; --no-auto-update) AUTO_UPDATE=-1;; esac; done
 [[ -n "$DOMAIN" ]] && echo "$DOMAIN" > /etc/medialedger-domain 2>/dev/null || true
 [[ -z "$DOMAIN" && -f /etc/medialedger-domain ]] && DOMAIN="$(cat /etc/medialedger-domain)"
 
@@ -101,6 +101,30 @@ systemctl restart medialedger
 echo "MediaLedger now at \$(node -p "require('$APP_DIR/package.json').version")"
 EOF
 chmod 755 /usr/local/bin/medialedger /usr/local/bin/medialedger-update
+
+# Optional: update every night at 04:30 (sudo bash install.sh --auto-update; --no-auto-update removes it).
+if [[ $AUTO_UPDATE -eq 1 ]]; then
+cat > /etc/systemd/system/medialedger-update.service <<EOF
+[Unit]
+Description=Update MediaLedger to the latest release
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/medialedger-update
+EOF
+cat > /etc/systemd/system/medialedger-update.timer <<EOF
+[Unit]
+Description=Nightly MediaLedger update
+[Timer]
+OnCalendar=*-*-* 04:30:00
+RandomizedDelaySec=900
+Persistent=true
+[Install]
+WantedBy=timers.target
+EOF
+systemctl daemon-reload; systemctl enable --now medialedger-update.timer >/dev/null; echo "Nightly auto-update enabled (04:30)."
+elif [[ $AUTO_UPDATE -eq -1 ]]; then
+systemctl disable --now medialedger-update.timer >/dev/null 2>&1 || true; rm -f /etc/systemd/system/medialedger-update.timer /etc/systemd/system/medialedger-update.service; systemctl daemon-reload; echo "Nightly auto-update removed."
+fi
 
 cat > /etc/systemd/system/medialedger.service <<EOF
 [Unit]
