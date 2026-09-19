@@ -48,3 +48,16 @@ console.log('feature tests passed');
   assert.strictEqual(parseFor('tv', E`Show\Show S01E01.mkv`).adult, 0);
   console.log('adult/web parse tests passed');
 }
+
+
+// ---- collecting policy: mute / from an episode onward
+{
+  const { applyCollectPolicy } = require('../src/main/metadata');
+  const res = { missing: [{ season: 1, missing: [1, 2, 50, 900], expected: 1000 }, { season: 2, missing: [3], expected: 10 }, { season: 3, missing: [1], expected: 5 }], missingCount: 6, expectedTotal: 1015, haveTotal: 1009, absolute: false };
+  assert.strictEqual(applyCollectPolicy(res, null).missingCount, 6); assert.strictEqual(applyCollectPolicy(res, null).policy, null);
+  const mute = applyCollectPolicy(res, { mute: 1 }); assert.strictEqual(mute.missingCount, 0); assert.strictEqual(mute.rawMissingCount, 6); assert.strictEqual(mute.policy, 'mute');
+  const fromEp = applyCollectPolicy(res, { from_episode: 50 }); assert.deepStrictEqual(fromEp.missing.map(m => m.missing), [[50, 900], [3], [1]], 'episode only means season 1');
+  const fromS2 = applyCollectPolicy(res, { from_season: 2, from_episode: 4 }); assert.deepStrictEqual(fromS2.missing, [{ season: 3, missing: [1], expected: 5 }]); assert.strictEqual(fromS2.missingCount, 1); assert.strictEqual(fromS2.policy, 'from');
+  assert.strictEqual(res.missingCount, 6, 'input untouched');
+  console.log('collect policy tests passed');
+}

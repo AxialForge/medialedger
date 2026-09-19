@@ -269,6 +269,26 @@ async function openMatchModal(type, show, after) {
   $('#mNone', card).onclick = async () => { await L.meta.setNone(type, show); closeModal(); after && after(); };
   if ($('#mUnlock', card)) $('#mUnlock', card).onclick = async () => { await L.meta.unlock(type, show); closeModal(); toast('Will be looked up automatically on the next refresh'); after && after(); };
 }
+// Collecting policy: what counts as missing for one series (everything, from an episode onward, or nothing).
+async function openCollectModal(type, show, raw, done) {
+  const cur = await L.collect.get(type, show) || {};
+  const mode = cur.mute ? 'mute' : (cur.from_season != null || cur.from_episode != null) ? 'from' : 'all';
+  const card = openModal(`<h2>What are you collecting of ${esc(show)}?</h2>
+    <p class="muted">${Number(raw) ? `${Number(raw).toLocaleString()} episodes are missing against the online listing.` : ''} This only changes what MediaLedger counts as missing; no file is touched.</p>
+    <div class="field"><label class="inline"><input type="radio" name="cm" value="all" ${mode === 'all' ? 'checked' : ''}> Everything</label><div class="hint">Every aired episode counts.</div></div>
+    <div class="field"><label class="inline"><input type="radio" name="cm" value="from" ${mode === 'from' ? 'checked' : ''}> From season <input type="number" id="cmS" min="0" value="${cur.from_season != null ? cur.from_season : 1}" style="width:64px"> episode <input type="number" id="cmE" min="1" value="${cur.from_episode || 1}" style="width:80px"> onward</label><div class="hint">For long runners you joined late. Shows numbered straight through (One Piece) use season 1 and the episode number.</div></div>
+    <div class="field"><label class="inline"><input type="radio" name="cm" value="mute" ${mode === 'mute' ? 'checked' : ''}> Mute this series</label><div class="hint">Nothing counts as missing; it stays listed with a "muted" badge.</div></div>
+    <div class="field"><label>Note</label><input type="text" id="cmNote" value="${esc(cur.note || '')}" placeholder="optional, e.g. only the dub"></div>
+    <div class="inline" style="justify-content:flex-end"><button id="cmCancel">Cancel</button><button class="primary" id="cmSave">Save</button></div>`);
+  $('#cmS', card).onfocus = $('#cmE', card).onfocus = () => { card.querySelector('input[value=from]').checked = true; };
+  $('#cmCancel', card).onclick = closeModal;
+  $('#cmSave', card).onclick = async () => {
+    const m = card.querySelector('input[name=cm]:checked').value;
+    try { await L.collect.set(type, show, m === 'mute' ? { mute: true, note: $('#cmNote', card).value } : m === 'from' ? { from_season: $('#cmS', card).value, from_episode: $('#cmE', card).value, note: $('#cmNote', card).value } : {}); closeModal(); toast('Saved'); refreshBadges(); if (done) done(); }
+    catch (e) { toast(e.message, true); }
+  };
+}
+document.addEventListener('click', e => { const b = e.target.closest('.collectbtn'); if (b) { e.stopPropagation(); openCollectModal(b.dataset.type, b.dataset.show, b.dataset.raw, () => route()); } });
 const matchBtn = (type, show) => `<button class="small matchbtn" data-type="${esc(type)}" data-show="${esc(show)}">Match…</button>`;
 document.addEventListener('click', e => { const b = e.target.closest('.matchbtn'); if (b) { e.stopPropagation(); openMatchModal(b.dataset.type, b.dataset.show, () => route()); } });
 
@@ -836,12 +856,14 @@ views.problems = async () => {
       ${tile(p.probeErrors.length ? 'badt' : '', 'ffprobe errors', p.probeErrors.length, 'unreadable files')}
       ${tile(p.missing.length ? 'badt' : '', 'Missing files', p.missing.length, 'seen before, gone now')}
       ${tile(p.duplicates ? 'warnt' : '', 'Duplicate episodes', p.duplicates, 'see the Duplicates button')}
+      ${tile((p.misfiled || []).length ? 'warnt' : '', 'Episodes under Movies', (p.misfiled || []).length, 'episode-style names in a movie folder')}
       ${tile('okt', 'Fixes saved', p.overrides.length, `${p.ignored.length} ignored files`)}
     </div>`;
   const sec = (title, rows, cols, extra = '', search = r => r.rel_path) => { const t = makeTable(rows, cols, { search, short: true }); const box = el(`<div><div class="section-head"><h2>${title} <span class="muted">(${rows.length})</span></h2>${extra}</div></div>`); box.append(t.node); return box; };
   const lib = { key: 'library_type', label: 'Library', render: r => `<span class="badge ${r.library_type}">${typeName(r.library_type)}</span>` };
   view.append(
     sec('Unparsed file names', p.unparsed, [lib, { key: 'rel_path', label: 'Path', cls: 'pathcell' }, { key: 'parse_note', label: 'Why' }, { key: 'show_name', label: 'Guess', render: r => esc(r.library_type === 'movie' ? `${r.movie_title || ''} ${r.movie_year || ''}` : `${r.show_name || ''} ${r.season != null ? 'S' + r.season : ''} ${r.episode != null ? 'E' + r.episode : ''}`) }, { key: 'id', label: '', render: r => fixBtn(r) }]),
+    sec('Episodes filed under Movies', p.misfiled || [], [lib, { key: 'rel_path', label: 'Path', cls: 'pathcell' }, { key: 'movie_title', label: 'Read as', render: r => esc(`${r.movie_title || ''}${r.movie_year ? ' (' + r.movie_year + ')' : ''}`) }, { key: 'id', label: '', render: r => fixBtn(r) }], '<span class="muted tiny">The name carries a season or episode marker. Move the file to a TV or anime folder, or use Fix to ignore it if it really is a film.</span>'),
     sec('ffprobe errors', p.probeErrors, [lib, { key: 'rel_path', label: 'Path', cls: 'pathcell' }, { key: 'probe_error', label: 'Error', cls: 'wrap' }, { key: 'id', label: '', render: r => fixBtn(r) }]),
     sec('Missing files', p.missing, [lib, { key: 'rel_path', label: 'Path', cls: 'pathcell' }, { key: 'last_seen', label: 'Last seen', render: r => fmtDate(r.last_seen) }], '<button class="small" id="purge">Forget missing files</button>'),
     sec('Manual fixes', p.overrides, [{ key: 'library_type', label: 'Library', render: r => `<span class="badge ${r.library_type}">${typeName(r.library_type)}</span>` }, { key: 'rel_path', label: 'Path', cls: 'pathcell' }, { key: 'show_name', label: 'Fix', cls: 'wrap', render: r => r.ignore ? '<span class="badge">ignored</span>' : esc(r.library_type === 'movie' ? `${r.movie_title || ''} ${r.movie_year ? '(' + r.movie_year + ')' : ''} ${r.edition_tag || ''}` : `${r.show_name || ''} ${r.season != null ? 'S' + r.season : ''}${r.episode != null ? 'E' + r.episode : ''} ${r.episode_title || ''}`) }, { key: 'note', label: 'Note' }, { key: 'updated', label: 'Updated', render: r => fmtDate(r.updated) }, { key: 'id', label: '', render: r => r.file_id ? fixBtn(r) : '<span class="muted tiny">file gone</span>' }]),
@@ -915,9 +937,9 @@ views.missing = async () => {
     { key: 'status', label: 'Status' },
     { key: 'expected', label: 'Expected', num: true, render: r => r.expected || '' },
     { key: 'have', label: 'Have', num: true, render: r => r.expected ? r.have : '' },
-    { key: 'missing_count', label: 'Missing', num: true, render: r => r.expected ? (r.missing_count ? `<span class="bad">${r.missing_count}</span>` : '<span class="ok">0</span>') : (r.source === 'none' ? '<span class="muted">no match</span>' : '') },
+    { key: 'missing_count', label: 'Missing', num: true, render: r => (r.expected ? (r.missing_count ? `<span class="bad">${r.missing_count}</span>` : '<span class="ok">0</span>') : (r.source === 'none' ? '<span class="muted">no match</span>' : '')) + (r.policy === 'mute' ? ` <span class="badge" title="Muted: ${r.raw_missing_count} missing episodes are not counted">muted</span>` : r.policy === 'from' ? ` <span class="badge" title="Counting from S${r.collect.from_season != null ? r.collect.from_season : 1}E${r.collect.from_episode || 1}; ${r.raw_missing_count} missing in total">from S${r.collect.from_season != null ? r.collect.from_season : 1}E${r.collect.from_episode || 1}</span>` : '') },
     { key: 'missing', label: 'Which', cls: 'wrap', render: r => esc(missingText(r.missing)) + (r.absolute ? ' <span class="badge warn" title="episode numbers on disk exceed the season length; that season was skipped">absolute numbering</span>' : '') },
-    { key: 'id', label: '', render: r => matchBtn(r.library_type, r.show_name) },
+    { key: 'id', label: '', render: r => matchBtn(r.library_type, r.show_name) + ` <button class="small collectbtn" data-type="${esc(r.library_type)}" data-show="${esc(r.show_name)}" data-raw="${r.raw_missing_count || 0}">Collect…</button>` },
   ];
   const t = makeTable(rows, cols, { search: r => `${r.show_name} ${r.matched_title || ''} ${r.source || ''}`, defaultSort: { key: 'missing_count', asc: false } });
   L.airing().then(a => {
@@ -1539,7 +1561,7 @@ views.settings = async () => {
   };
   const refreshPlex = async () => {
     const st = await L.plex.status();
-    $('#plexStatus').innerHTML = st.last ? `Last sync ${fmtDate(st.last.ts)}: ${st.last.matched.toLocaleString()} of ${st.last.items.toLocaleString()} Plex items matched to files · ${st.linked.toLocaleString()} of ${st.total.toLocaleString()} files linked · ${st.watched.toLocaleString()} watched · ${st.rated} with your Plex rating${st.unlinked.length ? `<br><span class="muted">${st.unlinked.length}${st.unlinked.length === 300 ? '+' : ''} files not in Plex, e.g. ${esc(st.unlinked.slice(0, 3).map(u => u.rel_path).join(' · '))}</span>` : ''}` : 'Never synced.';
+    $('#plexStatus').innerHTML = st.last ? `Last sync ${fmtDate(st.last.ts)}: ${st.last.matched.toLocaleString()} of ${st.last.items.toLocaleString()} Plex items matched to files · ${st.linked.toLocaleString()} of ${st.total.toLocaleString()} files linked · ${st.watched.toLocaleString()} watched · ${st.rated} with your Plex rating${st.unlinked.length ? `<br><span class="muted">${st.unlinked.length}${st.unlinked.length === 300 ? '+' : ''} files not in Plex, e.g. ${esc(st.unlinked.slice(0, 3).map(u => u.rel_path).join(' · '))}</span>` : ''}${(st.bySection || []).length ? `<table class="jobs" style="margin-top:8px"><tr><th>Plex library</th><th>Items</th><th>Matched</th><th>Unmatched</th><th>Why</th></tr>${st.bySection.map(b => { const R = { 'no path mapping': 'no path mapping covers this folder', 'not in MediaLedger': 'file is not in a scanned root', 'no file part': 'Plex reports no file' }; return `<tr><td><b>${esc(b.section)}</b></td><td>${b.items.toLocaleString()}</td><td>${b.matched.toLocaleString()}</td><td>${b.unmatched ? `<span class="bad">${b.unmatched.toLocaleString()}</span>` : '<span class="ok">0</span>'}</td><td class="wrap">${Object.entries(b.reasons || {}).map(([k, n]) => `${n.toLocaleString()} × ${esc(R[k] || k)}`).join('; ')}${b.unmatched && b.sample ? `<span class="sub mono">${esc(b.sample.file || '')}${b.sample.local ? ' → ' + esc(b.sample.local) : ''}</span>` : ''}</td></tr>`; }).join('')}</table>` : ''}` : 'Never synced.';
     if (st.job && st.job.running) $('#plexSyncMsg').textContent = st.job.message || 'Syncing…';
   };
   $('#plexSync').onclick = async () => { await L.settings.replace(collect()); $('#plexSyncMsg').textContent = 'Starting…'; try { const r = await L.plex.sync(); toast(`Plex sync: ${r.matched.toLocaleString()} of ${r.items.toLocaleString()} matched`); views.settings(); } catch (e) { toast(e.message, true); $('#plexSyncMsg').textContent = e.message; } };

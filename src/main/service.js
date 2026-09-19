@@ -37,6 +37,9 @@ const restore = require('./restore');
 const sysmon = require('./sysmon');
 const rootcheck = require('./rootcheck');
 
+// A file name that carries a season/episode marker: S01E02, s1e2, 1x02, "Season 1" (not a bare "Episode 1": Star Wars). Used to spot episodes filed under Movies.
+const EPISODE_NAME = /(?:^|[ ._\-\[(])(?:s\d{1,2}[ ._-]?e\d{1,3}|\d{1,2}x\d{2,3}(?!\d)|season[ ._-]?\d{1,2})(?:$|[ ._\-\])])/i;
+
 function createService({ userData, log, send, host }) {
   let settings, db, scanner, scheduler, watcher;
   let metaJob = { running: false, done: 0, total: 0, message: '' };
@@ -93,7 +96,7 @@ function createService({ userData, log, send, host }) {
       const r = await plex.syncLibrary(db, cfg, { log, onProgress: p => { plexJob = { running: true, ...p }; send('plex:progress', plexJob); } });
       if (r.mappingSuggested && !(cfg.pathMap || []).length) settings.set({ plex: { pathMap: [r.mappingSuggested] } });
       try { r.history = await plex.syncHistory(db, cfg, { log, onProgress: p => { plexJob = { running: true, ...p }; send('plex:progress', plexJob); } }); } catch (e) { log('plex history failed: ' + e.message); r.historyError = e.message; }
-      db.run('INSERT INTO plex_syncs (ts, sections, items, matched, unmatched, note) VALUES (?,?,?,?,?,?)', r.synced_at, r.sections, r.items, r.matched, r.unmatched, trigger);
+      db.run('INSERT INTO plex_syncs (ts, sections, items, matched, unmatched, note, detail) VALUES (?,?,?,?,?,?,?)', r.synced_at, r.sections, r.items, r.matched, r.unmatched, trigger, JSON.stringify(r.bySection || []));
       plexJob = { running: false, message: `Plex sync: ${r.matched.toLocaleString()} of ${r.items.toLocaleString()} items matched`, result: r }; send('plex:progress', plexJob);
       log(`plex sync (${trigger}): ${r.matched}/${r.items} matched, ${r.unmatched} unmatched, ${r.shows} shows`);
       return r;
@@ -154,12 +157,14 @@ function createService({ userData, log, send, host }) {
     const rows = db.all(`SELECT show_name, season, episode, episode_end FROM files WHERE library_type=? AND missing=0 AND ignored=0${AF()} AND parse_ok=1`, type);
     const byShow = new Map();
     for (const r of rows) { if (!byShow.has(r.show_name)) byShow.set(r.show_name, []); byShow.get(r.show_name).push(r); }
+    const prefs = new Map(db.all('SELECT * FROM series_prefs WHERE library_type=?', type).map(p => [p.show_name, p]));
     const out = [];
     for (const [show, list] of byShow) {
       const m = metas.get(show);
-      const res = m && m.seasons ? metadata.missingEpisodes(list, m.seasons) : { missing: [], missingCount: 0, expectedTotal: 0, haveTotal: 0, absolute: false };
+      const raw = m && m.seasons ? metadata.missingEpisodes(list, m.seasons) : { missing: [], missingCount: 0, expectedTotal: 0, haveTotal: 0, absolute: false };
+      const res = metadata.applyCollectPolicy(raw, prefs.get(show));
       out.push({ library_type: type, show_name: show, source: m ? m.source : null, matched_title: m ? m.matched_title : null, status: m ? m.status : null, url: m ? m.url : null, locked: m ? m.locked : 0, note: m ? m.note : null,
-        expected: res.expectedTotal, have: res.haveTotal, missing_count: res.missingCount, missing: res.missing, absolute: res.absolute, seasons: m && m.seasons ? JSON.parse(m.seasons) : null });
+        expected: res.expectedTotal, have: res.haveTotal, missing_count: res.missingCount, missing: res.missing, absolute: res.absolute, raw_missing_count: res.rawMissingCount, policy: res.policy, collect: prefs.get(show) || null, seasons: m && m.seasons ? JSON.parse(m.seasons) : null });
     }
     return out.sort((a, b) => b.missing_count - a.missing_count || a.show_name.localeCompare(b.show_name));
   }
@@ -272,7 +277,8 @@ function createService({ userData, log, send, host }) {
     const watched = db.get('SELECT COUNT(*) n FROM files WHERE plex_view_count > 0 AND missing=0').n;
     const rated = db.get('SELECT COUNT(*) n FROM files WHERE plex_user_rating IS NOT NULL AND missing=0').n + db.get('SELECT COUNT(*) n FROM plex_shows WHERE user_rating IS NOT NULL').n;
     const unlinked = db.all(`SELECT library_type, show_name, movie_title, movie_year, rel_path FROM files WHERE plex_rating_key IS NULL AND missing=0 AND ignored=0 AND library_type IN ('tv','anime','movie')${AF()} ORDER BY library_type, rel_path LIMIT 300`);
-    return { job: plexJob, last, linked, total, watched, rated, unlinked, pathMap: settings.get().plex.pathMap || [] };
+    let bySection = []; try { bySection = last && last.detail ? JSON.parse(last.detail) : []; } catch { /* old row */ }
+    return { job: plexJob, last, bySection, linked, total, watched, rated, unlinked, pathMap: settings.get().plex.pathMap || [] };
   });
 
   // ---- overrides (manual fixes) --------------------------------------------------
@@ -806,10 +812,22 @@ function createService({ userData, log, send, host }) {
     unparsed: db.all(`SELECT id, root_id, library_type, rel_path, file_name, parse_note, show_name, season, episode, movie_title, movie_year FROM files WHERE missing=0 AND ignored=0${AF()} AND parse_ok=0 ORDER BY library_type, rel_path LIMIT 2000`),
     probeErrors: db.all(`SELECT id, root_id, library_type, rel_path, probe_error FROM files WHERE missing=0 AND ignored=0${AF()} AND probed_at IS NOT NULL AND probe_ok=0 ORDER BY library_type, rel_path LIMIT 2000`),
     missing: db.all(`SELECT id, root_id, library_type, rel_path, last_seen FROM files WHERE missing=1 ORDER BY last_seen DESC LIMIT 2000`),
+    misfiled: db.all(`SELECT id, root_id, library_type, rel_path, file_name, movie_title, movie_year FROM files WHERE missing=0 AND ignored=0${AF()} AND library_type='movie'`).filter(f => EPISODE_NAME.test(f.file_name)).slice(0, 2000),
     duplicates: db.get(`SELECT COUNT(*) n FROM (SELECT 1 FROM files WHERE missing=0 AND ignored=0${AF()} AND library_type IN ('tv','anime') AND parse_ok=1 GROUP BY library_type, show_name, season, episode HAVING COUNT(*)>1)`).n,
     ignored: db.all(`SELECT id, root_id, library_type, rel_path FROM files WHERE ignored=1 ORDER BY rel_path LIMIT 2000`),
     overrides: db.listOverrides(),
   }));
+  // ---- collecting policy: per series, what counts as missing ----
+  h('collect:get', (type, show) => db.get('SELECT * FROM series_prefs WHERE library_type=? AND show_name=?', type, show) || null);
+  h('collect:set', (type, show, p) => {
+    const o = p || {};
+    const mute = o.mute ? 1 : 0, fs = o.from_season != null && o.from_season !== '' ? Math.max(0, Number(o.from_season)) : null, fe = o.from_episode != null && o.from_episode !== '' ? Math.max(1, Number(o.from_episode)) : null;
+    if (!mute && fs == null && fe == null) { db.run('DELETE FROM series_prefs WHERE library_type=? AND show_name=?', type, show); return null; }
+    db.run('INSERT INTO series_prefs (library_type, show_name, mute, from_season, from_episode, note, updated_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(library_type, show_name) DO UPDATE SET mute=excluded.mute, from_season=excluded.from_season, from_episode=excluded.from_episode, note=excluded.note, updated_at=excluded.updated_at',
+      type, show, mute, mute ? null : fs, mute ? null : fe, o.note ? String(o.note).slice(0, 200) : null, new Date().toISOString());
+    return handlers.get('collect:get')(type, show);
+  });
+
   h('data:purgeMissing', () => db.run('DELETE FROM files WHERE missing=1').changes);
 
   return {

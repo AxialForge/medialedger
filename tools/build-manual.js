@@ -51,7 +51,7 @@ const TOC_ENTRIES = [
   '4. Dashboard', '4.1 Top tiles', '4.2 Charts', '4.3 Panels', '4.4 What the new data adds', '4.5 Charts, colours and drill-down', '4.6 Storage forecast',
   '5. TV Shows and Anime', '5.1 Episode detail', '5.2 Tags: genres, sub/dub and your own',
   '6. Movies', '7. Web videos', '8. Adult library',
-  '9. Missing episodes', '9.1 The Match dialog', '9.2 Airing next',
+  '9. Missing episodes', '9.1 The Match dialog', '9.2 Airing next', '9.3 What you are collecting',
   '10. Issues', '10.1 Problems', '10.2 The Fix dialog', '10.3 Duplicates',
   '11. Quality', '11.1 Upgrade candidates', '12. Ratings', '12.1 Watch tonight', '12.2 Watched: who watched what',
   '13. Media requests', '13.1 The phone page and notifications', '13.2 Schedules',
@@ -253,6 +253,8 @@ add(H1('9. Missing episodes'), ...img('missing', 'Series ranked by how many epis
   P('Press **Match…** on any series (here, on the series page, or in the lists) when a series was matched to the wrong entry, was not found, or you know the counts yourself. The dialog shows the current match, lets you search either TVmaze or AniList regardless of library type, and lists candidates with year, format and episode count; click one to use it. Below that you can type counts per season by hand, declare that the series has no expected counts, or return a locked series to automatic.'),
   note('AniList numbers anime by cour, so a split season shows up as separate "Part 2" entries. MediaLedger merges those into the same season automatically. If a series still lines up better with broadcast seasons, switch its source to TVmaze in the Match dialog.'),
   P('The two buttons above the list start a background pass: **Look up new series** for anything not yet looked up, **Re-check all unlocked series** to refresh everything that you have not locked.'),
+  H2('9.3 What you are collecting'),
+  P('A long runner you joined late can swamp the Missing page: a thousand early episodes you never meant to keep. **Collect…** on a series row sets what counts as missing for that one series. **Everything** is the default. **From season S episode E onward** drops everything earlier; shows numbered straight through use season 1 and the episode number. **Mute this series** counts nothing. The row keeps a badge (`from S1E1100`, `muted`) whose tooltip gives the full count, and the dashboard, the sidebar count, the daily summary and the Home Assistant status all follow the policy. No file is touched.'),
 );
 
 // ---------------- 10 Issues ----------------
@@ -276,6 +278,7 @@ add(H1('10. Issues'), ...img('issues', 'The Issues tab with Problems selected; t
   H2('10.3 Duplicates'), ...img('duplicates', 'Two files for the same episode, side by side.'),
   P('Every season/episode that exists as more than one file is shown as a group, each file as a card with size, length, resolution, bitrate, codec, HDR, audio, subtitles and container. The card with the highest resolution and bitrate is marked **best quality**.'),
   P('Press **Keep this** on the file you want. It is marked keep, the others are marked discard candidates and drawn faded, and the group moves to the decided state. Nothing is deleted: use **Reveal** to open a file in Explorer and delete it there if you wish. Decisions are stored with the file and survive scans and renames; **Clear decision** undoes them. **Hide decided** narrows the list to groups still waiting.'),
+  P('**Episodes filed under Movies** lists files in a movie folder whose name carries a season or episode marker (`S01E02`, `1x02`, `Season 2`). They show up as odd movies everywhere else, so move them to a TV or anime folder; if one really is a film, use Fix to ignore it. A bare "Episode 1" is not flagged, so the Star Wars films are safe.'),
 );
 
 // ---------------- 11 Quality ----------------
@@ -468,6 +471,7 @@ add(H1('19. Plex integration'),
     ['Rated', 'Stores the new rating on the linked file at once.'],
   ], [3000, 6360]),
   warn('The key in the URL is the credential: anyone who has it can post events. **New key** generates another and invalidates the old one; update the URL in Plex afterwards. LAN-only still applies, so a Plex server on the internet cannot reach the webhook unless you turn that rule off.'),
+  P('Under the last-sync line a table breaks the sync down **per Plex library**: items, matched, unmatched and why. *No path mapping covers this folder* means that library lives under a path none of your mappings translate: add a mapping for it. *File is not in a scanned root* means Plex has files MediaLedger does not scan: add the root, or ignore it if that library is not meant to be tracked. The first unmatched path is shown as Plex reports it and as MediaLedger translated it, which is usually enough to see the difference.'),
 );
 
 // ---------------- 20 System ----------------

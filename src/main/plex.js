@@ -131,7 +131,7 @@ async function syncLibrary(db, cfg, opts = {}) {
   const filesByPath = new Map(db.all('SELECT id, root_id, abs_path, library_type, show_name, group_key FROM files WHERE missing=0').map(f => [norm(f.abs_path), f]));
   let pathMap = (cfg.pathMap || []).filter(m => m.plex && m.local);
   let mappingSuggested = null;
-  const stats = { sections: sections.length, items: 0, matched: 0, unmatched: 0, shows: 0, unmatchedSamples: [] };
+  const stats = { sections: sections.length, items: 0, matched: 0, unmatched: 0, shows: 0, unmatchedSamples: [], bySection: [] };
   const now = new Date().toISOString();
 
   for (const sec of sections) {
@@ -151,6 +151,8 @@ async function syncLibrary(db, cfg, opts = {}) {
 
     const { matched, unmatched } = matchItems(videos, filesByPath, pathMap);
     stats.matched += matched.length; stats.unmatched += unmatched.length;
+    { const reasons = {}; for (const u of unmatched) reasons[u.reason] = (reasons[u.reason] || 0) + 1;
+      stats.bySection.push({ section: sec.title, type: sec.type, items: videos.length, matched: matched.length, unmatched: unmatched.length, reasons, sample: unmatched[0] ? { file: unmatched[0].file, local: unmatched[0].local || null } : null, locations: sec.locations || [] }); }
     for (const u of unmatched.slice(0, 5 - stats.unmatchedSamples.length)) stats.unmatchedSamples.push({ title: u.showTitle ? `${u.showTitle} S${u.seasonIndex}E${u.index}` : u.title, file: u.file, reason: u.reason });
 
     onProgress({ phase: 'store', section: sec.title, message: `Storing ${matched.length.toLocaleString()} matches for ${sec.title}…` });

@@ -335,6 +335,18 @@ const MIGRATIONS = [
       CREATE TABLE IF NOT EXISTS plex_accounts (id INTEGER PRIMARY KEY, name TEXT, synced_at TEXT);
     `,
   },
+  {
+    version: 11, name: 'collecting policy per series, plex sync detail',
+    sql: `
+      -- What you are collecting of a series: everything (no row), from an episode onward, or nothing (muted).
+      CREATE TABLE IF NOT EXISTS series_prefs (
+        library_type TEXT NOT NULL, show_name TEXT NOT NULL,
+        mute INTEGER DEFAULT 0, from_season INTEGER, from_episode INTEGER, note TEXT, updated_at TEXT,
+        PRIMARY KEY (library_type, show_name)
+      );
+      ALTER TABLE plex_syncs ADD COLUMN detail TEXT;  -- JSON: per section items / matched / unmatched by reason
+    `,
+  },
 ];
 
 class Db {

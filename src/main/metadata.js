@@ -179,4 +179,25 @@ function missingEpisodes(rows, seasonsJson) {
   return out;
 }
 
-module.exports = { lookupSeries, fetchById, searchCandidates, missingEpisodes, cleanTitle, similarity };
+/**
+ * Apply a collecting policy to a missingEpisodes() result. pref: { mute, from_season, from_episode } or null.
+ * Muted: nothing counts as missing. From S/E onward: earlier seasons and earlier episodes of that season are dropped.
+ * Returns a new result with rawMissingCount (before the policy) and policy ('mute' | 'from' | null).
+ */
+function applyCollectPolicy(res, pref) {
+  const out = { ...res, rawMissingCount: res.missingCount, policy: null };
+  if (!pref) return out;
+  if (pref.mute) return { ...out, missing: [], missingCount: 0, policy: 'mute' };
+  const fs = pref.from_season != null ? Number(pref.from_season) : (pref.from_episode != null ? 1 : null);
+  if (fs == null) return out;
+  const fe = Number(pref.from_episode) || 1;
+  const missing = [];
+  for (const m of res.missing) {
+    if (m.season < fs) continue;
+    const eps = m.season === fs ? m.missing.filter(e => e >= fe) : m.missing;
+    if (eps.length) missing.push({ ...m, missing: eps });
+  }
+  return { ...out, missing, missingCount: missing.reduce((a, m) => a + m.missing.length, 0), policy: 'from' };
+}
+
+module.exports = { applyCollectPolicy, lookupSeries, fetchById, searchCandidates, missingEpisodes, cleanTitle, similarity };

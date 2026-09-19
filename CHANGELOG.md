@@ -8,6 +8,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [1.11.0] - 2026-09-18
+
+### Added
+
+- **Collecting policy per series** (Missing → Collect…): everything, from a
+  season and episode onward, or muted. Counts everywhere follow it; the row
+  keeps a badge with the full number in its tooltip. Schema v11.
+- **Episodes filed under Movies** on the Problems page: files in a movie
+  folder whose name carries a season or episode marker.
+- **Plex sync breakdown per library**: items, matched, unmatched and the
+  reason, with the first unmatched path as Plex reports it and as translated.
+
 ## [1.10.0] - 2026-09-18
 
 ### Added
