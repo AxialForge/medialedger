@@ -204,6 +204,18 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   build worked. Fix: `sandbox: false` (contextIsolation stays on). Guarded by
   `test/service.test.js`. **Release gate: run the desktop screenshot pass and
   look at `dashboard.png` before every tag.** Web-only testing is not enough.
+  The pass also collects renderer `console.error`s and uncaught exceptions and exits 3 when any page logged
+  one (verified by injecting an error), so check the exit code, not just the PNG count.
+- **Restore never touches a live database.** `restore.stageRestore()` validates a backup read-only and copies it to
+  `<data>/restore-pending/`; the shell restarts; `applyPendingRestore()` runs before `createSecurity` /
+  `createService` open anything and moves the old files to `pre-restore-<stamp>/`. Swapping a WAL database under
+  an open handle corrupts it, which is why the obvious "copy the file over" is wrong. New shells must call
+  `applyPendingRestore` first thing.
+- **"Added" for a title is not `first_seen`.** `first_seen` is when MediaLedger first saw the file, so on a young
+  ledger every title looks new. `watched.reclaim()` uses the earlier of `first_seen` and the newest file's mtime.
+- **Webhook history keys need more than a timestamp.** Several scrobbles can land in one millisecond; the key is
+  `wh-<ms>-<account>-<ratingKey>-<random>`. The next history sync deletes `wh-` rows within 30 minutes of the
+  matching Plex row, so plays are not double counted.
 - **GNU tar on Windows treats `C:` as a remote host.** `tar -czf C:\path\out.tgz` fails with "Cannot connect to C". `pack-server.js` runs tar with `cwd` set and a relative output name, then copies the file.
 - **RFC 6238 test vectors are 8 digits.** The 6-digit code is the last six: T=59 → 287082, T=1111111109 → 081804, T=2000000000 → 279037 (not 005924, which is T=1234567890).
 - **Adult visibility is per session on the web, one flag in the core.** `server.js` calls `svc.setShowAdult(session.showAdult)` before every handler; handlers are effectively synchronous DB reads so the flag cannot leak between callers, but a new long-running handler that reads `AF()` after an `await` would need its own copy.

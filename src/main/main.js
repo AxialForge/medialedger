@@ -88,7 +88,16 @@ function createWindow() {
 
     createWindow();
     const shotArg = process.argv.find(a => a.startsWith('--screenshots='));
-    if (shotArg) { captureScreenshots(shotArg.slice('--screenshots='.length)).then(() => app.quit()); return; }
+    if (shotArg) {
+      // The pass is the release gate: besides the PNGs it fails (exit 3) when any page logged a renderer error or an uncaught exception.
+      const pageErrors = [];
+      const hook = () => { if (!win) return setTimeout(hook, 50); win.webContents.on('console-message', (_e, level, message, line, source) => { if (level >= 3) pageErrors.push(`${message} (${String(source).split('/').pop()}:${line}) at ${win.webContents.getURL().split('#')[1] || ''}`); }); };
+      hook();
+      captureScreenshots(shotArg.slice('--screenshots='.length)).then(() => {
+        if (pageErrors.length) { for (const e of pageErrors) { log('screenshot gate: renderer error: ' + e); console.error('RENDERER ERROR: ' + e); } app.exit(3); } else app.quit();
+      });
+      return;
+    }
     scheduler.start();
     watcher.apply();
     const s = settings.get();
