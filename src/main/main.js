@@ -112,7 +112,7 @@ function createWindow() {
       ['dashboard', '#dashboard'], ['tv', '#tv'], ['anime', '#anime'], ['movies', '#movies'],
       ['episodes', '#anime/' + encodeURIComponent('One Piece')], ['movie-versions', '#movies/' + encodeURIComponent('pacificrim|2013')],
       ['missing', '#missing'], ['duplicates', '#duplicates'], ['movienames', '#movienames'], ['web', '#web'], ['ratings', '#ratings'], ['quality', '#quality'], ['rename', '#rename'],
-      ['changes', '#changes'], ['issues', '#issues/problems'], ['problems', '#problems'], ['requests', '#requests'], ['tonight', '#tonight'], ['watched', '#watched'], ['upgrades', '#upgrades'], ['export', '#export'], ['system', '#system'], ['log', '#log'], ['settings', '#settings'], ['about', '#about'],
+      ['changes', '#changes'], ['issues', '#issues/problems'], ['problems', '#problems'], ['requests', '#requests'], ['tonight', '#tonight'], ['watched', '#watched'], ['upgrades', '#upgrades'], ['reclaim', '#reclaim'], ['export', '#export'], ['system', '#system'], ['log', '#log'], ['settings', '#settings'], ['about', '#about'],
     ];
     await new Promise(r => win.webContents.once('did-finish-load', r));
     await sleep(1500);

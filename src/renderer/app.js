@@ -586,6 +586,36 @@ views.log = async () => {
   clearInterval(logTimer); logTimer = setInterval(() => { if ($('#lgAuto') && $('#lgAuto').checked) load(); }, 5000);
 };
 
+// ---- Reclaim space: large titles nobody has played in a long time. A list to think about; nothing is deleted here. ----
+views.reclaim = async () => {
+  const pref = (() => { try { return JSON.parse(localStorage.getItem('medialedger.reclaim') || '{}'); } catch { return {}; } })();
+  let months = pref.months || 12, minGb = pref.minGb != null ? pref.minGb : 2;
+  const load = async () => {
+    const [r, st] = await Promise.all([L.reclaim({ months, minGb }), L.storage().catch(() => null)]);
+    try { localStorage.setItem('medialedger.reclaim', JSON.stringify({ months, minGb })); } catch { /* ignore */ }
+    view.innerHTML = `<h1>Reclaim space</h1>
+      <p class="lead">The mirror image of Upgrades: large titles that <b>nobody</b> on the Plex server has played for a long time, or ever. It is a list to think about. MediaLedger never deletes media, and titles you rated 4★ or higher are left out.</p>
+      <div class="toolbar"><label class="inline small">not played for <select id="rcMonths" class="small">${[6, 12, 24, 36].map(m => `<option value="${m}" ${m === months ? 'selected' : ''}>${m} months</option>`).join('')}</select></label><label class="inline small">at least <input type="number" id="rcGb" min="0" step="1" value="${minGb}" style="width:70px"> GB</label></div>
+      <div class="tiles compact">${tile(r.candidates.length ? 'warnt' : 'okt', 'Candidates', r.candidates.length.toLocaleString(), `added over ${months} months ago`)}${tile('', 'Could free', fmtBytes(r.totalBytes), 'if all of them went')}${tile('', 'Never played', r.neverPlayed.toLocaleString(), 'by anyone')}${st && st.free != null ? tile('', 'Free now', fmtBytes(st.free), st.months_left != null ? `about ${st.months_left} months at this rate` : '') : ''}</div>
+      ${r.candidates.length && r.candidates.every(c => !c.in_plex) ? '<div class="warnbox" style="margin-top:12px">None of these titles is linked to Plex on this machine, so there is no play data behind the list. Sync Plex here (Settings → Plex), or open this page on the server that does.</div>' : ''}
+      <div id="rcTable" style="margin-top:12px"></div>`;
+    const cols = [
+      { key: 'title', label: 'Title', cls: 'wrap', render: x => `<span class="badge ${x.library_type}">${typeName(x.library_type)}</span> ${esc(x.title || x.key)}${x.year ? ` <span class="muted">(${x.year})</span>` : ''}` },
+      { key: 'bytes', label: 'Size', num: true, render: x => fmtBytes(x.bytes) },
+      { key: 'files', label: 'Files', num: true },
+      { key: 'last_played', label: 'Last played', sortVal: x => x.last_played || '', render: x => x.last_played ? fmtAgo(x.last_played) : (x.in_plex ? '<span class="badge warn">never</span>' : '<span class="muted">not in Plex</span>') },
+      { key: 'plays', label: 'Plays', num: true },
+      { key: 'added', label: 'Added', render: x => fmtAgo(x.added) },
+      { key: 'my_rating', label: 'Mine', sortVal: x => x.my_rating || 0, render: x => x.my_rating ? '★'.repeat(x.my_rating) : '' },
+    ];
+    const t = makeTable(r.candidates, cols, { search: x => x.title || x.key, defaultSort: { key: 'bytes', asc: false }, onRow: x => { location.hash = x.library_type === 'movie' ? '#movies/' + encodeURIComponent(x.key) : `#${x.library_type}/${encodeURIComponent(x.key)}`; } });
+    $('#rcTable').append(t.node);
+    $('#rcMonths').onchange = () => { months = Number($('#rcMonths').value); load(); };
+    $('#rcGb').onchange = () => { minGb = Math.max(0, Number($('#rcGb').value) || 0); load(); };
+  };
+  await load();
+};
+
 // ---- Watched: who watched what, from Plex play history (every account on the server) ----
 views.watched = async () => {
   const pref = (() => { try { return JSON.parse(localStorage.getItem('medialedger.watched') || '{}'); } catch { return {}; } })();
@@ -595,6 +625,7 @@ views.watched = async () => {
   const whenFull = iso => iso ? new Date(iso).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
   const load = async () => {
     const w = await L.watched({ days: days || 'all', account: account || null });
+    const nu = await L.nextUp({ days: 60, account: account || null }).catch(() => []);
     try { localStorage.setItem('medialedger.watched', JSON.stringify({ days, account })); } catch { /* ignore */ }
     const t = w.totals, hours = t.seconds / 3600;
     const periodLabel = days ? `last ${days} days` : 'all time';
@@ -625,6 +656,7 @@ views.watched = async () => {
         <div class="card"><h3>Most watched series</h3>${w.top.series.length ? `<table>${w.top.series.slice(0, 15).map(s => `<tr><td class="wrap"><span class="badge ${s.library_type}">${typeName(s.library_type)}</span> ${esc(s.title)}<span class="sub">${esc(s.who || '')}</span></td><td class="num"><b>${s.plays}</b><span class="sub">${fmtDur(s.seconds)}</span></td><td class="muted tiny nowrap">${fmtAgo(s.last)}</td></tr>`).join('')}</table>` : '<p class="muted">No episodes played.</p>'}</div>
         <div class="card"><h3>Most watched movies</h3>${w.top.movies.length ? `<table>${w.top.movies.slice(0, 15).map(s => `<tr><td class="wrap">${esc(s.title)}<span class="sub">${esc(s.who || '')}</span></td><td class="num"><b>${s.plays}</b><span class="sub">${s.people > 1 ? s.people + ' people' : ''}</span></td><td class="muted tiny nowrap">${fmtAgo(s.last)}</td></tr>`).join('')}</table>` : '<p class="muted">No movies played.</p>'}</div>
       </div>
+      ${nu.length ? `<div class="card" style="margin-top:12px"><h3>Next up <span class="muted tiny">the episode after the furthest one each person watched in the last 60 days</span></h3><table>${nu.slice(0, 20).map(n => `<tr><td class="nowrap"><b>${esc(n.who)}</b></td><td class="wrap"><a href="#${n.library_type}/${encodeURIComponent(n.show)}">${esc(n.show)}</a><span class="sub">watched S${String(n.last.season).padStart(2, '0')}E${String(n.last.episode).padStart(2, '0')} ${fmtAgo(n.last.at)}</span></td><td class="wrap">${n.next ? `S${String(n.next.season).padStart(2, '0')}E${String(n.next.episode).padStart(2, '0')}${n.next.title ? ' · ' + esc(n.next.title) : ''}${n.next.gap ? ' <span class="badge warn" title="The episode right after the last one watched is not on disk">gap before it</span>' : ''}` : '<span class="badge ok">caught up</span>'}</td><td class="num nowrap">${n.left ? n.left + ' left' : ''}</td></tr>`).join('')}</table></div>` : ''}
       ${w.binge.length ? `<div class="card" style="margin-top:12px"><h3>Binges <span class="muted tiny">three or more episodes of one show in a sitting</span></h3><table>${w.binge.map(b => `<tr><td class="wrap"><b>${esc(b.who)}</b> · ${esc(b.show)}</td><td class="num">${b.episodes} episodes</td><td class="muted tiny nowrap">${whenFull(b.start)} → ${new Date(b.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td></tr>`).join('')}</table></div>` : ''}
       <h2 style="margin-top:16px">Recent plays <span class="muted tiny">newest ${w.recent.length.toLocaleString()}</span></h2><div id="wTable"></div>`}`;
     if (t.plays) {

@@ -53,7 +53,7 @@ const TOC_ENTRIES = [
   '6. Movies', '7. Web videos', '8. Adult library',
   '9. Missing episodes', '9.1 The Match dialog', '9.2 Airing next', '9.3 What you are collecting',
   '10. Issues', '10.1 Problems', '10.2 The Fix dialog', '10.3 Duplicates',
-  '11. Quality', '11.1 Upgrade candidates', '12. Ratings', '12.1 Watch tonight', '12.2 Watched: who watched what',
+  '11. Quality', '11.1 Upgrade candidates', '11.2 Reclaim space', '12. Ratings', '12.1 Watch tonight', '12.2 Watched: who watched what',
   '13. Media requests', '13.1 The phone page and notifications', '13.2 Schedules',
   '14. Change log',
   '15. Movie names (the naming engine)', '15.1 The pattern', '15.2 Ready, flagged, blocked', '15.3 Batch settings', '15.4 Running a batch', '15.5 Undo', '15.6 Bulk source, collisions, placeholders',
@@ -311,6 +311,10 @@ add(H1('12. Ratings'), ...img('ratings', 'Online averages beside your own stars.
   P('**Watched** is the play history of the whole Plex server, one row per play for every account, not just yours. Each Plex sync pulls Plex\'s own history (Plex keeps it as long as its settings allow), and the scrobble webhook adds plays as they finish, so the list is current between syncs. Pick a period (7 days to all time) and a person at the top; the tiles count plays, hours (from the files\' lengths), distinct titles and people.'),
   P('The charts break plays down **by person**, **by library**, **by weekday**, **by hour of day** and **by device**, with **plays per day** as a trend. **Most watched series** and **movies** list who watched each and when it was last played. **Binges** picks out sittings of three or more episodes of one show by one person. **Recent plays** is searchable and sortable; a row opens the series or movie when MediaLedger has matched it.'),
   note('Plays are attributed by Plex account. Shared accounts show as one person. Adult titles follow the same visibility rule as everywhere else.'),
+  H2('11.2 Reclaim space'), ...img('reclaim', 'Reclaim space: the largest titles nobody has played in the chosen period.'),
+  P('**Reclaim space** is the mirror image of Upgrades. It lists large titles that **nobody** on the Plex server has played for the period you choose (6 to 36 months), or ever, and that have been in the library at least that long. "Played" covers every Plex account, from the play history, not just yours. The tiles show how many titles qualify, how much space they hold together, how many were never played, and the free space now. Sort by size and work from the top.'),
+  P('It is a list to think about, nothing more: MediaLedger never deletes media. Titles you rated 4★ or higher are left out, the size threshold keeps small titles off the list, and a title that is not in Plex at all is marked as such rather than as never played.'),
+  P('**Next up** lists, for each person and each show they watched in the last 60 days, the episode after the furthest one they have seen, with how many are left on disk. **Caught up** means nothing later is on disk; **gap before it** means the very next episode is missing and the one shown is the next you actually have, which is a good reason to visit the Missing page.'),
 );
 
 // ---------------- 13 Media requests ----------------

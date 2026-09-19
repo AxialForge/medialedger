@@ -59,6 +59,20 @@ console.log('plex tests passed');
   assert.strictEqual(historyKeyOf({ historyKey: '/status/sessions/history/77' }), '77');
   assert.strictEqual(historyKeyOf({ ratingKey: '5', accountID: 1, viewedAt: 9 }), '5-1-9');
   assert.ok(Array.isArray(watched.bingeSessions(r.recent)));
+  // next up + reclaim (the file is not adult for these)
+  const longAgo = new Date(Date.now() - 800 * 86400000).toISOString(), nowIso = new Date().toISOString();
+  db.run('UPDATE files SET adult=0, season=1, episode=4, size=5368709120, first_seen=? WHERE id=1', longAgo);
+  db.run("INSERT INTO files (id, root_id, rel_path, abs_path, file_name, library_type, show_name, group_key, season, episode, episode_title, size, first_seen, adult) VALUES (2, 'r1', 'b.mkv', 'x-b.mkv', 'b.mkv', 'anime', 'Show A', 'show a', 1, 5, 'Five', 1, ?, 0)", nowIso);
+  db.run("INSERT INTO files (id, root_id, rel_path, abs_path, file_name, library_type, movie_title, group_key, size, first_seen, adult) VALUES (3, 'r1', 'm.mkv', 'x-m.mkv', 'm.mkv', 'movie', 'Old Film', 'old film', 8589934592, ?, 0)", longAgo);
+  const nu = watched.nextUp(db, { days: 60 });
+  assert.strictEqual(nu.length, 2, 'one row per person per show');
+  assert.deepStrictEqual([nu[0].next.season, nu[0].next.episode, nu[0].next.gap, nu[0].left], [1, 5, false, 1]);
+  assert.strictEqual(watched.nextUp(db, { days: 60, account: 2 }).length, 1);
+  const rc = watched.reclaim(db, { months: 12, minGb: 2 });
+  assert.deepStrictEqual(rc.candidates.map(c => c.title), ['Old Film'], 'the show was played this month, the film never');
+  assert.strictEqual(rc.neverPlayed, 1); assert.strictEqual(rc.totalBytes, 8589934592);
+  db.run("INSERT INTO user_ratings (library_type, title_key, title, stars, updated) VALUES ('movie', 'old film', 'Old Film', 5, ?)", nowIso);
+  assert.strictEqual(watched.reclaim(db, { months: 12, minGb: 2 }).candidates.length, 0, 'a 5-star title is protected');
   db.close(); fs.rmSync(dir, { recursive: true, force: true });
   console.log('plex history tests passed');
 }

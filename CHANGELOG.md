@@ -8,6 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [1.12.0] - 2026-09-18
+
+### Added
+
+- **Reclaim space**: large titles nobody on the Plex server has played for 6
+  to 36 months, or ever, with the space they hold. Read-only; titles rated 4★
+  or higher are left out.
+- **Next up** on the Watched tab: per person and show, the episode after the
+  furthest one watched, how many are left, and whether there is a gap.
+
 ## [1.11.0] - 2026-09-18
 
 ### Added

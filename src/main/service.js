@@ -695,6 +695,8 @@ function createService({ userData, log, send, host }) {
   }
   h('data:snapshots', (days) => db.snapshots(Number(days) || 365));
   h('data:watched', (opts) => watched.report(db, { ...(opts || {}), adultFilter: AF() }));
+  h('data:reclaim', (opts) => watched.reclaim(db, { ...(opts || {}), adultFilter: AF() }));
+  h('data:nextUp', (opts) => watched.nextUp(db, { ...(opts || {}), adultFilter: AF() }));
   h('data:snapshotNow', () => takeSnapshot());
   const snapshotTick = () => { const today = new Date().toISOString().slice(0, 10); const now = new Date(); const [sh, sm] = String((settings.get().snapshot || {}).time || '03:05').split(':').map(Number); if (now.getHours() * 60 + now.getMinutes() < sh * 60 + sm) return; if (scanner.running) return; if (db.get('SELECT 1 FROM snapshots WHERE day=?', today)) return; try { takeSnapshot(); } catch (e) { log('snapshot failed: ' + e.message); } };
   const snapshotTimer = setInterval(snapshotTick, 60000); if (snapshotTimer.unref) snapshotTimer.unref();
