@@ -44,6 +44,13 @@ async function checkRoot(root) {
     const fe = fstabEntries().filter(e => under(p, e.mountPoint)).sort((a, b) => b.mountPoint.length - a.mountPoint.length)[0];
     const me = mounted().filter(e => under(p, e.mountPoint) && e.mountPoint !== '/').sort((a, b) => b.mountPoint.length - a.mountPoint.length)[0];
     if (fe || me) out.mount = { point: (fe || me).mountPoint, source: (fe || me).source, type: (fe || me).type, inFstab: !!fe, mounted: !!me && me.type !== 'autofs', automount: !!me && me.type === 'autofs' };
+    // An armed automount only mounts when something looks inside it. Look, then read the mount table again.
+    if (out.mount && out.mount.automount && !out.mount.mounted) {
+      try { fs.readdirSync(out.mount.point); } catch { /* the mount attempt failed; reported below */ }
+      const again = mounted().find(e => e.mountPoint === out.mount.point && e.type !== 'autofs');
+      if (again) { out.mount.mounted = true; out.mount.type = again.type; out.mount.nudged = true;
+        try { const st = fs.statSync(p); out.exists = true; out.isDir = st.isDirectory(); const names = fs.readdirSync(p); out.entries = names.length; out.sample = names.slice(0, 5); out.readable = true; out.detail = ''; } catch (e) { out.detail = e.code || e.message; } }
+    }
   }
   // Network share: does the file server answer on SMB at all?
   const host = hostOf(p) || (out.mount && hostOf(out.mount.source));

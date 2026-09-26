@@ -66,7 +66,7 @@ const GUEST = new Set(['app:info', 'security:me', 'data:dashboard', 'data:series
 // A standard user: everything a guest may, plus the review pages, own ratings, the adult switch for their own session.
 const STANDARD = new Set([...GUEST, 'data:watched', 'data:reclaim', 'data:nextUp', 'data:problems', 'data:duplicates', 'data:missing', 'data:quality', 'data:changes', 'data:changeStats', 'movie:plan', 'movie:batches', 'movie:batchItems', 'rename:proposals', 'rename:history', 'export:list', 'override:list', 'override:suggest', 'meta:status', 'plex:status', 'watch:status', 'schedule:nextInApp', 'db:stats', 'settings:get', 'adult:toggle', 'ratings:setUser', 'security:changePassword', 'tags:add', 'tags:remove', 'data:upgrades', 'rename:dry', 'prefs:set']);
 // Admins: every channel. Actions that write to the share or throw data away also need a fresh password (re-auth).
-const SENSITIVE = new Set(['db:restoreStage', 'security:tlsEnable', 'status:rotate', 'plex:webhookSet', 'movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']);
+const SENSITIVE = new Set(['db:restoreStage', 'security:tlsEnable', 'security:tlsDisable', 'status:rotate', 'plex:webhookSet', 'movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']);
 const isSensitive = (ch, args) => ch === 'movie:run' ? !!(args[1] && args[1].live) : SENSITIVE.has(ch);
 const allowed = (role, ch) => role === 'admin' || (role === 'standard' ? STANDARD.has(ch) : GUEST.has(ch));
 // Settings hold secrets (Plex token, GitHub token); a standard user sees them blanked.
@@ -106,6 +106,15 @@ const webHandlers = new Map([
   ['security:me', (ctx) => ({ available: true, guest: ctx.role === 'guest', username: ctx.session ? ctx.session.user : null, role: ctx.role, guestEnabled: sec.guestEnabled(), hasUsers: sec.hasPassword() })],
   ['security:status', (ctx) => sec.status(ctx.session, { available: true, https: !!tls, port: servePort, tlsPort: port === 80 ? 443 : port, bindHost, dataDir, checks: posture(), opensslAvailable: hasOpenssl() })],
   // Creates a self-signed certificate for every name this Pi answers to, then exits so systemd restarts the service on HTTPS.
+  ['security:tlsDisable', (ctx) => {
+    if (!tls) return { ok: true, already: true };
+    const off = path.join(dataDir, 'tls-off'); fs.mkdirSync(off, { recursive: true, mode: 0o700 });
+    for (const f of ['cert.pem', 'key.pem']) { try { fs.renameSync(path.join(tlsDir, f), path.join(off, f)); } catch { /* already gone */ } }
+    sec.audit('tls_disabled', ctx.ip, '', ctx.session.user);
+    log('HTTPS turned off (certificate moved to tls-off); restarting on plain HTTP');
+    setTimeout(() => process.exit(0), 1500);
+    return { ok: true, port };
+  }],
   ['security:tlsEnable', (ctx) => {
     if (tls) return { ok: true, already: true, port: servePort };
     if (!hasOpenssl()) throw new Error('openssl is not installed on this server (sudo apt install openssl)');

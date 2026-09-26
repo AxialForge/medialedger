@@ -210,7 +210,7 @@ function createWindow() {
   h('status:info', () => ({ available: false }));       // the Home Assistant status URL is a web-server thing
   h('status:rotate', () => { throw new Error('Only available on the web server'); });
   h('plex:webhookSet', () => { throw new Error('Only available on the web server'); });
-  for (const ch of ['security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revoke', 'security:revokeOthers', 'security:users', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser', 'security:tlsEnable']) h(ch, () => { throw new Error('Only available on the web server'); });
+  for (const ch of ['security:tlsDisable', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revoke', 'security:revokeOthers', 'security:users', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser', 'security:tlsEnable']) h(ch, () => { throw new Error('Only available on the web server'); });
 
   // Everything else comes from the core, unchanged in name and signature.
   for (const [ch, fn] of svc.handlers) h(ch, fn);

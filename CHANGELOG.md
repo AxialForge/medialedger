@@ -8,6 +8,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [1.12.1] - 2026-09-26
+
+### Added
+
+- **Turn HTTPS off** on the Security tab, for running behind a reverse proxy.
+  The certificate is kept in `tls-off`.
+- The installer honours `--port` together with `--update-only`, rewriting just
+  the service's port.
+- Manual: running several services on one Pi with Caddy in front.
+
+### Fixed
+
+- **The share mount watchdog never re-mounted.** With `x-systemd.automount`
+  the armed trap counts as a mountpoint, so `mountpoint -q` always said
+  mounted. It now checks the filesystem type, and nudges the automount first.
+- **Reachability check nudges an armed automount** before reporting the share
+  as not mounted, so a share that simply has not been touched since boot no
+  longer shows red.
+
 ## [1.12.0] - 2026-09-18
 
 ### Added

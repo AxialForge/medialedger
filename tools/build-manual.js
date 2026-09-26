@@ -595,6 +595,7 @@ add(H1('22. Running MediaLedger on a Raspberry Pi'),
   H2('22.4 Command reference'),
   table(['Command (run on the Pi)', 'Does'], [
     ['`sudo medialedger-update`', 'Download the newest release package, verify it, install it and restart. Data is untouched.'],
+    ['`sudo bash install.sh --update-only --port=8080`', 'Move the service to another port without a full reinstall, for example to put it behind a reverse proxy such as Caddy. The Caddy setup is described below.'],
     ['`sudo bash install.sh --auto-update`', 'Rerun the installer with this flag to add a systemd timer that runs the update every night at about 04:30. `--no-auto-update` removes it. Without it, admins see a notice on the Dashboard when a newer release exists.'],
     ['`sudo medialedger --set-password`', 'Set or reset the **admin** account\'s password. Signs everyone out. Other accounts are reset from Security → Users.'],
     ['`systemctl status medialedger`', 'Is the service running, since when, last log lines.'],
@@ -646,6 +647,10 @@ add(H1('22. Running MediaLedger on a Raspberry Pi'),
     ['Power & throttling tile missing', 'The service user must be in the `video` group: `sudo usermod -aG video medialedger && sudo systemctl restart medialedger` (the installer does this).'],
     ['Above 80 °C during scans', 'Add a heatsink or fan, or lower Probe concurrency in Settings.'],
   ], [3000, 6360]),
+  H2('22.1 Several services on one Pi: Caddy in front'),
+  P('DNS records carry an address, never a port, so a second web service on the same Pi either lives on its own port in the URL or sits behind a reverse proxy. **Caddy** is the easy proxy: it owns ports 80 and 443, reads the name the browser asked for, and hands the request to the right service on a local port. Every service then has a clean `https://name.home` address with no port, and one root certificate covers all of them.'),
+  P('Setup, once: `sudo apt install caddy`; move MediaLedger off 80/443 with `sudo bash install.sh --update-only --port=8080`; turn its own HTTPS off (Security → **Turn HTTPS off**); write `/etc/caddy/Caddyfile` with one block per service, `medialedger.home { tls internal  reverse_proxy 127.0.0.1:8080 }`, and `sudo systemctl reload caddy`. `tls internal` makes Caddy issue certificates from its own authority; install its root once per device from `/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt` and no service on that Pi warns again. To let visitors in over plain HTTP without a certificate, name both schemes: `http://medialedger.home, https://medialedger.home { … }`.'),
+  P('Adding a service later is one block in the Caddyfile on the next free port, a reload, and one DNS record for the new name pointing at the same Pi. Behind the proxy MediaLedger sees every visitor as 127.0.0.1 unless the proxy forwards the real address, which Caddy does by default.'),
 );
 
 // ---------------- 23 Troubleshooting ----------------

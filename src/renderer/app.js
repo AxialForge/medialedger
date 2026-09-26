@@ -1733,7 +1733,7 @@ views.security = async () => {
           : `<p class="muted">Adds a code from Google Authenticator, Aegis, Bitwarden, 1Password or any TOTP app. Even a leaked password then cannot sign in.</p><div id="totpBox"><button class="primary" id="totpStart">Set up 2FA</button></div>`}
         <h3 style="margin-top:16px">HTTPS ${st.https ? '<span class="right ok">on</span>' : '<span class="right muted">off</span>'}</h3>
         ${st.https
-          ? `<p class="muted">Traffic between browsers and this server is encrypted with a self-signed certificate on port ${st.port}. Each device warns once until the certificate is installed on it.</p><div class="inline"><a href="tls/medialedger-cert.crt" download="medialedger-cert.crt"><button>Download certificate</button></a></div>`
+          ? `<p class="muted">Traffic between browsers and this server is encrypted with a self-signed certificate on port ${st.port}. Each device warns once until the certificate is installed on it.</p><div class="inline"><button class="danger" id="tlsOff" title="Behind a reverse proxy such as Caddy the proxy should hold the certificate, not this server">Turn HTTPS off</button> <a href="tls/medialedger-cert.crt" download="medialedger-cert.crt"><button>Download certificate</button></a></div>`
           : `<p class="muted">Encrypts the traffic between browsers and this server with a self-signed certificate made here, for every name and address the server answers to. The service restarts, sign-in sessions are kept${st.tlsPort !== st.port ? `, and the site moves to port ${st.tlsPort} with a redirect left on ${st.port}` : ''}.</p><div class="inline"><button class="primary" id="tlsOn" ${st.opensslAvailable ? '' : 'disabled title="openssl is not installed on the server"'}>Turn on HTTPS</button></div>`}
         <details style="margin-top:8px"><summary class="muted tiny" style="cursor:pointer">Removing the browser warning: install the certificate once per device</summary><div class="tiny" style="margin-top:6px;line-height:1.6">
           <b>Windows</b>: download it, double-click the .crt → Install Certificate → Local Machine → Place all certificates in the following store → <i>Trusted Root Certification Authorities</i>. Restart the browser.<br>
@@ -1754,6 +1754,12 @@ views.security = async () => {
   $('#pwChange').onclick = () => { if ($('#pwNew').value !== $('#pwNew2').value) return toast('New passwords differ', true); act(() => L.security.changePassword($('#pwCur').value, $('#pwNew').value), 'Password changed'); };
   const saveOptions = () => act(() => L.security.setOptions({ lanOnly: $('#optLan').checked, idleMinutes: Number($('#optIdle').value), guestEnabled: $('#optGuest').checked }), 'Options saved');
   $('#optSave').onclick = saveOptions; $('#optIdleSave').onclick = saveOptions;
+  if ($('#tlsOff')) $('#tlsOff').onclick = () => { if (!confirm('Turn HTTPS off and restart on plain HTTP? Do this when a reverse proxy (Caddy) handles HTTPS in front of this server. The certificate is kept in tls-off.')) return; act(async () => {
+    const r = await L.security.tlsDisable();
+    const target = `http://${location.hostname}${r.port === 80 ? '' : ':' + r.port}/#security`;
+    toast(`HTTPS off. Restarting on plain HTTP; this page will open ${target} in a few seconds.`);
+    setTimeout(() => { location.href = target; }, 5000);
+  }); };
   if ($('#tlsOn')) $('#tlsOn').onclick = () => { if (!confirm('Create a certificate and restart on HTTPS? Every browser will warn once until the certificate is installed on it.')) return; act(async () => {
     const r = await L.security.tlsEnable();
     const target = `https://${location.hostname}${r.port === 443 ? '' : ':' + r.port}/#security`;

@@ -27,7 +27,7 @@ CREDS="/etc/medialedger-cifs.cred"
 PORT="${MEDIALEDGER_PORT:-8080}"
 BRANCH=""
 UPDATE_ONLY=0; HTTPS=0; DOMAIN=""; AUTO_UPDATE=0
-for a in "$@"; do case "$a" in --branch=*) BRANCH="${a#--branch=}";; --share=*) SHARE="${a#--share=}";; --port=*) PORT="${a#--port=}";; --domain=*) DOMAIN="${a#--domain=}";; --update-only) UPDATE_ONLY=1;; --https) HTTPS=1;; --auto-update) AUTO_UPDATE=1;; --no-auto-update) AUTO_UPDATE=-1;; esac; done
+for a in "$@"; do case "$a" in --branch=*) BRANCH="${a#--branch=}";; --share=*) SHARE="${a#--share=}";; --port=*) PORT="${a#--port=}"; PORT_SET=1;; --domain=*) DOMAIN="${a#--domain=}";; --update-only) UPDATE_ONLY=1;; --https) HTTPS=1;; --auto-update) AUTO_UPDATE=1;; --no-auto-update) AUTO_UPDATE=-1;; esac; done
 [[ -n "$DOMAIN" ]] && echo "$DOMAIN" > /etc/medialedger-domain 2>/dev/null || true
 [[ -z "$DOMAIN" && -f /etc/medialedger-domain ]] && DOMAIN="$(cat /etc/medialedger-domain)"
 
@@ -68,7 +68,11 @@ fi
 echo "version $(node -p "require('$APP_DIR/package.json').version")${BRANCH:+ ($BRANCH)}"
 chown -R root:root "$APP_DIR"
 
-if [[ $UPDATE_ONLY -eq 1 ]]; then systemctl restart medialedger; echo "MediaLedger updated to $(node -p "require('$APP_DIR/package.json').version")"; exit 0; fi
+if [[ $UPDATE_ONLY -eq 1 ]]; then
+  # A --port with --update-only rewrites just the ExecStart line so the service moves without a full reinstall.
+  if [[ -n "${PORT_SET:-}" && -f /etc/systemd/system/medialedger.service ]]; then sed -i "s|--port=[0-9]*|--port=$PORT|" /etc/systemd/system/medialedger.service; systemctl daemon-reload; echo "Service port set to $PORT"; fi
+  systemctl restart medialedger; echo "MediaLedger updated to $(node -p "require('$APP_DIR/package.json').version")"; exit 0
+fi
 
 say "NAS share at $MOUNT"
 install -d "$MOUNT"
@@ -155,7 +159,10 @@ EOF
 cat > /usr/local/sbin/medialedger-mount-check <<EOF
 #!/usr/bin/env bash
 # Re-mount $MOUNT if it is not mounted and the NAS answers. Runs from medialedger-mount.timer every minute.
-mountpoint -q "$MOUNT" && exit 0
+# With x-systemd.automount the armed trap already counts as a mountpoint, so ask for the filesystem type instead.
+[[ "\$(findmnt -n -o FSTYPE --target "$MOUNT" 2>/dev/null)" == "cifs" ]] && exit 0
+# Touching the folder lets the automount try first; only mount by hand if that did not do it.
+ls "$MOUNT" >/dev/null 2>&1; [[ "\$(findmnt -n -o FSTYPE --target "$MOUNT" 2>/dev/null)" == "cifs" ]] && exit 0
 HOST="\$(awk '\$2=="$MOUNT"{print \$1}' /etc/fstab | sed -E 's#^//([^/]+)/.*#\\1#')"
 if [[ -n "\$HOST" ]] && ! timeout 3 bash -c "exec 3<>/dev/tcp/\$HOST/445" 2>/dev/null; then exit 0; fi
 mount "$MOUNT" && logger -t medialedger "re-mounted $MOUNT"
