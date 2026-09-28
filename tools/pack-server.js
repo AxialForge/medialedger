@@ -23,7 +23,7 @@ const dist = path.join(root, 'dist');
 fs.mkdirSync(dist, { recursive: true });
 
 const copy = (rel, dest = rel) => fs.cpSync(path.join(root, rel), path.join(top, dest), { recursive: true, filter: (src) => !/[\\/](\.git|node_modules)([\\/]|$)/.test(src) });
-copy('src/main'); copy('src/renderer'); copy('src/server'); copy('server'); copy('LICENSE'); copy('CHANGELOG.md');
+copy('src/main'); copy('src/renderer'); copy('src/portal'); copy('src/server'); copy('server'); copy('LICENSE'); copy('CHANGELOG.md');
 copy('docs/RASPBERRY-PI.md', 'README.md');
 // A minimal package.json: the server has no runtime dependencies at all.
 fs.writeFileSync(path.join(top, 'package.json'), JSON.stringify({ name: 'medialedger-server', version: pkg.version, description: 'MediaLedger web server (Raspberry Pi / Linux)', license: pkg.license, private: true, engines: { node: '>=22' }, scripts: { start: 'node src/server/server.js' } }, null, 2) + '\n');

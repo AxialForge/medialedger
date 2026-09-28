@@ -561,6 +561,48 @@ async function webUpdateInfo() {
   return v;
 }
 
+// ---- Family portal: invites and the switch for the second, read-only front door ----
+views.family = async () => {
+  const st = await L.portal.status();
+  if (!st.available) { view.innerHTML = `<h1>Family portal</h1><div class="card"><p>The family portal is part of the web server. It gives people you invite a small read-only site: browse the libraries, pick something for tonight, and send media requests. Nothing on it can change the library.</p><p class="muted">Open this page on the Raspberry Pi's site to set it up.</p></div>`; return; }
+  const active = st.invites.filter(i => i.active);
+  const linkBox = (title, url, note) => url ? `<div><div class="qrbox">${qrSvg(url, { size: 168, label: title })}</div><div class="muted tiny" style="margin:6px 0 2px">${esc(title)}${note ? ' · ' + esc(note) : ''}</div><div class="inline"><input type="text" readonly value="${esc(url)}" onclick="this.select()"><button class="small copyLink" data-url="${esc(url)}">Copy</button></div></div>` : '';
+  view.innerHTML = `<h1>Family portal</h1>
+    <p class="lead">A second front door for people you invite: they can browse the libraries, use What to watch tonight, and send media requests. It serves its own small site on its own port. Sign-in, settings, scans, renames, file paths, watch history and the adult library do not exist there.</p>
+    <div class="tiles compact">${tile(st.enabled ? (st.listening ? 'okt' : 'badt') : '', 'Portal', st.enabled ? (st.listening ? 'on' : 'not running') : 'off', st.listening ? `listening on ${esc(st.listening)}` : esc(st.error || 'switched off'))}${tile('', 'Active invites', active.length, `${st.invites.length - active.length} revoked or expired`)}${tile('', 'Requests from family', st.invites.reduce((a, i) => a + (i.requests || 0), 0))}${tile('', 'Last visit', st.lastVisit ? fmtAgo(st.lastVisit.at) : 'none yet', st.lastVisit ? `${esc(st.lastVisit.name)} · ${esc(st.lastVisit.ip)}` : 'since the server started')}</div>
+    <h2>Invites</h2>
+    <div class="card"><div class="inline" style="flex-wrap:wrap;gap:8px"><input type="text" id="fvName" placeholder="Name, e.g. Mom" maxlength="40" style="width:200px"><select id="fvDays" class="small"><option value="0">never expires</option><option value="7">7 days</option><option value="30">30 days</option><option value="365">1 year</option></select><label class="inline small"><input type="checkbox" id="fvBrowse" checked> browse</label><label class="inline small"><input type="checkbox" id="fvTonight" checked> tonight</label><label class="inline small"><input type="checkbox" id="fvRequest" checked> requests</label><button class="primary" id="fvAdd">Create invite</button></div><div id="fvNew"></div></div>
+    <div id="fvTable"></div>
+    <h2>Addresses</h2>
+    <div class="field"><label>Public address</label><input type="text" id="fvPublic" value="${esc(st.publicUrl)}" placeholder="https://aether.your-tailnet.ts.net"><div class="hint">What family outside your home opens. With Tailscale Funnel it is the address <span class="mono">tailscale funnel status</span> prints. Invite links and QR codes use it.</div></div>
+    <div class="field"><label>Home address</label><input type="text" id="fvHome" value="${esc(st.homeUrl)}" placeholder="https://family.home"><div class="hint">Optional, for people on your own network: a name Caddy serves, pointing at the portal port.</div></div>
+    <h2>Server</h2>
+    <div class="field"><label>Portal</label><div class="inline"><label class="inline"><input type="checkbox" id="fvOn" ${st.enabled ? 'checked' : ''}> on</label> port <input type="number" id="fvPort" min="1024" max="65535" value="${st.port}" style="width:90px"> reachable from <select id="fvBind" class="small"><option value="127.0.0.1" ${st.bind === '127.0.0.1' ? 'selected' : ''}>this machine only (Caddy, Tailscale)</option><option value="0.0.0.0" ${st.bind === '0.0.0.0' ? 'selected' : ''}>the whole network</option></select></div><div class="hint">"This machine only" is right when Caddy or Tailscale Funnel sits in front, which is the intended setup. Switching the portal off closes the door for everyone at once; invites are kept.</div></div>
+    <div class="field"><label>Show my star ratings</label><input type="checkbox" id="fvRatings" ${st.showRatings ? 'checked' : ''}><div class="hint">Your notes are never shown.</div></div>
+    <div class="field"><label></label><button class="primary" id="fvSave">Save</button></div>`;
+  const showLinks = (r, what) => { $('#fvNew').innerHTML = `<div class="warnbox" style="margin-top:10px"><b>${esc(what)} for ${esc(r.invite.name)}.</b> This is the only time the link is shown: send it now. Anyone holding it gets in as ${esc(r.invite.name)}.${!r.links.public && !r.links.home ? ' Set a public or home address below first, then press New link.' : ''}</div><div class="invite-links">${linkBox('Away from home', r.links.public, 'public address')}${linkBox('At home', r.links.home, 'home address')}</div>`; document.querySelectorAll('.copyLink').forEach(b => { b.onclick = async () => { try { await navigator.clipboard.writeText(b.dataset.url); toast('Link copied'); } catch { toast('Select the text and copy it by hand', true); } }; }); };
+  const t = makeTable(st.invites, [
+    { key: 'name', label: 'Name', render: r => `<b>${esc(r.name)}</b>` },
+    { key: 'active', label: 'State', render: r => r.revoked ? '<span class="badge bad">revoked</span>' : r.active ? '<span class="badge ok">active</span>' : '<span class="badge warn">expired</span>' },
+    { key: 'perms', label: 'May', render: r => ['browse', 'tonight', 'request'].filter(p => r.perms[p]).join(', ') },
+    { key: 'lastSeen', label: 'Last seen', render: r => r.lastSeen ? fmtAgo(r.lastSeen) : '<span class="muted">never</span>' },
+    { key: 'devices', label: 'Devices', num: true }, { key: 'requests', label: 'Requests', num: true },
+    { key: 'expires', label: 'Expires', render: r => r.expires ? fmtDate(r.expires) : '<span class="muted">never</span>' },
+    { key: 'id', label: '', render: r => `<button class="small fvRenew" data-id="${r.id}" title="Make a new link; the old one and its devices stop working">New link</button> ${r.revoked ? `<button class="small danger fvDel" data-id="${r.id}">Delete</button>` : `<button class="small danger fvRevoke" data-id="${r.id}">Revoke</button>`}` },
+  ], { short: true, defaultSort: { key: 'name', asc: true } });
+  $('#fvTable').append(t.node);
+  $('#fvAdd').onclick = async () => { try { const r = await L.portal.invite({ name: $('#fvName').value, days: Number($('#fvDays').value), perms: { browse: $('#fvBrowse').checked, tonight: $('#fvTonight').checked, request: $('#fvRequest').checked } }); await views.family(); showLinks(r, 'Invite created'); } catch (e) { toast(e.message, true); } };
+  t.node.addEventListener('click', async e => {
+    const b = e.target.closest('button'); if (!b) return; const id = b.dataset.id; const inv = st.invites.find(i => i.id === id);
+    try {
+      if (b.classList.contains('fvRenew')) { if (!confirm(`Make a new link for ${inv.name}? The old link and every device using it stop working.`)) return; const r = await L.portal.renew(id); await views.family(); showLinks(r, 'New link'); }
+      else if (b.classList.contains('fvRevoke')) { if (!confirm(`Revoke ${inv.name}'s access?`)) return; await L.portal.revoke(id); toast('Revoked'); views.family(); }
+      else if (b.classList.contains('fvDel')) { await L.portal.remove(id); views.family(); }
+    } catch (err) { toast(err.message, true); }
+  });
+  $('#fvSave').onclick = async () => { try { await L.portal.set({ enabled: $('#fvOn').checked, port: Number($('#fvPort').value), bind: $('#fvBind').value, publicUrl: $('#fvPublic').value, homeUrl: $('#fvHome').value, showRatings: $('#fvRatings').checked }); toast('Saved'); setTimeout(() => views.family(), 600); } catch (e) { toast(e.message, true); } };
+};
+
 // ---- Log: the tail of medialedger.log with a filter, so diagnosing the server does not need SSH ----
 let logTimer = null;
 views.log = async () => {

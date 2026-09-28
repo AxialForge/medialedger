@@ -121,7 +121,7 @@ function createWindow() {
       ['dashboard', '#dashboard'], ['tv', '#tv'], ['anime', '#anime'], ['movies', '#movies'],
       ['episodes', '#anime/' + encodeURIComponent('One Piece')], ['movie-versions', '#movies/' + encodeURIComponent('pacificrim|2013')],
       ['missing', '#missing'], ['duplicates', '#duplicates'], ['movienames', '#movienames'], ['web', '#web'], ['ratings', '#ratings'], ['quality', '#quality'], ['rename', '#rename'],
-      ['changes', '#changes'], ['issues', '#issues/problems'], ['problems', '#problems'], ['requests', '#requests'], ['tonight', '#tonight'], ['watched', '#watched'], ['upgrades', '#upgrades'], ['reclaim', '#reclaim'], ['export', '#export'], ['system', '#system'], ['log', '#log'], ['settings', '#settings'], ['about', '#about'],
+      ['changes', '#changes'], ['issues', '#issues/problems'], ['problems', '#problems'], ['requests', '#requests'], ['tonight', '#tonight'], ['watched', '#watched'], ['upgrades', '#upgrades'], ['reclaim', '#reclaim'], ['export', '#export'], ['system', '#system'], ['log', '#log'], ['family', '#family'], ['settings', '#settings'], ['about', '#about'],
     ];
     await new Promise(r => win.webContents.once('did-finish-load', r));
     await sleep(1500);
@@ -209,6 +209,12 @@ function createWindow() {
   h('plex:webhookInfo', () => ({ available: false })); // Plex can only call an always-on server
   h('status:info', () => ({ available: false }));       // the Home Assistant status URL is a web-server thing
   h('status:rotate', () => { throw new Error('Only available on the web server'); });
+  h('portal:status', () => ({ available: false }));     // the family portal is served by the web server
+  h('portal:set', () => { throw new Error('Only available on the web server'); });
+  h('portal:invite', () => { throw new Error('Only available on the web server'); });
+  h('portal:renew', () => { throw new Error('Only available on the web server'); });
+  h('portal:revoke', () => { throw new Error('Only available on the web server'); });
+  h('portal:remove', () => { throw new Error('Only available on the web server'); });
   h('plex:webhookSet', () => { throw new Error('Only available on the web server'); });
   for (const ch of ['security:tlsDisable', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revoke', 'security:revokeOthers', 'security:users', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser', 'security:tlsEnable']) h(ch, () => { throw new Error('Only available on the web server'); });
 

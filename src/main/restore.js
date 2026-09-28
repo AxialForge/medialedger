@@ -11,13 +11,13 @@
 const fs = require('fs');
 const path = require('path');
 
-const SET_RE = /^medialedger-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})\.(db|settings\.json|web\.json)$/;
+const SET_RE = /^medialedger-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})\.(db|settings\.json|web\.json|portal\.json)$/;
 const stampNow = () => new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 
 /** Copy the companions of a database backup next to it. Returns the files written. */
 function copyCompanions(dataDir, destDir, stamp) {
   const out = [];
-  for (const [src, suffix] of [['settings.json', 'settings.json'], ['web.json', 'web.json']]) {
+  for (const [src, suffix] of [['settings.json', 'settings.json'], ['web.json', 'web.json'], ['portal.json', 'portal.json']]) {
     const from = path.join(dataDir, src);
     if (!fs.existsSync(from)) continue;
     const to = path.join(destDir, `medialedger-${stamp}.${suffix}`);
@@ -36,7 +36,7 @@ function listSets(dir) {
     const m = SET_RE.exec(f); if (!m) continue;
     const s = sets.get(m[1]) || { stamp: m[1], files: {}, bytes: 0 };
     const st = fs.statSync(path.join(dir, f));
-    s.files[m[2] === 'db' ? 'db' : m[2] === 'web.json' ? 'web' : 'settings'] = f; s.bytes += st.size;
+    s.files[m[2] === 'db' ? 'db' : m[2] === 'web.json' ? 'web' : m[2] === 'portal.json' ? 'portal' : 'settings'] = f; s.bytes += st.size;
     sets.set(m[1], s);
   }
   return [...sets.values()].filter(s => s.files.db).sort((a, b) => b.stamp.localeCompare(a.stamp))
@@ -73,6 +73,7 @@ function stageRestore(dataDir, dir, stamp, what = {}, maxVersion = null) {
   fs.rmSync(pend, { recursive: true, force: true }); fs.mkdirSync(pend, { recursive: true });
   fs.copyFileSync(path.join(dir, set.files.db), path.join(pend, 'medialedger.db'));
   if (what.settings && set.files.settings) { JSON.parse(fs.readFileSync(path.join(dir, set.files.settings), 'utf8')); fs.copyFileSync(path.join(dir, set.files.settings), path.join(pend, 'settings.json')); }
+  if (what.web && set.files.portal) { JSON.parse(fs.readFileSync(path.join(dir, set.files.portal), 'utf8')); fs.copyFileSync(path.join(dir, set.files.portal), path.join(pend, 'portal.json')); }
   if (what.web && set.files.web) { JSON.parse(fs.readFileSync(path.join(dir, set.files.web), 'utf8')); fs.copyFileSync(path.join(dir, set.files.web), path.join(pend, 'web.json')); }
   fs.writeFileSync(path.join(pend, 'READY'), JSON.stringify({ stamp, staged: new Date().toISOString(), ...info }));
   return { ...info, stamp, restored: fs.readdirSync(pend).filter(f => f !== 'READY') };
@@ -86,13 +87,13 @@ function applyPendingRestore(dataDir, log = () => {}) {
     const meta = JSON.parse(fs.readFileSync(path.join(pend, 'READY'), 'utf8'));
     const aside = path.join(dataDir, 'pre-restore-' + stampNow()); fs.mkdirSync(aside, { recursive: true });
     const done = [];
-    for (const f of ['medialedger.db', 'settings.json', 'web.json']) {
+    for (const f of ['medialedger.db', 'settings.json', 'web.json', 'portal.json']) {
       const staged = path.join(pend, f); if (!fs.existsSync(staged)) continue;
       const live = path.join(dataDir, f);
       if (fs.existsSync(live)) fs.renameSync(live, path.join(aside, f));
       if (f === 'medialedger.db') for (const ext of ['-wal', '-shm']) { try { fs.renameSync(live + ext, path.join(aside, f + ext)); } catch { /* none */ } }
       fs.renameSync(staged, live);
-      if (f === 'web.json') { try { fs.chmodSync(live, 0o600); } catch { /* windows */ } }
+      if (f === 'web.json' || f === 'portal.json') { try { fs.chmodSync(live, 0o600); } catch { /* windows */ } }
       done.push(f);
     }
     fs.rmSync(pend, { recursive: true, force: true });

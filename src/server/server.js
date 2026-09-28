@@ -24,6 +24,8 @@ const path = require('path');
 const os = require('os');
 const { createService } = require('../main/service');
 const { createSecurity } = require('./security');
+const { createPortal } = require('./portal');
+const realIp = require('./clientip');
 const plex = require('../main/plex');
 const pkg = require('../../package.json');
 
@@ -59,6 +61,8 @@ const clients = new Set(); // SSE responses
 const send = (channel, payload) => { const data = `data: ${JSON.stringify({ channel, payload })}\n\n`; for (const res of clients) { try { res.write(data); } catch { clients.delete(res); } } };
 const svc = createService({ userData: dataDir, log, send, host: { isPackaged: true, getAppPath: () => path.join(__dirname, '..', '..'), restart: () => setTimeout(() => process.exit(0), 1500) } });
 svc.init();
+// The family portal: its own listener, its own routes, its own static folder (see portal.js).
+const portal = createPortal({ svc, dataDir, log, audit: (...a) => sec.audit(...a), version: pkg.version });
 
 // ---- roles ---------------------------------------------------------------------------------
 // What a guest (no account) may call: read-only library statistics, plus filing a media request.
@@ -66,7 +70,7 @@ const GUEST = new Set(['app:info', 'security:me', 'data:dashboard', 'data:series
 // A standard user: everything a guest may, plus the review pages, own ratings, the adult switch for their own session.
 const STANDARD = new Set([...GUEST, 'data:watched', 'data:reclaim', 'data:nextUp', 'data:problems', 'data:duplicates', 'data:missing', 'data:quality', 'data:changes', 'data:changeStats', 'movie:plan', 'movie:batches', 'movie:batchItems', 'rename:proposals', 'rename:history', 'export:list', 'override:list', 'override:suggest', 'meta:status', 'plex:status', 'watch:status', 'schedule:nextInApp', 'db:stats', 'settings:get', 'adult:toggle', 'ratings:setUser', 'security:changePassword', 'tags:add', 'tags:remove', 'data:upgrades', 'rename:dry', 'prefs:set']);
 // Admins: every channel. Actions that write to the share or throw data away also need a fresh password (re-auth).
-const SENSITIVE = new Set(['db:restoreStage', 'security:tlsEnable', 'security:tlsDisable', 'status:rotate', 'plex:webhookSet', 'movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']);
+const SENSITIVE = new Set(['portal:set', 'portal:invite', 'portal:renew', 'db:restoreStage', 'security:tlsEnable', 'security:tlsDisable', 'status:rotate', 'plex:webhookSet', 'movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']);
 const isSensitive = (ch, args) => ch === 'movie:run' ? !!(args[1] && args[1].live) : SENSITIVE.has(ch);
 const allowed = (role, ch) => role === 'admin' || (role === 'standard' ? STANDARD.has(ch) : GUEST.has(ch));
 // Settings hold secrets (Plex token, GitHub token); a standard user sees them blanked.
@@ -102,6 +106,13 @@ const webHandlers = new Map([
   ['adult:status', (ctx) => { const base = svc.handlers.get('adult:status')(); return { ...base, showAdult: ctx.role === 'guest' ? false : !!ctx.session.showAdult, canToggle: ctx.role !== 'guest' }; }],
   ['adult:toggle', (ctx, on) => { if (ctx.role === 'guest') throw new Error('Sign in to see adult content'); sec.setSessionFlag(ctx.session.id, 'showAdult', !!on); svc.setShowAdult(!!on); return { ...svc.handlers.get('adult:status')(), showAdult: !!on, canToggle: true }; }],
   ['requests:add', (ctx, r) => svc.handlers.get('requests:add')({ ...(r || {}), requested_by: ctx.role === 'guest' ? `guest: ${String((r || {}).requested_by || 'anonymous').slice(0, 40)}` : ctx.session.user })],
+  // family portal (admin only; not in the guest or standard lists)
+  ['portal:status', () => portal.status()],
+  ['portal:set', (ctx, o) => portal.setOptions(o || {}, ctx.session.user, ctx.ip)],
+  ['portal:invite', (ctx, o) => portal.createInvite(o || {}, ctx.session.user, ctx.ip)],
+  ['portal:renew', (ctx, id) => portal.renewInvite(String(id), ctx.session.user, ctx.ip)],
+  ['portal:revoke', (ctx, id) => portal.revokeInvite(String(id), ctx.session.user, ctx.ip)],
+  ['portal:remove', (ctx, id) => portal.deleteInvite(String(id), ctx.session.user, ctx.ip)],
   // security
   ['security:me', (ctx) => ({ available: true, guest: ctx.role === 'guest', username: ctx.session ? ctx.session.user : null, role: ctx.role, guestEnabled: sec.guestEnabled(), hasUsers: sec.hasPassword() })],
   ['security:status', (ctx) => sec.status(ctx.session, { available: true, https: !!tls, port: servePort, tlsPort: port === 80 ? 443 : port, bindHost, dataDir, checks: posture(), opensslAvailable: hasOpenssl() })],
@@ -158,7 +169,7 @@ webHandlers.set('status:info', (ctx) => { const key = sec.statusKey(false, ctx.i
 webHandlers.set('status:rotate', (ctx) => { sec.statusKey(true, ctx.ip, ctx.session.user); return webHandlers.get('status:info')(ctx); });
 webHandlers.set('plex:webhookInfo', (ctx) => ({ available: true, enabled: sec.webhook().enabled, url: webhookUrl(ctx.req), events: webhookEvents.slice().reverse() }));
 webHandlers.set('plex:webhookSet', (ctx, opts) => { sec.webhookSet(opts || {}, ctx.ip, ctx.session.user); return { enabled: sec.webhook().enabled, url: webhookUrl(ctx.req) }; });
-const CTX_HANDLERS = new Set([...webHandlers.keys()].filter(k => k.startsWith('security:') || ['settings:get', 'adult:status', 'adult:toggle', 'requests:add', 'plex:webhookInfo', 'plex:webhookSet', 'status:info', 'status:rotate', 'prefs:get', 'prefs:set'].includes(k)));
+const CTX_HANDLERS = new Set([...webHandlers.keys()].filter(k => k.startsWith('security:') || (k.startsWith('portal:') && k !== 'portal:status') || ['settings:get', 'adult:status', 'adult:toggle', 'requests:add', 'plex:webhookInfo', 'plex:webhookSet', 'status:info', 'status:rotate', 'prefs:get', 'prefs:set'].includes(k)));
 const handlers = new Map([...svc.handlers, ...webHandlers]);
 
 const hasOpenssl = () => { try { return require('child_process').spawnSync('openssl', ['version'], { encoding: 'utf8', timeout: 5000 }).status === 0; } catch { return false; } };
@@ -192,7 +203,9 @@ const SEC_HEADERS = {
 };
 const json = (res, status, body) => { res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); };
 const readBody = (req) => new Promise((resolve, reject) => { let s = ''; req.on('data', d => { s += d; if (s.length > 4 * 1024 * 1024) { reject(new Error('body too large')); req.destroy(); } }); req.on('end', () => resolve(s)); req.on('error', reject); });
-const clientIp = (req) => String(req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+// Behind Caddy the socket is loopback and the visitor is in X-Forwarded-For; clientip.js believes that header only from loopback.
+const clientIp = (req) => realIp.clientIp(req);
+const isHttps = (req) => !!tls || realIp.forwardedProto(req) === 'https';
 const readRaw = (req, max = 8 * 1024 * 1024) => new Promise((resolve, reject) => { const chunks = []; let n = 0; req.on('data', d => { n += d.length; if (n > max) { reject(new Error('body too large')); req.destroy(); } else chunks.push(d); }); req.on('end', () => resolve(Buffer.concat(chunks))); req.on('error', reject); });
 
 // Plex → us. No session: the key in the URL is the credential (LAN-only still applies). Plex sends multipart with a JSON "payload" part and sometimes a thumbnail.
@@ -232,7 +245,7 @@ async function handle(req, res) {
       if (ch === 'login' && req.method === 'POST') {
         const body = JSON.parse(await readBody(req) || '{}');
         const r = sec.login(ip, req.headers['user-agent'], body);
-        if (r.ok) { res.setHeader('Set-Cookie', sec.cookieFor(r.id, !!tls)); return json(res, 200, { ok: true, username: r.username, role: r.role }); }
+        if (r.ok) { res.setHeader('Set-Cookie', sec.cookieFor(r.id, isHttps(req))); return json(res, 200, { ok: true, username: r.username, role: r.role }); }
         const status = { locked: 429, nopassword: 503, totp: 401, totp_bad: 401, password: 401 }[r.reason] || 401;
         return json(res, status, { ok: false, reason: r.reason, error: { locked: 'Too many failed attempts; this address is locked for 15 minutes', nopassword: 'No account exists yet. On the server run: sudo medialedger --set-password', totp: 'Enter the code from your authenticator app', totp_bad: 'Wrong code', password: 'Wrong username or password' }[r.reason] });
       }
@@ -297,6 +310,7 @@ server.requestTimeout = 0;       // a scan request legitimately runs for minutes
 server.headersTimeout = 60000;
 server.keepAliveTimeout = 65000;
 
+portal.start();
 server.listen(servePort, bindHost, () => {
   log(`MediaLedger ${pkg.version} web server on ${tls ? 'https' : 'http'}://${bindHost}:${servePort} (data: ${dataDir}, LAN-only: ${sec.state.lanOnly}, guest: ${sec.guestEnabled()})`);
   if (servePort !== port) {
@@ -308,6 +322,6 @@ server.listen(servePort, bindHost, () => {
   if (s.metadata.enabled) setTimeout(() => svc.refreshMetadata({ onlyNew: true }).catch(e => log('metadata: ' + e.message)), 4000);
 });
 
-const stop = (sig) => { log(`${sig}: shutting down`); server.close(); for (const c of clients) { try { c.end(); } catch { /* ignore */ } } svc.shutdown(); process.exit(0); };
+const stop = (sig) => { log(`${sig}: shutting down`); server.close(); for (const c of clients) { try { c.end(); } catch { /* ignore */ } } portal.stop(); svc.shutdown(); process.exit(0); };
 process.on('SIGTERM', () => stop('SIGTERM'));
 process.on('SIGINT', () => stop('SIGINT'));
