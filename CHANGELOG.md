@@ -8,6 +8,40 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [2.0.0] - 2026-09-28
+
+### Added
+
+- **Editable dashboard.** Every element is a card from a catalog of 53 on a
+  six-column grid. Edit mode: drag or ▲ ▼ to move, S / M / L / XL to size,
+  per-card options, Add card, Reset. Layouts are saved per account on the web
+  server (guests see the admin's) and once on the desktop. New cards: next up,
+  plays per day, plays by person, reclaimable space, overdue jobs, storage per
+  month, pending requests over time. The editor comes from the Bracket kit, so
+  it behaves like Linewatch and PiPulse.
+- **Options shown** level per account: Simple (title, size), Standard (also
+  period and rows), Advanced (also colour thresholds). Thresholds set with the
+  old tile gear carry over.
+- **Family portal.** A second listener (default port 8090, bound to this
+  machine) with its own routes and its own phone-first site: browse the
+  libraries, What to watch tonight, media requests with an "already in the
+  library" check. No sign-in, settings, scans, renames or logs exist there;
+  replies are built from a fixed list of fields and never include paths, Plex
+  keys, watch history, notes or adult titles.
+- **Invites** with a link and QR code, optional expiry, per-person
+  permissions, New link and Revoke. Only a hash of each link is stored.
+  Rate limits on browsing, request filing and link guessing; everything is
+  written to the security log.
+- Backups include the portal state; restoring accounts restores invites.
+- Manual: editing the dashboard, the family portal, Tailscale Funnel.
+
+### Changed
+
+- **The visitor's real address behind a reverse proxy.** The server reads
+  `X-Forwarded-For` and `X-Forwarded-Proto`, but only when the connection
+  comes from this machine, so LAN-only, lockouts and the security log work
+  behind Caddy and sign-in cookies are marked Secure over HTTPS.
+
 ## [1.12.1] - 2026-09-26
 
 ### Added

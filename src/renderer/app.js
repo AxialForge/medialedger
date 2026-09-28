@@ -26,6 +26,8 @@ function toast(msg, bad = false) {
 }
 function openModal(html) { $('#modalCard').innerHTML = html; $('#modal').hidden = false; return $('#modalCard'); }
 function closeModal() { $('#modal').hidden = true; }
+// What ui-shim.js forwards to (dash.js talks to window.UI). Filled in here, used from the first route() on.
+window.__ml = { toast: (...x) => toast(...x), openModal: (...x) => openModal(...x), closeModal: () => closeModal(), api: L, isGuest: () => !!(me && (me.guest || me.role === 'guest')), level: () => (prefs && prefs.editorLevel) || 'standard', setLevel: async (l) => { prefs = await L.prefs.set({ editorLevel: l }); } };
 // Walks a list of rename proposals one file at a time: Rename / Skip / Stop per file. Each confirmed file runs as its own
 // batch through the same pre-flight, verification and journal as a big batch, so a mistake is one file and still undoable.
 function stepThrough(items, { what, run }) {
@@ -401,95 +403,107 @@ function storagePanel(st) {
 // ---------- views -----------------------------------------------------------
 const views = {};
 
-views.dashboard = async () => {
-  const [d, snaps] = await Promise.all([L.data.dashboard(), L.snapshots(365).catch(() => [])]); await loadPrefs();
-  L.storage().then(st => { const t = $('#storageTile'); if (!t) return; t.outerHTML = storageTile(st); view.append(el(storagePanel(st))); }).catch(() => {});
+// ---- Dashboard: every element is a card from this catalog; dash.js arranges them per account ----
+const SNAP_NOTE = 'Daily snapshots start tonight; the line appears after the second one.';
+async function dashLoad() {
+  const [d, snapsAll] = await Promise.all([L.data.dashboard(), L.snapshots(3650).catch(() => [])]); await loadPrefs();
   const t = Object.fromEntries(d.byType.map(r => [r.library_type, r]));
   const tot = d.byType.reduce((a, r) => ({ files: a.files + r.files, bytes: a.bytes + (r.bytes || 0), seconds: a.seconds + (r.seconds || 0), probed: a.probed + r.probed, captioned: a.captioned + r.captioned }), { files: 0, bytes: 0, seconds: 0, probed: 0, captioned: 0 });
-  const capPct = r => r && r.probed ? pct(r.captioned, r.files) + '% captioned' : 'not probed yet';
-  const last = d.lastScans[0];
-  const lowRes = d.lowRes.reduce((a, r) => a + r.n, 0);
   const health = tot.files ? Math.max(0, 100 - pct(d.byType.reduce((a, r) => a + r.unparsed + r.probe_errors, 0) + d.missingFiles, tot.files)) : 0;
-
+  // Things only some cards need are fetched once, the first time a card asks.
+  const memo = new Map();
+  const lazy = (key, fn) => { if (!memo.has(key)) memo.set(key, Promise.resolve().then(fn)); return memo.get(key); };
+  const snaps = (range) => { const days = (window.UI.RANGE_DAYS[range] || 90); const from = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10); return snapsAll.filter(x => x.day >= from); };
   let notices = '';
   if (me.role === 'admin' || !L.isWeb) {
     try { const od = await L.jobs.overdue(); if (od.length) notices += `<div class="warnbox">${od.map(j => `<b>${esc(j.label)}</b> is overdue: ${esc(j.why)}.`).join('<br>')} <a href="#settings">Open Settings → Schedules</a> · <a href="#log">Log</a></div>`; } catch { /* older server */ }
     if (L.isWeb) { try { const u = await webUpdateInfo(); if (u && u.state === 'available') notices += `<div class="warnbox">MediaLedger <b>${esc(u.version)}</b> is available (this server runs ${esc((await L.appInfo()).version)}). On the Pi run <span class="mono">sudo medialedger-update</span>, or install with <span class="mono">--auto-update</span> to have it update itself every night.</div>`; } catch { /* offline */ } }
   }
-  view.innerHTML = `
-    <h1>Dashboard</h1>${notices}
-    <div class="tiles">
-      ${tile('', 'Library', `${tot.files.toLocaleString()} files`, `${fmtBytes(tot.bytes)} · ${fmtHours(tot.seconds)} of video`)}
-      ${tile('tv', 'TV Shows', `${d.titles.tv} series`, `${(t.tv?.files || 0).toLocaleString()} episodes · ${fmtBytes(t.tv?.bytes)} · ${capPct(t.tv)}`)}
-      ${tile('anime', 'Anime', `${d.titles.anime} series`, `${(t.anime?.files || 0).toLocaleString()} episodes · ${fmtBytes(t.anime?.bytes)} · ${capPct(t.anime)}`)}
-      ${tile('movie', 'Movies', `${d.titles.movie} titles`, `${(t.movie?.files || 0).toLocaleString()} files · ${fmtBytes(t.movie?.bytes)} · ${capPct(t.movie)}`)}
-    </div>
-    <div class="tiles compact">
-      ${tile(d.multiples.n ? 'warnt' : '', 'Movie multiples', `${d.multiples.n} titles`, `${d.multiples.extra} extra file(s) · ${fmtBytes(d.multiples.bytes)}`)}
-      ${ncard('health', 'Library health', health, `${health}%`, `${d.byType.reduce((a, r) => a + r.unparsed, 0)} unparsed · ${d.byType.reduce((a, r) => a + r.probe_errors, 0)} probe errors · ${d.missingFiles} missing`)}
-      ${tile('', 'Captions', `${pct(tot.captioned, tot.files)}%`, `${tot.captioned.toLocaleString()} of ${tot.files.toLocaleString()} files have subtitles`)}
-      ${ncard('lowres', 'Below 720p', lowRes, lowRes.toLocaleString(), d.lowRes.map(r => `${typeName(r.library_type)} ${r.n}`).join(' · ') || 'nothing SD')}
-      ${tile('', 'Avg bitrate', t.tv || t.movie ? `${Math.round(d.byType.reduce((a, r) => a + (r.avg_kbps || 0) * r.files, 0) / Math.max(1, tot.files)).toLocaleString()} kbps` : '—', d.byType.map(r => `${typeName(r.library_type)} ${Math.round(r.avg_kbps || 0).toLocaleString()}`).join(' · '))}
-      ${tile('', 'Last scan', last ? fmtAgo(last.started) : 'never', last ? `${last.status} in ${fmtMs(last.duration_ms)} · +${last.added} −${last.removed} ~${last.modified}` : 'Run a scan to populate the library')}
-      ${tile('', 'Manual fixes', d.overrides, d.overrides ? 'applied on every scan' : 'none needed yet')}
-      ${tile('', 'Last export', d.lastExport ? fmtAgo(d.lastExport.ts) : 'never', d.lastExport ? `${JSON.parse(d.lastExport.files || '[]').length} CSV files` : '')}
-      <div id="storageTile"></div>
-    </div>
-    <div class="tiles compact">
-      ${ncard('pending', 'Pending requests', d.pending, d.pending, d.pending ? 'waiting for a decision' : 'nothing asked for', { href: '#requests' })}
-      ${linkTile('#missing', tile(d.airingWeek ? 'okt' : '', 'Airing this week', d.airingWeek, d.nextAiring ? `next: ${esc(d.nextAiring.show_name)} ${esc(d.nextAiring.next_episode || '')} on ${esc(d.nextAiring.next_airing)}` : 'no dates from the lookups yet'))}
-      ${linkTile('#watched', tile('', 'Watched', d.watched.linked ? `${pct(d.watched.watched, d.watched.linked)}%` : '—', d.watched.linked ? `${d.watched.watched.toLocaleString()} of ${d.watched.linked.toLocaleString()} Plex-linked files · who watched what →` : 'sync Plex to see play counts'))}
-      ${tile('', 'Genres known', d.genresTitles, d.genres.length ? `${d.genres.reduce((a, r) => a + r.n, 0).toLocaleString()} genre tags across the library` : 'from TVmaze / AniList / Plex')}
-      ${tile('', 'Your tags', d.tagged ? `${d.tagged} titles` : '—', d.tags.slice(0, 4).map(t => `${esc(t.tag)} ${t.n}`).join(' · ') || 'type one on any title page')}
-      ${ncard('upgrades', 'Upgrade candidates', d.upgrades, d.upgrades || '—', d.upgrades ? 'worth a better copy' : 'ranking not tuned yet (upgrades.js)', { href: '#upgrades' })}
-      ${ncard('ended', 'Ended but incomplete', d.finishedIncomplete, d.finishedIncomplete, 'finished airing, still have gaps', { href: '#missing' })}
-    </div>
-    <div class="tiles compact">
-      ${ncard('missing', 'Missing episodes', d.missingEpisodes.episodes, d.missingEpisodes.episodes.toLocaleString(), `${d.missingEpisodes.series} series · ${d.missingEpisodes.matched} matched · ${d.missingEpisodes.unmatched} unmatched${d.missingEpisodes.pending ? ` · ${d.missingEpisodes.pending} pending` : ''}`)}
-      ${ncard('dups', 'Duplicate episodes', d.duplicates, d.duplicates, 'same season/episode, several files', { href: '#issues/duplicates' })}
-      ${tile(d.quality.mixedSeries ? 'warnt' : 'okt', 'Mixed-quality series', d.quality.mixedSeries, 'more than one resolution')}
-      ${ncard('lowbit', 'Low-bitrate files', d.quality.lowBitrate, d.quality.lowBitrate.toLocaleString(), 'below the threshold for their resolution', { href: '#quality' })}
-      ${tile('', 'Undefined audio language', d.quality.undAudio.toLocaleString(), 'no language tag on the audio track')}
-      ${tile(d.watch.enabled ? 'okt' : '', 'Folder watch', d.watch.enabled ? `${d.watch.roots.length} roots` : 'off', d.watch.enabled ? (d.watch.lastEvent ? `last change ${fmtAgo(d.watch.lastEvent.ts)}` : 'no changes seen yet') : 'enable in Settings')}
-    </div>
-    <div class="grid4" style="margin-top:14px">
-      ${bars(d.resolution, 'Resolution', { order: ['4K', '1440p', '1080p', '720p', '576p', '480p', 'SD', 'unknown'] })}
-      ${bars(d.videoCodec, 'Video codec')}
-      ${bars(d.audioCodec, 'Audio codec', { keyLabel: k => k.replace(/;/g, '+') })}
-      ${bars(d.container, 'Container')}
-    </div>
-    <div class="grid4" style="margin-top:14px">
-      ${bars(d.audioLang, 'Audio languages', { keyLabel: k => k.replace(/;/g, '+') })}
-      ${bars(d.subLang, 'Subtitle languages', { keyLabel: k => k.replace(/;/g, '+') })}
-      ${bars(d.fps, 'Frame rate', { keyLabel: k => k === 'unknown' ? k : k + ' fps' })}
-      ${bars(d.hdr, 'Dynamic range')}
-    </div>
-    <div class="grid4" style="margin-top:14px">
-      ${bars(d.genres, 'Genres', { max: 12, legend: true })}
-      ${window.Cards.donut([{ k: 'Subbed', n: d.anime_audio.sub, color: 'var(--anime)', href: '#anime?q=sub' }, { k: 'Dubbed', n: d.anime_audio.dub, color: 'var(--movie)', href: '#anime?q=dub' }, { k: 'Dual audio', n: d.anime_audio.dual, color: 'var(--accent2)', href: '#anime?q=dual' }, { k: 'Mixed', n: d.anime_audio.mixed, color: 'var(--warn)', href: '#anime?q=mixed' }, { k: 'Raw', n: d.anime_audio.raw, color: 'var(--muted)' }], 'Anime sub / dub', { sub: 'series' })}
-      ${window.Cards.donut([{ k: 'Watched', n: d.watched.watched, color: 'var(--accent2)' }, { k: 'Not yet', n: Math.max(0, d.watched.linked - d.watched.watched), color: 'var(--line)' }], 'Watched (Plex)', { center: d.watched.linked ? pct(d.watched.watched, d.watched.linked) + '%' : '—', sub: d.watched.linked ? 'of linked files' : 'sync Plex' })}
-      ${bars(d.tags.map(t => ({ k: t.tag, n: t.n, library_type: '' })), 'Your tags', { legend: false, max: 12, drill: false })}
-    </div>
-    <div class="grid3" style="margin-top:14px">
-      ${window.Cards.trend(snaps.map(x => ({ x: x.day, y: x.files })), 'Files over time', { note: 'Daily snapshots start tonight; the line appears after the second one.' })}
-      ${window.Cards.trend(snaps.map(x => ({ x: x.day, y: x.free_bytes })), 'Free space over time', { fmt: fmtBytes, upIsGood: true, note: 'Daily snapshots start tonight; the line appears after the second one.' })}
-      ${window.Cards.trend(snaps.map(x => ({ x: x.day, y: x.missing_episodes })), 'Missing episodes over time', { upIsGood: false, note: 'Daily snapshots start tonight; the line appears after the second one.' })}
-    </div>
-    <div class="grid3" style="margin-top:14px">
-      <div class="card"><h3>Recently added <a class="right" href="#changes">change log →</a></h3><div id="recentAdded"></div></div>
-      <div class="card"><h3>Largest series</h3><div id="biggest"></div></div>
-      <div class="card"><h3>Largest movie files</h3><div id="biggestMovies"></div></div>
-    </div>
-    <div class="grid2" style="margin-top:14px">
-      <div class="card"><h3>Most missing episodes <a class="right" href="#missing">all series →</a></h3><div id="gaps"></div></div>
-      <div class="card"><h3>Scan history</h3><div id="scanHist"></div></div>
-    </div>`;
-  $('#recentAdded').append(d.recentlyAdded.length ? el(`<table>${d.recentlyAdded.map(r => `<tr><td><span class="badge ${r.library_type}">${typeName(r.library_type)}</span></td><td class="wrap">${esc(r.library_type === 'movie' ? `${r.movie_title} (${r.movie_year || '?'})` : `${r.show_name} ${sxe(r)}`)}<span class="sub">${esc(r.file_name)}</span></td><td class="num muted tiny">${fmtAgo(r.first_seen)}</td></tr>`).join('')}</table>`) : el('<div class="empty">Nothing yet</div>'));
-  $('#biggest').append(el(`<table>${d.biggestShows.map(s => `<tr><td><span class="badge ${s.library_type}">${typeName(s.library_type)}</span></td><td class="wrap">${esc(s.show_name)}</td><td class="num">${s.episodes} eps</td><td class="num">${fmtBytes(s.bytes)}</td><td class="num muted">${fmtHours(s.seconds)}</td></tr>`).join('') || '<tr><td class="empty">—</td></tr>'}</table>`));
-  $('#biggestMovies').append(el(`<table>${d.biggestMovies.map(m => `<tr><td class="wrap">${esc(m.movie_title)} <span class="muted">(${m.movie_year || '?'})</span></td><td>${esc(m.resolution || '')}</td><td class="muted">${esc(m.video_codec || '')}</td><td class="num">${fmtBytes(m.size)}</td></tr>`).join('') || '<tr><td class="empty">—</td></tr>'}</table>`));
-  $('#gaps').append(d.missingEpisodes.top.length ? el(`<table>${d.missingEpisodes.top.map(g => `<tr><td><span class="badge ${g.library_type}">${typeName(g.library_type)}</span></td><td class="wrap"><a href="#${g.library_type}/${encodeURIComponent(g.show_name)}">${esc(g.show_name)}</a>${g.matched_title && g.matched_title !== g.show_name ? `<span class="sub">${esc(g.matched_title)}</span>` : ''}</td><td class="num">${g.have} of ${g.expected}</td><td class="num bad">${g.missing_count} missing</td><td class="muted tiny wrap">${esc(missingText(g.missing, 6))}</td></tr>`).join('')}</table>`) : el(`<div class="empty">${d.missingEpisodes.matched ? 'Every matched series is complete' : 'No expected counts yet — they are fetched in the background after a scan'}</div>`));
-  $('#scanHist').append(el(`<table>${d.lastScans.map(s => `<tr><td class="muted tiny">${fmtDate(s.started)}</td><td><span class="badge ${s.status === 'done' ? 'ok' : s.status === 'running' ? '' : 'bad'}">${s.status}</span></td><td class="muted">${s.trigger}${s.threads > 1 ? ` · ${s.threads}t` : ''}</td><td class="num">${fmtMs(s.duration_ms)}</td><td class="num"><span class="kind-added">+${s.added}</span> <span class="kind-removed">−${s.removed}</span> <span class="kind-modified">~${s.modified}</span></td><td class="num muted">${s.probed} probed</td></tr>`).join('') || '<tr><td class="empty">—</td></tr>'}</table>`));
+  return { d, t, tot, health, snaps, lazy, notices, last: d.lastScans[0], lowRes: d.lowRes.reduce((a, r) => a + r.n, 0), capPct: r => r && r.probed ? pct(r.captioned, r.files) + '% captioned' : 'not probed yet' };
+}
+const canSee = (role) => !L.isWeb || me.role === 'admin' || (role === 'standard' && me.role === 'standard');
+const nc = (c, id, label, num, value, sub, opts = {}) => ncard(id, label, num, value, sub, { ...opts, rule: c.rule, gear: false });
+const langKey = k => k.replace(/;/g, '+');
+const SZ_TILE = ['s', 'm', 'l'], SZ_CHART = ['m', 'l', 'xl'], SZ_TABLE = ['m', 'l', 'xl'];
+const rows = (c, dflt) => Math.max(3, Math.min(40, Number(c.o.limit) || dflt));
+const DASH_CARDS = [
+  // ---- Library
+  { type: 'lib_all', group: 'Library', label: 'Library', help: 'Files, size and hours of video across every library.', sizes: SZ_TILE, def: 'm', guest: true, render: c => tile('', 'Library', `${c.tot.files.toLocaleString()} files`, `${fmtBytes(c.tot.bytes)} · ${fmtHours(c.tot.seconds)} of video`) },
+  { type: 'lib_tv', group: 'Library', label: 'TV Shows', help: 'Series, episodes, size and caption share.', sizes: SZ_TILE, def: 'm', guest: true, render: c => linkTile('#tv', tile('tv', 'TV Shows', `${c.d.titles.tv} series`, `${(c.t.tv?.files || 0).toLocaleString()} episodes · ${fmtBytes(c.t.tv?.bytes)} · ${c.capPct(c.t.tv)}`)) },
+  { type: 'lib_anime', group: 'Library', label: 'Anime', help: 'Series, episodes, size and caption share.', sizes: SZ_TILE, def: 'm', guest: true, render: c => linkTile('#anime', tile('anime', 'Anime', `${c.d.titles.anime} series`, `${(c.t.anime?.files || 0).toLocaleString()} episodes · ${fmtBytes(c.t.anime?.bytes)} · ${c.capPct(c.t.anime)}`)) },
+  { type: 'lib_movie', group: 'Library', label: 'Movies', help: 'Titles, files, size and caption share.', sizes: SZ_TILE, def: 'm', guest: true, render: c => linkTile('#movies', tile('movie', 'Movies', `${c.d.titles.movie} titles`, `${(c.t.movie?.files || 0).toLocaleString()} files · ${fmtBytes(c.t.movie?.bytes)} · ${c.capPct(c.t.movie)}`)) },
+  { type: 'multiples', group: 'Library', label: 'Movie multiples', help: 'Movies you hold in more than one file.', sizes: SZ_TILE, def: 's', guest: true, render: c => tile(c.d.multiples.n ? 'warnt' : '', 'Movie multiples', `${c.d.multiples.n} titles`, `${c.d.multiples.extra} extra file(s) · ${fmtBytes(c.d.multiples.bytes)}`) },
+  { type: 'genres_known', group: 'Library', label: 'Genres known', help: 'Titles that carry genres from TVmaze, AniList or Plex.', sizes: SZ_TILE, def: 's', guest: true, render: c => tile('', 'Genres known', c.d.genresTitles, c.d.genres.length ? `${c.d.genres.reduce((a, r) => a + r.n, 0).toLocaleString()} genre tags across the library` : 'from TVmaze / AniList / Plex') },
+  { type: 'my_tags', group: 'Library', label: 'Your tags', help: 'How many titles carry a tag of yours, and the most used.', sizes: SZ_TILE, def: 's', guest: true, render: c => tile('', 'Your tags', c.d.tagged ? `${c.d.tagged} titles` : '—', c.d.tags.slice(0, 4).map(t => `${esc(t.tag)} ${t.n}`).join(' · ') || 'type one on any title page') },
+  // ---- Health
+  { type: 'health', group: 'Health', label: 'Library health', help: 'Share of files that parsed, probed and are still on the share.', sizes: SZ_TILE, def: 's', guest: true, rule: DEFAULT_RULES.health, render: c => nc(c, 'health', 'Library health', c.health, `${c.health}%`, `${c.d.byType.reduce((a, r) => a + r.unparsed, 0)} unparsed · ${c.d.byType.reduce((a, r) => a + r.probe_errors, 0)} probe errors · ${c.d.missingFiles} missing`, { href: '#issues/problems' }) },
+  { type: 'missing', group: 'Health', label: 'Missing episodes', help: 'Episodes the online listings say exist and you do not have, after your collecting choices.', sizes: SZ_TILE, def: 's', guest: true, rule: DEFAULT_RULES.missing, render: c => nc(c, 'missing', 'Missing episodes', c.d.missingEpisodes.episodes, c.d.missingEpisodes.episodes.toLocaleString(), `${c.d.missingEpisodes.series} series · ${c.d.missingEpisodes.matched} matched · ${c.d.missingEpisodes.unmatched} unmatched${c.d.missingEpisodes.pending ? ` · ${c.d.missingEpisodes.pending} pending` : ''}`, { href: '#missing' }) },
+  { type: 'ended', group: 'Health', label: 'Ended but incomplete', help: 'Series that finished airing and still have gaps.', sizes: SZ_TILE, def: 's', guest: true, rule: DEFAULT_RULES.ended, render: c => nc(c, 'ended', 'Ended but incomplete', c.d.finishedIncomplete, c.d.finishedIncomplete, 'finished airing, still have gaps', { href: '#missing' }) },
+  { type: 'dups', group: 'Health', label: 'Duplicate episodes', help: 'The same season and episode in several files.', sizes: SZ_TILE, def: 's', guest: true, rule: DEFAULT_RULES.dups, render: c => nc(c, 'dups', 'Duplicate episodes', c.d.duplicates, c.d.duplicates, 'same season/episode, several files', { href: '#issues/duplicates' }) },
+  { type: 'fixes', group: 'Health', label: 'Manual fixes', help: 'Corrections you saved; they apply on every scan.', sizes: SZ_TILE, def: 's', guest: true, render: c => tile('', 'Manual fixes', c.d.overrides, c.d.overrides ? 'applied on every scan' : 'none needed yet') },
+  { type: 'overdue', group: 'Health', label: 'Overdue jobs', help: 'Scheduled jobs that have not run when they should have.', sizes: SZ_TILE, def: 's', render: async c => { if (!canSee('admin')) return null; const od = await c.lazy('overdue', () => L.jobs.overdue()); return linkTile('#settings', tile(od.length ? 'badt' : 'okt', 'Scheduled jobs', od.length ? `${od.length} overdue` : 'on time', od.map(j => esc(j.label)).join(' · ') || 'scan, Plex sync, backup, snapshot, summary')); } },
+  // ---- Quality
+  { type: 'lowres', group: 'Quality', label: 'Below 720p', help: 'Files in standard definition.', sizes: SZ_TILE, def: 's', guest: true, rule: DEFAULT_RULES.lowres, render: c => nc(c, 'lowres', 'Below 720p', c.lowRes, c.lowRes.toLocaleString(), c.d.lowRes.map(r => `${typeName(r.library_type)} ${r.n}`).join(' · ') || 'nothing SD', { href: '#quality' }) },
+  { type: 'lowbit', group: 'Quality', label: 'Low-bitrate files', help: 'Files under the bitrate threshold for their resolution.', sizes: SZ_TILE, def: 's', guest: true, rule: DEFAULT_RULES.lowbit, render: c => nc(c, 'lowbit', 'Low-bitrate files', c.d.quality.lowBitrate, c.d.quality.lowBitrate.toLocaleString(), 'below the threshold for their resolution', { href: '#quality' }) },
+  { type: 'upgrades', group: 'Quality', label: 'Upgrade candidates', help: 'Titles worth a better copy, ranked by how much you watch and rate them.', sizes: SZ_TILE, def: 's', guest: true, rule: DEFAULT_RULES.upgrades, render: c => nc(c, 'upgrades', 'Upgrade candidates', c.d.upgrades, c.d.upgrades || '—', c.d.upgrades ? 'worth a better copy' : 'nothing to upgrade', { href: '#upgrades' }) },
+  { type: 'mixed', group: 'Quality', label: 'Mixed-quality series', help: 'Series held in more than one resolution.', sizes: SZ_TILE, def: 's', guest: true, render: c => linkTile('#quality', tile(c.d.quality.mixedSeries ? 'warnt' : 'okt', 'Mixed-quality series', c.d.quality.mixedSeries, 'more than one resolution')) },
+  { type: 'captions', group: 'Quality', label: 'Captions', help: 'Share of files with subtitles.', sizes: SZ_TILE, def: 's', guest: true, render: c => tile('', 'Captions', `${pct(c.tot.captioned, c.tot.files)}%`, `${c.tot.captioned.toLocaleString()} of ${c.tot.files.toLocaleString()} files have subtitles`) },
+  { type: 'bitrate', group: 'Quality', label: 'Average bitrate', help: 'Average bitrate overall and per library.', sizes: SZ_TILE, def: 's', guest: true, render: c => tile('', 'Avg bitrate', c.t.tv || c.t.movie ? `${Math.round(c.d.byType.reduce((a, r) => a + (r.avg_kbps || 0) * r.files, 0) / Math.max(1, c.tot.files)).toLocaleString()} kbps` : '—', c.d.byType.map(r => `${typeName(r.library_type)} ${Math.round(r.avg_kbps || 0).toLocaleString()}`).join(' · ')) },
+  { type: 'undaudio', group: 'Quality', label: 'Undefined audio language', help: 'Files whose audio track carries no language tag.', sizes: SZ_TILE, def: 's', guest: true, render: c => tile('', 'Undefined audio language', c.d.quality.undAudio.toLocaleString(), 'no language tag on the audio track') },
+  // ---- Activity
+  { type: 'lastscan', group: 'Activity', label: 'Last scan', help: 'When the library was last scanned and what changed.', sizes: SZ_TILE, def: 's', guest: true, render: c => tile('', 'Last scan', c.last ? fmtAgo(c.last.started) : 'never', c.last ? `${c.last.status} in ${fmtMs(c.last.duration_ms)} · +${c.last.added} −${c.last.removed} ~${c.last.modified}` : 'Run a scan to populate the library') },
+  { type: 'lastexport', group: 'Activity', label: 'Last export', help: 'When the CSVs were last written.', sizes: SZ_TILE, def: 's', guest: true, render: c => tile('', 'Last export', c.d.lastExport ? fmtAgo(c.d.lastExport.ts) : 'never', c.d.lastExport ? `${JSON.parse(c.d.lastExport.files || '[]').length} CSV files` : '') },
+  { type: 'watchfolders', group: 'Activity', label: 'Folder watch', help: 'Whether the roots are watched for changes.', sizes: SZ_TILE, def: 's', guest: true, render: c => tile(c.d.watch.enabled ? 'okt' : '', 'Folder watch', c.d.watch.enabled ? `${c.d.watch.roots.length} roots` : 'off', c.d.watch.enabled ? (c.d.watch.lastEvent ? `last change ${fmtAgo(c.d.watch.lastEvent.ts)}` : 'no changes seen yet') : 'enable in Settings') },
+  { type: 'pending', group: 'Activity', label: 'Pending requests', help: 'Media requests waiting for your decision.', sizes: SZ_TILE, def: 's', guest: true, rule: DEFAULT_RULES.pending, render: c => nc(c, 'pending', 'Pending requests', c.d.pending, c.d.pending, c.d.pending ? 'waiting for a decision' : 'nothing asked for', { href: '#requests' }) },
+  { type: 'airing', group: 'Activity', label: 'Airing this week', help: 'Episodes of your series that air in the next seven days.', sizes: SZ_TILE, def: 's', guest: true, render: c => linkTile('#missing', tile(c.d.airingWeek ? 'okt' : '', 'Airing this week', c.d.airingWeek, c.d.nextAiring ? `next: ${esc(c.d.nextAiring.show_name)} ${esc(c.d.nextAiring.next_episode || '')} on ${esc(c.d.nextAiring.next_airing)}` : 'no dates from the lookups yet')) },
+  { type: 'scanhist', group: 'Activity', label: 'Scan history', help: 'The most recent scans.', sizes: SZ_TABLE, def: 'l', guest: true, list: true, render: c => { const d = c.d, n = rows(c, 8); return `<div class="card"><h3>Scan history</h3><table>${d.lastScans.slice(0, n).map(s => `<tr><td class="muted tiny">${fmtDate(s.started)}</td><td><span class="badge ${s.status === 'done' ? 'ok' : s.status === 'running' ? '' : 'bad'}">${s.status}</span></td><td class="muted">${s.trigger}${s.threads > 1 ? ` · ${s.threads}t` : ''}</td><td class="num">${fmtMs(s.duration_ms)}</td><td class="num"><span class="kind-added">+${s.added}</span> <span class="kind-removed">−${s.removed}</span> <span class="kind-modified">~${s.modified}</span></td><td class="num muted">${s.probed} probed</td></tr>`).join('') || '<tr><td class="empty">—</td></tr>'}</table></div>`; } },
+  { type: 'recent', group: 'Activity', label: 'Recently added', help: 'The newest files in the library.', sizes: SZ_TABLE, def: 'm', guest: true, list: true, render: c => { const d = c.d, n = rows(c, 10); return `<div class="card"><h3>Recently added <a class="right" href="#changes">change log →</a></h3>${d.recentlyAdded.length ? `<table>${d.recentlyAdded.slice(0, n).map(r => `<tr><td><span class="badge ${r.library_type}">${typeName(r.library_type)}</span></td><td class="wrap">${esc(r.library_type === 'movie' ? `${r.movie_title} (${r.movie_year || '?'})` : `${r.show_name} ${sxe(r)}`)}<span class="sub">${esc(r.file_name)}</span></td><td class="num muted tiny">${fmtAgo(r.first_seen)}</td></tr>`).join('')}</table>` : '<div class="empty">Nothing yet</div>'}</div>`; } },
+  // ---- Storage
+  { type: 'storage', group: 'Storage', label: 'Free on the share', help: 'Free space and when the share fills at the current rate.', sizes: SZ_TILE, def: 's', guest: true, render: async c => storageTile(await c.lazy('storage', () => L.storage())) },
+  { type: 'storage_months', group: 'Storage', label: 'Storage added per month', help: 'How much was added each month and the space left on each disk.', sizes: SZ_CHART, def: 'xl', guest: true, render: async c => storagePanel(await c.lazy('storage', () => L.storage())).replace(' style="margin-top:12px"', '') },
+  { type: 'reclaim', group: 'Storage', label: 'Reclaimable space', help: 'Space held by large titles nobody has played in a year.', sizes: SZ_TILE, def: 's', render: async c => { if (!canSee('standard')) return null; const r = await c.lazy('reclaim', () => L.reclaim({ months: 12, minGb: 2 })); return linkTile('#reclaim', tile(r.candidates.length ? 'warnt' : 'okt', 'Could free', fmtBytes(r.totalBytes), `${r.candidates.length.toLocaleString()} titles not played in a year`)); } },
+  { type: 'biggest', group: 'Storage', label: 'Largest series', help: 'The series that take the most space.', sizes: SZ_TABLE, def: 'm', guest: true, list: true, render: c => { const d = c.d, n = rows(c, 10); return `<div class="card"><h3>Largest series</h3><table>${d.biggestShows.slice(0, n).map(s => `<tr><td><span class="badge ${s.library_type}">${typeName(s.library_type)}</span></td><td class="wrap">${esc(s.show_name)}</td><td class="num">${s.episodes} eps</td><td class="num">${fmtBytes(s.bytes)}</td><td class="num muted">${fmtHours(s.seconds)}</td></tr>`).join('') || '<tr><td class="empty">—</td></tr>'}</table></div>`; } },
+  { type: 'biggest_movies', group: 'Storage', label: 'Largest movie files', help: 'The biggest single movie files.', sizes: SZ_TABLE, def: 'm', guest: true, list: true, render: c => { const d = c.d, n = rows(c, 10); return `<div class="card"><h3>Largest movie files</h3><table>${d.biggestMovies.slice(0, n).map(m => `<tr><td class="wrap">${esc(m.movie_title)} <span class="muted">(${m.movie_year || '?'})</span></td><td>${esc(m.resolution || '')}</td><td class="muted">${esc(m.video_codec || '')}</td><td class="num">${fmtBytes(m.size)}</td></tr>`).join('') || '<tr><td class="empty">—</td></tr>'}</table></div>`; } },
+  // ---- Watching
+  { type: 'watched', group: 'Watching', label: 'Watched', help: 'Share of Plex-linked files that have been played.', sizes: SZ_TILE, def: 's', guest: true, render: c => linkTile(canSee('standard') ? '#watched' : '#tonight', tile('', 'Watched', c.d.watched.linked ? `${pct(c.d.watched.watched, c.d.watched.linked)}%` : '—', c.d.watched.linked ? `${c.d.watched.watched.toLocaleString()} of ${c.d.watched.linked.toLocaleString()} Plex-linked files` : 'sync Plex to see play counts')) },
+  { type: 'watched_donut', group: 'Watching', label: 'Watched (chart)', help: 'Watched against not yet, from Plex.', sizes: SZ_CHART, def: 'm', guest: true, render: c => window.Cards.donut([{ k: 'Watched', n: c.d.watched.watched, color: 'var(--accent2)' }, { k: 'Not yet', n: Math.max(0, c.d.watched.linked - c.d.watched.watched), color: 'var(--line)' }], 'Watched (Plex)', { center: c.d.watched.linked ? pct(c.d.watched.watched, c.d.watched.linked) + '%' : '—', sub: c.d.watched.linked ? 'of linked files' : 'sync Plex' }) },
+  { type: 'plays', group: 'Watching', label: 'Plays per day', help: 'Plays by everyone on the Plex server.', sizes: SZ_CHART, def: 'm', period: true, render: async c => { if (!canSee('standard')) return null; const days = window.UI.RANGE_DAYS[c.range] || 90; const w = await c.lazy('watched' + days, () => L.watched({ days: days > 3650 ? 'all' : days })); return window.Cards.trend(w.perDay.map(x => ({ x: x.day, y: x.plays })), 'Plays per day', { note: 'Appears once there are plays on two different days.' }); } },
+  { type: 'by_person', group: 'Watching', label: 'Plays by person', help: 'Who watched how much, split by library.', sizes: SZ_CHART, def: 'm', period: true, render: async c => { if (!canSee('standard')) return null; const days = window.UI.RANGE_DAYS[c.range] || 90; const w = await c.lazy('watched' + days, () => L.watched({ days: days > 3650 ? 'all' : days })); return bars(w.byPerson, 'Plays by person', { max: 12, drill: false }); } },
+  { type: 'nextup', group: 'Watching', label: 'Next up', help: 'The episode after the furthest one each person watched lately.', sizes: SZ_TABLE, def: 'l', list: true, render: async c => { if (!canSee('standard')) return null; const nu = await c.lazy('nextup', () => L.nextUp({ days: 60 })); const n = rows(c, 8); return `<div class="card"><h3>Next up <a class="right" href="#watched">watched →</a></h3>${nu.length ? `<table>${nu.slice(0, n).map(x => `<tr><td class="nowrap"><b>${esc(x.who)}</b></td><td class="wrap"><a href="#${x.library_type}/${encodeURIComponent(x.show)}">${esc(x.show)}</a></td><td class="num nowrap">${x.next ? `S${String(x.next.season).padStart(2, '0')}E${String(x.next.episode).padStart(2, '0')}` : '<span class="badge ok">caught up</span>'}</td><td class="num muted tiny nowrap">${x.left ? x.left + ' left' : ''}</td></tr>`).join('')}</table>` : '<div class="empty">No plays in the last 60 days</div>'}</div>`; } },
+  { type: 'anime_audio', group: 'Watching', label: 'Anime sub / dub', help: 'Anime series by how they are voiced.', sizes: SZ_CHART, def: 'm', guest: true, render: c => window.Cards.donut([{ k: 'Subbed', n: c.d.anime_audio.sub, color: 'var(--anime)', href: '#anime?q=sub' }, { k: 'Dubbed', n: c.d.anime_audio.dub, color: 'var(--movie)', href: '#anime?q=dub' }, { k: 'Dual audio', n: c.d.anime_audio.dual, color: 'var(--accent2)', href: '#anime?q=dual' }, { k: 'Mixed', n: c.d.anime_audio.mixed, color: 'var(--warn)', href: '#anime?q=mixed' }, { k: 'Raw', n: c.d.anime_audio.raw, color: 'var(--muted)' }], 'Anime sub / dub', { sub: 'series' }) },
+  { type: 'gaps', group: 'Watching', label: 'Most missing episodes', help: 'The series with the most gaps.', sizes: SZ_TABLE, def: 'l', guest: true, list: true, render: c => { const d = c.d, n = rows(c, 8); return `<div class="card"><h3>Most missing episodes <a class="right" href="#missing">all series →</a></h3>${d.missingEpisodes.top.length ? `<table>${d.missingEpisodes.top.slice(0, n).map(g => `<tr><td><span class="badge ${g.library_type}">${typeName(g.library_type)}</span></td><td class="wrap"><a href="#${g.library_type}/${encodeURIComponent(g.show_name)}">${esc(g.show_name)}</a>${g.matched_title && g.matched_title !== g.show_name ? `<span class="sub">${esc(g.matched_title)}</span>` : ''}</td><td class="num">${g.have} of ${g.expected}</td><td class="num bad">${g.missing_count} missing</td><td class="muted tiny wrap">${esc(missingText(g.missing, 6))}</td></tr>`).join('')}</table>` : `<div class="empty">${d.missingEpisodes.matched ? 'Every matched series is complete' : 'No expected counts yet; they are fetched in the background after a scan'}</div>`}</div>`; } },
+  // ---- Charts
+  { type: 'ch_resolution', group: 'Charts', label: 'Resolution', help: 'Files by resolution. Click a bar to open that list.', sizes: SZ_CHART, def: 'm', guest: true, render: c => bars(c.d.resolution, 'Resolution', { order: ['4K', '1440p', '1080p', '720p', '576p', '480p', 'SD', 'unknown'] }) },
+  { type: 'ch_vcodec', group: 'Charts', label: 'Video codec', help: 'Files by video codec.', sizes: SZ_CHART, def: 'm', guest: true, render: c => bars(c.d.videoCodec, 'Video codec') },
+  { type: 'ch_acodec', group: 'Charts', label: 'Audio codec', help: 'Files by audio codec.', sizes: SZ_CHART, def: 'm', guest: true, render: c => bars(c.d.audioCodec, 'Audio codec', { keyLabel: langKey }) },
+  { type: 'ch_container', group: 'Charts', label: 'Container', help: 'Files by container format.', sizes: SZ_CHART, def: 'm', guest: true, render: c => bars(c.d.container, 'Container') },
+  { type: 'ch_alang', group: 'Charts', label: 'Audio languages', help: 'Files by audio language.', sizes: SZ_CHART, def: 'm', guest: true, render: c => bars(c.d.audioLang, 'Audio languages', { keyLabel: langKey }) },
+  { type: 'ch_slang', group: 'Charts', label: 'Subtitle languages', help: 'Files by subtitle language.', sizes: SZ_CHART, def: 'm', guest: true, render: c => bars(c.d.subLang, 'Subtitle languages', { keyLabel: langKey }) },
+  { type: 'ch_fps', group: 'Charts', label: 'Frame rate', help: 'Files by frame rate.', sizes: SZ_CHART, def: 'm', guest: true, render: c => bars(c.d.fps, 'Frame rate', { keyLabel: k => k === 'unknown' ? k : k + ' fps' }) },
+  { type: 'ch_hdr', group: 'Charts', label: 'Dynamic range', help: 'SDR, HDR10, Dolby Vision and the rest.', sizes: SZ_CHART, def: 'm', guest: true, render: c => bars(c.d.hdr, 'Dynamic range') },
+  { type: 'ch_genres', group: 'Charts', label: 'Genres', help: 'The most common genres.', sizes: SZ_CHART, def: 'm', guest: true, list: true, render: c => bars(c.d.genres, 'Genres', { max: rows(c, 12), legend: true }) },
+  { type: 'ch_tags', group: 'Charts', label: 'Your tags (chart)', help: 'Your own tags by how many titles carry them.', sizes: SZ_CHART, def: 'm', guest: true, list: true, render: c => bars(c.d.tags.map(t => ({ k: t.tag, n: t.n, library_type: '' })), 'Your tags', { legend: false, max: rows(c, 12), drill: false }) },
+  // ---- Trends
+  { type: 'tr_files', group: 'Trends', label: 'Files over time', help: 'How the library grew, from the daily snapshots.', sizes: SZ_CHART, def: 'm', guest: true, period: true, render: c => window.Cards.trend(c.snaps(c.range).map(x => ({ x: x.day, y: x.files })), 'Files over time', { note: SNAP_NOTE }) },
+  { type: 'tr_free', group: 'Trends', label: 'Free space over time', help: 'Free space on the share, from the daily snapshots.', sizes: SZ_CHART, def: 'm', guest: true, period: true, render: c => window.Cards.trend(c.snaps(c.range).map(x => ({ x: x.day, y: x.free_bytes })), 'Free space over time', { fmt: fmtBytes, upIsGood: true, note: SNAP_NOTE }) },
+  { type: 'tr_missing', group: 'Trends', label: 'Missing episodes over time', help: 'Whether the gaps are closing.', sizes: SZ_CHART, def: 'm', guest: true, period: true, render: c => window.Cards.trend(c.snaps(c.range).map(x => ({ x: x.day, y: x.missing_episodes })), 'Missing episodes over time', { upIsGood: false, note: SNAP_NOTE }) },
+  { type: 'tr_pending', group: 'Trends', label: 'Pending requests over time', help: 'Whether requests are piling up.', sizes: SZ_CHART, def: 'm', guest: true, period: true, render: c => window.Cards.trend(c.snaps(c.range).map(x => ({ x: x.day, y: x.pending_requests })), 'Pending requests over time', { upIsGood: false, note: SNAP_NOTE }) },
+];
+// The layout a new account starts with: today's dashboard, in today's order.
+const DASH_DEFAULT = ['lib_all', 'lib_tv', 'lib_anime', 'lib_movie', 'storage', 'health',
+  'missing', 'pending', 'airing', 'upgrades', 'watched', 'lastscan', 'ended', 'dups', 'lowbit', 'lowres', 'overdue', 'reclaim',
+  'ch_resolution', 'ch_vcodec', 'ch_acodec', 'ch_genres', 'anime_audio', 'watched_donut',
+  'tr_files', 'tr_free', 'tr_missing', 'recent', 'biggest', 'biggest_movies', 'gaps', 'scanhist', 'storage_months'];
+const DASH_CFG = { catalog: DASH_CARDS, defaults: DASH_DEFAULT, load: dashLoad, header: (c) => c.notices || '', title: 'Dashboard', prefKey: 'dashboard' };
+views.dashboard = async () => {
+  // Thresholds set with the old per-tile gear carry over into the default layout the first time.
+  await loadPrefs();
+  const old = prefs.cards || {};
+  const defaults = DASH_DEFAULT.map(t => (old[t] && old[t].rule ? { type: t, o: { warn: old[t].rule.warn, bad: old[t].rule.bad } } : t));
+  window.Dash.mount({ ...DASH_CFG, defaults, after: null });
+  return window.Dash.render();
 };
+
 
 async function seriesView(type) {
   const rows = await L.data.series(type);

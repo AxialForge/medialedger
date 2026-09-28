@@ -48,20 +48,20 @@ const TOC_ENTRIES = [
   '1. What MediaLedger is', '1.1 What it never does', '1.2 Core concepts',
   '2. Installing and first run', '2.1 Install', '2.2 First launch', '2.3 Where your data lives', '2.4 Updates',
   '3. The window',
-  '4. Dashboard', '4.1 Top tiles', '4.2 Charts', '4.3 Panels', '4.4 What the new data adds', '4.5 Charts, colours and drill-down', '4.6 Storage forecast',
+  '4. Dashboard', '4.1 Top tiles', '4.2 Charts', '4.3 Panels', '4.4 What the new data adds', '4.5 Charts, colours and drill-down', '4.6 Storage forecast', '4.7 Editing the dashboard',
   '5. TV Shows and Anime', '5.1 Episode detail', '5.2 Tags: genres, sub/dub and your own',
   '6. Movies', '7. Web videos', '8. Adult library',
   '9. Missing episodes', '9.1 The Match dialog', '9.2 Airing next', '9.3 What you are collecting',
   '10. Issues', '10.1 Problems', '10.2 The Fix dialog', '10.3 Duplicates',
   '11. Quality', '11.1 Upgrade candidates', '11.2 Reclaim space', '12. Ratings', '12.1 Watch tonight', '12.2 Watched: who watched what',
-  '13. Media requests', '13.1 The phone page and notifications', '13.2 Schedules',
+  '13. Media requests', '13.1 The phone page and notifications', '13.2 Schedules', '13.3 The family portal',
   '14. Change log',
   '15. Movie names (the naming engine)', '15.1 The pattern', '15.2 Ready, flagged, blocked', '15.3 Batch settings', '15.4 Running a batch', '15.5 Undo', '15.6 Bulk source, collisions, placeholders',
   '16. Rename TV / anime', '17. CSV export', '17.1 Choosing what to export', '17.2 The files', '18. Settings reference', '18.1 Appearance',
   '19. Plex integration', '19.1 Setup', '19.2 What a sync stores', '19.3 Plex webhook',
   '20. System (health and hardware)', '20.1 Log',
   '21. Security', '21.1 Accounts and roles', '21.2 Always on', '21.3 Controls', '21.4 Two-factor codes with a phone', '21.5 HTTPS',
-  '22. Running MediaLedger on a Raspberry Pi', '22.1 Requirements', '22.2 Install, step by step', '22.3 First run on the Pi', '22.3a Your own name for the Pi', '22.4 Command reference', '22.5 Security on the Pi', '22.6 Moving the desktop database to the Pi', '22.7 File locations', '22.8 Pi troubleshooting',
+  '22. Running MediaLedger on a Raspberry Pi', '22.1 Requirements', '22.2 Install, step by step', '22.3 First run on the Pi', '22.3a Your own name for the Pi', '22.4 Command reference', '22.5 Security on the Pi', '22.6 Moving the desktop database to the Pi', '22.7 File locations', '22.9 Several services on one Pi: Caddy in front', '22.10 The family portal from outside: Tailscale Funnel', '22.8 Pi troubleshooting',
   '23. Troubleshooting', '24. Glossary',
 ];
 const body = [];
@@ -172,6 +172,10 @@ add(H1('4. Dashboard'), ...img('dashboard', 'The Dashboard after a full scan.'),
     '**Most missing episodes** – the series with the biggest gaps, with the exact episodes listed; whole missing seasons collapse into ranges such as "S6–S12 entirely".',
     '**Scan history** – the last eight scans with status, trigger, thread count, duration and counts.',
   ]),
+  H2('4.7 Editing the dashboard'),
+  P('Every element of the Dashboard is a **card** from a catalog, laid out on a grid six columns wide. Press **Edit dashboard** and each card gets a handle: drag it to move the card, or use ▲ ▼ on a phone; **S**, **M**, **L** and **XL** set the width (one, two, three or all six columns); ⚙ opens the card\'s options; ✕ removes it. **Add card** opens the catalog, grouped as Library, Health, Quality, Activity, Storage, Watching, Charts and Trends. A card can be added more than once, for example the same trend over a month and over a year. **Reset to default** puts the original layout back. **Done** saves.'),
+  P('The layout is saved **per account** on the web server, so your phone and your PC show the same arrangement and each person has their own; guests see the admin\'s. The desktop app keeps one layout. On narrow screens cards widen by themselves and the grid becomes one or two columns.'),
+  P('A card\'s options depend on the **options shown** level, chosen at the bottom of the dialog and remembered for your account. **Simple** offers the title and the size. **Standard** adds the period for trend cards and the number of rows for lists. **Advanced** adds the colour thresholds of number tiles. Thresholds you set before version 2.0 with the gear on a tile carry over. The trend period picker above the grid sets the period for every trend card that does not have its own.'),
 );
 
 // ---------------- 5 TV & Anime ----------------
@@ -330,6 +334,11 @@ add(H1('13. Media requests'), ...img('requests', 'The Requests tab as an admin s
   P('Settings → **Schedules** lists every job MediaLedger runs on its own, in one table: the library scan, the Plex sync, episode counts and airing dates, the backup, the daily snapshot and the daily summary. Each row shows when it runs, the last run and its result, the next run, and a **Run now** button. The timing controls sit underneath: the **Plex sync** interval (a timer keeps the Watched tab and play counts current on days without a scan; 0 means only after scans), the backup time and how many copies to keep, the snapshot time and the summary time. The scan timers and the Windows scheduled task follow.'),
   P('A job is **overdue** when it is enabled but has not run for twice its interval (48 hours for the daily ones), or when the last backup failed. Overdue jobs get a red badge in the table, a notice at the top of the Dashboard for admins, a line in the log and, once a day, a notification if **a scheduled job is overdue** is ticked under Notifications.'),
 
+  H2('13.3 The family portal'), ...img('family', 'The Family portal page: invites, addresses and the switch.'),
+  P('The **family portal** is a second front door for people you invite. It lets them browse the three libraries, use **What to watch tonight**, and send **media requests**, from a small site made for phones. It is a separate listener on its own port with its own short list of operations: sign-in, settings, scans, renames, exports and logs do not exist there, so there is nothing to break into. Every reply is built from a fixed list of fields, so file paths, the names of your NAS and shares, Plex keys, watch history and your notes never leave the server, and adult titles are never included.'),
+  P('**Invites.** On the **Family portal** page type a name, choose an expiry and what the person may do, and press **Create invite**. You get a link and a QR code, shown once: send it then. Opening the link on a phone remembers that device for six months; the link itself is only needed again on a new device. The table shows each person, when they were last seen, how many devices and requests, and gives **New link** (the old link and its devices stop working) and **Revoke**. Only a fingerprint of each link is stored, so a copied database cannot recreate one.'),
+  P('**What they see.** Library: search, genre, quality and sub or dub filters, and a page per title with the seasons and episodes on hand and what is missing. Tonight: the same filters and **Pick for me**; "not watched yet" follows the household Plex account. Requests: the form checks the library first and shows *already in the library* before sending; each person sees their own requests with your status and reply. Requests arrive in your Requests tab marked `family: Name`, with the usual notification. Filing is limited to a handful an hour per person.'),
+  P('**Addresses.** Give the portal a **public address** (what people away from home open, see 22.10) and optionally a **home address** served by Caddy. Invite links are built from them. Leave the portal reachable from **this machine only** when Caddy or Tailscale sits in front. Switching the portal **off** closes it for everyone at once and keeps the invites.'),
 );
 
 // ---------------- 14 Change log ----------------
@@ -647,10 +656,22 @@ add(H1('22. Running MediaLedger on a Raspberry Pi'),
     ['Power & throttling tile missing', 'The service user must be in the `video` group: `sudo usermod -aG video medialedger && sudo systemctl restart medialedger` (the installer does this).'],
     ['Above 80 °C during scans', 'Add a heatsink or fan, or lower Probe concurrency in Settings.'],
   ], [3000, 6360]),
-  H2('22.1 Several services on one Pi: Caddy in front'),
+  H2('22.9 Several services on one Pi: Caddy in front'),
   P('DNS records carry an address, never a port, so a second web service on the same Pi either lives on its own port in the URL or sits behind a reverse proxy. **Caddy** is the easy proxy: it owns ports 80 and 443, reads the name the browser asked for, and hands the request to the right service on a local port. Every service then has a clean `https://name.home` address with no port, and one root certificate covers all of them.'),
   P('Setup, once: `sudo apt install caddy`; move MediaLedger off 80/443 with `sudo bash install.sh --update-only --port=8080`; turn its own HTTPS off (Security → **Turn HTTPS off**); write `/etc/caddy/Caddyfile` with one block per service, `medialedger.home { tls internal  reverse_proxy 127.0.0.1:8080 }`, and `sudo systemctl reload caddy`. `tls internal` makes Caddy issue certificates from its own authority; install its root once per device from `/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt` and no service on that Pi warns again. To let visitors in over plain HTTP without a certificate, name both schemes: `http://medialedger.home, https://medialedger.home { … }`.'),
   P('Adding a service later is one block in the Caddyfile on the next free port, a reload, and one DNS record for the new name pointing at the same Pi. Behind the proxy MediaLedger sees every visitor as 127.0.0.1 unless the proxy forwards the real address, which Caddy does by default.'),
+  H2('22.10 The family portal from outside: Tailscale Funnel'),
+  P('People away from your home need a public address for the portal. **Tailscale Funnel** gives one for free, with a real certificate, without buying a domain and without opening a port on the router. Only the portal port is published; the admin site and every other service on the Pi stay private.'),
+  ...steps([
+    'Create a free Tailscale account at tailscale.com (a Google, Microsoft, GitHub or Apple sign-in works).',
+    'On the Pi: `curl -fsSL https://tailscale.com/install.sh | sh`, then `sudo tailscale up`. It prints a link; open it on your PC and approve the Pi.',
+    'In the Tailscale admin console, under DNS, enable **MagicDNS** and **HTTPS certificates**. Under Access controls, add the **funnel** node attribute when the console offers it the first time you run the next command.',
+    'In MediaLedger open **Family portal**, tick **on**, keep port 8090 and **this machine only**, and Save.',
+    'On the Pi: `sudo tailscale funnel --bg 8090`. It prints the public address, like `https://aether.your-tailnet.ts.net`.',
+    'Paste that address into **Public address** on the Family portal page and Save. Create an invite and open its link on a phone that is on mobile data.',
+  ]),
+  P('`tailscale funnel status` shows what is published and `sudo tailscale funnel --bg --https=443 off` stops it. Funnel survives reboots. At home you can also serve the portal under its own name by adding a block to the Caddyfile, `family.home { tls internal  reverse_proxy 127.0.0.1:8090 }`, with a DNS record for the name.'),
+  note('Funnel publishes only what you point it at. Never point it at the main MediaLedger port.'),
 );
 
 // ---------------- 23 Troubleshooting ----------------

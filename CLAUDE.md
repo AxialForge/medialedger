@@ -211,6 +211,16 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   `createService` open anything and moves the old files to `pre-restore-<stamp>/`. Swapping a WAL database under
   an open handle corrupts it, which is why the obvious "copy the file over" is wrong. New shells must call
   `applyPendingRestore` first thing.
+- **The family portal is a separate surface, not a role.** `src/server/portal.js` has its own listener, routes and
+  static folder (`src/portal/`). Never add an admin channel to it and never return a core row directly: every reply
+  goes through a `project*` function that copies named fields. `test/portal.test.js` fails if a reply contains a path,
+  an id or a Plex field, and if any admin route answers there. It calls `svc.setShowAdult(false)` before every core call.
+- **`X-Forwarded-For` is believed only from loopback** (`src/server/clientip.js`). Trusting it from any socket would let
+  a LAN client pick its own address and walk around LAN-only and the lockout.
+- **`dash.js` is vendored from the Bracket kit** with four marked `[ML]` changes (the `after` hook and the editor
+  level). MediaLedger has no kit `ui.js`; `ui-shim.js` provides `window.UI` and forwards to `window.__ml`, which
+  `app.js` fills in. Script order matters: `ui-shim.js`, `dash.js`, `app.js`. To add a dashboard card, add an entry to
+  `DASH_CARDS` in `app.js`; cards that need an extra call use `c.lazy(key, fn)` so it is fetched once per render.
 - **"Added" for a title is not `first_seen`.** `first_seen` is when MediaLedger first saw the file, so on a young
   ledger every title looks new. `watched.reclaim()` uses the earlier of `first_seen` and the newest file's mtime.
 - **Webhook history keys need more than a timestamp.** Several scrobbles can land in one millisecond; the key is
