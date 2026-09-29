@@ -833,6 +833,7 @@ function createService({ userData, log, send, host }) {
   h('data:purgeMissing', () => db.run('DELETE FROM files WHERE missing=1').changes);
 
   return {
+    notify: (event, title, message, extra) => notifier.send(event, title, message, extra),
     init, shutdown, handlers, runScan, refreshMetadata, runPlexSync, exportDir, ffprobePath, setShowAdult: (v) => { showAdult = !!v; },
     get settings() { return settings; }, get db() { return db; }, get scanner() { return scanner; },
     get scheduler() { return scheduler; }, get watcher() { return watcher; }, get metaJob() { return metaJob; },

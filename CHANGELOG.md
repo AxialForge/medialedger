@@ -8,6 +8,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [2.0.1] - 2026-09-28
+
+### Added
+
+- **Family portal address check.** The server opens its public and home
+  address the way a visitor would (DNS, connection, certificate, and the
+  portal identifying itself) every 15 minutes and on demand. Tiles show
+  working / not reachable, response time, up or down since, and certificate
+  days left. Two failures in a row raise a Dashboard notice, a log line and a
+  notification (new event "family portal not reachable"), with one more on
+  recovery. Listed under Settings → Schedules.
+
+### Fixed
+
+- Invites can no longer be created before an address is set, which produced
+  an invite with no link or QR code.
+- Family portal page: the Save button and the ratings checkbox no longer
+  stretch across the page.
+
 ## [2.0.0] - 2026-09-28
 
 ### Added

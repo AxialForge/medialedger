@@ -210,6 +210,7 @@ function createWindow() {
   h('status:info', () => ({ available: false }));       // the Home Assistant status URL is a web-server thing
   h('status:rotate', () => { throw new Error('Only available on the web server'); });
   h('portal:status', () => ({ available: false }));     // the family portal is served by the web server
+  h('portal:check', () => { throw new Error('Only available on the web server'); });
   h('portal:set', () => { throw new Error('Only available on the web server'); });
   h('portal:invite', () => { throw new Error('Only available on the web server'); });
   h('portal:renew', () => { throw new Error('Only available on the web server'); });

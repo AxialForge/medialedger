@@ -62,7 +62,7 @@ const send = (channel, payload) => { const data = `data: ${JSON.stringify({ chan
 const svc = createService({ userData: dataDir, log, send, host: { isPackaged: true, getAppPath: () => path.join(__dirname, '..', '..'), restart: () => setTimeout(() => process.exit(0), 1500) } });
 svc.init();
 // The family portal: its own listener, its own routes, its own static folder (see portal.js).
-const portal = createPortal({ svc, dataDir, log, audit: (...a) => sec.audit(...a), version: pkg.version });
+const portal = createPortal({ svc, dataDir, log, audit: (...a) => sec.audit(...a), version: pkg.version, notify: (...a) => svc.notify(...a) });
 
 // ---- roles ---------------------------------------------------------------------------------
 // What a guest (no account) may call: read-only library statistics, plus filing a media request.
@@ -108,6 +108,11 @@ const webHandlers = new Map([
   ['requests:add', (ctx, r) => svc.handlers.get('requests:add')({ ...(r || {}), requested_by: ctx.role === 'guest' ? `guest: ${String((r || {}).requested_by || 'anonymous').slice(0, 40)}` : ctx.session.user })],
   // family portal (admin only; not in the guest or standard lists)
   ['portal:status', () => portal.status()],
+  ['portal:check', async () => { await portal.checkNow(); return portal.status(); }],
+  // Schedules shows the portal's address check next to the core's jobs.
+  ['jobs:list', () => [...svc.handlers.get('jobs:list')(), portal.job()]],
+  ['jobs:overdue', () => { const j = portal.job(); return [...svc.handlers.get('jobs:overdue')(), ...(j.overdue ? [{ id: j.id, label: j.label, why: j.overdueWhy }] : [])]; }],
+  ['jobs:run', async (id) => { if (id !== 'portal') return svc.handlers.get('jobs:run')(id); const r = await portal.checkNow(); const c = [r.public, r.home].filter(Boolean); if (!c.length) throw new Error('Set an address on the Family portal page first'); return { done: true, message: c.map(x => `${x.url}: ${x.ok ? 'working' : x.error}`).join(' · ') }; }],
   ['portal:set', (ctx, o) => portal.setOptions(o || {}, ctx.session.user, ctx.ip)],
   ['portal:invite', (ctx, o) => portal.createInvite(o || {}, ctx.session.user, ctx.ip)],
   ['portal:renew', (ctx, id) => portal.renewInvite(String(id), ctx.session.user, ctx.ip)],

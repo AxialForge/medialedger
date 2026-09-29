@@ -35,7 +35,8 @@ const handlers = new Map([
   ['requests:add', (r) => { const row = { id: added.length + 1, status: 'pending', admin_note: null, created: new Date().toISOString(), updated: new Date().toISOString(), ...r }; added.push(row); return row; }],
 ]);
 const svc = { handlers, setShowAdult: (v) => adultCalls.push(v) };
-const portal = createPortal({ svc, dataDir: dir, log: () => {}, audit: (...a) => audits.push(a), version: 'test' });
+const notes = [];
+const portal = createPortal({ svc, dataDir: dir, log: () => {}, audit: (...a) => audits.push(a), version: 'test', notify: async (...a) => { notes.push(a); } });
 
 const call = (method, p, { cookie, body, headers } = {}) => new Promise((resolve, reject) => {
   const data = body ? JSON.stringify(body) : null;
@@ -57,6 +58,27 @@ const call = (method, p, { cookie, body, headers } = {}) => new Promise((resolve
   for (const p of ['/../server/security.js', '/..%2f..%2fserver%2fportal.js', '/%2e%2e/renderer/app.js']) assert.ok([400, 404].includes((await call('GET', p)).status), `${p} must not escape the portal folder`);
   assert.strictEqual((await call('GET', '/portal.js')).status, 200);
   assert.ok(/noindex/.test((await call('GET', '/')).headers['x-robots-tag']));
+
+  // the address checker: /health is public and says nothing private; a check must reach THIS portal
+  const hz = await call('GET', '/health'); assert.strictEqual(hz.status, 200); assert.deepStrictEqual(Object.keys(hz.json).sort(), ['app', 'instance', 'ok', 'version']);
+  portal.setOptions({ homeUrl: `http://127.0.0.1:${port}`, publicUrl: 'https://example.ts.net', checkMinutes: 0 }, 'admin', 'x');
+  let c = await portal.checkNow();
+  assert.strictEqual(c.home.ok, true, 'the home address reaches this portal'); assert.ok(c.home.ms >= 0);
+  assert.strictEqual(portal.job().overdue, false, 'one failure is not an outage');
+  const other = require('http').createServer((q, r) => { r.writeHead(200, { 'content-type': 'application/json' }); r.end(JSON.stringify({ ok: true, app: 'medialedger-portal', instance: 'someone-else' })); }).listen(port + 1, '127.0.0.1');
+  portal.setOptions({ homeUrl: `http://127.0.0.1:${port + 1}` }, 'admin', 'x');
+  c = await portal.checkNow(); assert.strictEqual(c.home.ok, false); assert.ok(/different/.test(c.home.error));
+  c = await portal.checkNow(); assert.ok(c.home.fails >= 2, 'failures in a row are counted');
+  assert.ok(notes.some(n => n[0] === 'portalDown' && /not reachable/.test(n[1])), 'two failures in a row notify');
+  assert.strictEqual(portal.job().overdue, true); assert.ok(/not reachable/.test(portal.job().overdueWhy));
+  other.close();
+  portal.setOptions({ homeUrl: `http://127.0.0.1:${port}` }, 'admin', 'x');
+  c = await portal.checkNow(); assert.strictEqual(c.home.ok, true);
+  assert.ok(notes.some(n => /reachable again/.test(n[1])), 'recovery notifies once');
+  assert.throws(() => portal.setOptions({ checkMinutes: -5 }, 'admin', 'x'), /interval/);
+  portal.setOptions({ homeUrl: '', publicUrl: '' }, 'admin', 'x');
+  assert.throws(() => portal.createInvite({ name: 'Nobody' }, 'admin', 'x'), /address first/, 'no address, no invite');
+  portal.setOptions({ publicUrl: 'https://example.ts.net' }, 'admin', 'x');
 
   // invites
   const mom = portal.createInvite({ name: 'Mom', days: 30 }, 'admin', '127.0.0.1');

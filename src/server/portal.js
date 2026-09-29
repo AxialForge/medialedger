@@ -13,6 +13,7 @@
 //
 // State lives in <data>/portal.json (mode 0600): { enabled, port, bind, publicUrl, homeUrl, showRatings, invites, devices }.
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -57,10 +58,11 @@ const projectRequest = (r) => ({ id: r.id, title: String(r.title), year: num(r.y
 
 const normTitle = (s) => String(s || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, ' ').replace(/\b(the|a|an)\b/g, ' ').replace(/\s+/g, ' ').trim();
 
-function createPortal({ svc, dataDir, log, audit, version }) {
+function createPortal({ svc, dataDir, log, audit, version, notify }) {
   const file = path.join(dataDir, 'portal.json');
   const staticDir = path.join(__dirname, '..', 'portal');
-  let state = { enabled: false, port: 8090, bind: '127.0.0.1', publicUrl: '', homeUrl: '', showRatings: true, invites: {}, devices: {} };
+  let state = { enabled: false, port: 8090, bind: '127.0.0.1', publicUrl: '', homeUrl: '', showRatings: true, checkMinutes: 15, invites: {}, devices: {} };
+  const instance = rand(9); // /health echoes it, so a check knows it reached THIS portal and not something else on that name
   try { state = { ...state, ...JSON.parse(fs.readFileSync(file, 'utf8')) }; } catch { /* first run */ }
   const save = () => { fs.writeFileSync(file, JSON.stringify(state, null, 2), { mode: 0o600 }); try { fs.chmodSync(file, 0o600); } catch { /* windows */ } };
   const within = limiter();
@@ -72,6 +74,7 @@ function createPortal({ svc, dataDir, log, audit, version }) {
   const linksFor = (id, secret) => { const tail = `/i/${id}.${secret}`; return { public: state.publicUrl ? state.publicUrl.replace(/\/+$/, '') + tail : null, home: state.homeUrl ? state.homeUrl.replace(/\/+$/, '') + tail : null, path: tail }; };
   function createInvite({ name, days, perms }, by, ip) {
     const n = String(name || '').trim().slice(0, 40); if (!n) throw new Error('Give the invite a name');
+    if (!state.publicUrl && !state.homeUrl) throw new Error('Set a public or home address first (under Addresses), then create the invite: the link is built from it');
     if (Object.values(state.invites).some(i => live(i) && i.name.toLowerCase() === n.toLowerCase())) throw new Error(`${n} already has an active invite; use New link on it`);
     const id = rand(6), secret = rand(24);
     const p = Object.fromEntries(PERMS.map(k => [k, !perms || perms[k] !== false]));
@@ -99,11 +102,13 @@ function createPortal({ svc, dataDir, log, audit, version }) {
     if (o.bind != null) { if (!['127.0.0.1', '0.0.0.0'].includes(o.bind)) throw new Error('Bind must be 127.0.0.1 or 0.0.0.0'); state.bind = o.bind; }
     for (const k of ['publicUrl', 'homeUrl']) if (o[k] != null) { const v = String(o[k]).trim(); if (v && !/^https?:\/\/[a-z0-9.-]+(:\d+)?\/?$/i.test(v)) throw new Error(`${k === 'publicUrl' ? 'Public' : 'Home'} address must look like https://name.example`); state[k] = v.replace(/\/+$/, ''); }
     if (typeof o.showRatings === 'boolean') state.showRatings = o.showRatings;
+    if (o.checkMinutes != null) { const m = Number(o.checkMinutes); if (!(m === 0 || (m >= 1 && m <= 1440))) throw new Error('Check interval must be 0 (off) or 1 to 1440 minutes'); state.checkMinutes = m; }
     save(); audit('portal_options', ip, `enabled=${state.enabled} port=${state.port}`, by);
     if (was.enabled !== state.enabled || was.port !== state.port || was.bind !== state.bind) restart();
+    armChecks(); setTimeout(() => checkNow().catch(() => {}), 1500);
     return status();
   }
-  const status = () => ({ available: true, enabled: state.enabled, port: state.port, bind: state.bind, publicUrl: state.publicUrl, homeUrl: state.homeUrl, showRatings: state.showRatings, listening, error: lastError, lastVisit, invites: Object.entries(state.invites).map(publicInvite).sort((a, b) => a.name.localeCompare(b.name)) });
+  const status = () => ({ available: true, enabled: state.enabled, port: state.port, bind: state.bind, publicUrl: state.publicUrl, homeUrl: state.homeUrl, showRatings: state.showRatings, checkMinutes: state.checkMinutes, checks: { public: checks.public, home: checks.home, next: nextCheck }, listening, error: lastError, lastVisit, invites: Object.entries(state.invites).map(publicInvite).sort((a, b) => a.name.localeCompare(b.name)) });
 
   // ---- visitors -------------------------------------------------------------------------------------
   const cookieOf = (req) => { const m = /(?:^|;\s*)mlp=([A-Za-z0-9_-]{20,})/.exec(req.headers.cookie || ''); return m ? m[1] : null; };
@@ -132,6 +137,8 @@ function createPortal({ svc, dataDir, log, audit, version }) {
     for (const [k, v] of Object.entries(HEADERS)) res.setHeader(k, v);
     try {
       if (!within('ip:' + ip, 600, 60000)) { res.setHeader('retry-after', '60'); return json(res, 429, { ok: false, error: 'Too many requests; wait a minute' }); }
+      // Nothing private: the checker (and anyone) may ask whether this is the portal and whether it is up.
+      if (url.pathname === '/health') return json(res, 200, { ok: true, app: 'medialedger-portal', version, instance });
       if (url.pathname === '/robots.txt') { res.writeHead(200, { 'content-type': 'text/plain' }); return res.end('User-agent: *\nDisallow: /\n'); }
 
       // ---- opening an invite link
@@ -225,20 +232,80 @@ function createPortal({ svc, dataDir, log, audit, version }) {
     }
   }
 
+  // ---- is the address working? The server opens its own public and home address the way a visitor would ----
+  // A check passes when the name resolves, the connection and the certificate are good, and /health answers
+  // with this portal's instance id. The home address may use Caddy's own certificate authority, which Node
+  // does not know, so there the certificate is not verified (the result says so).
+  const checks = { public: null, home: null };
+  let checkTimer = null, nextCheck = null;
+  function probe(base, { verify }) {
+    return new Promise((resolve) => {
+      const started = Date.now();
+      let u; try { u = new URL('/health', base); } catch { return resolve({ ok: false, error: 'not a valid address' }); }
+      const lib = u.protocol === 'https:' ? https : http;
+      const req = lib.request(u, { method: 'GET', timeout: 12000, headers: { accept: 'application/json', 'user-agent': 'MediaLedger-portal-check' }, ...(u.protocol === 'https:' ? { rejectUnauthorized: !!verify } : {}) }, (res) => {
+        let body = ''; res.setEncoding('utf8'); res.on('data', d => { if (body.length < 4096) body += d; });
+        res.on('end', () => {
+          const ms = Date.now() - started; let j = null; try { j = JSON.parse(body); } catch { /* not ours */ }
+          const cert = res.socket && typeof res.socket.getPeerCertificate === 'function' ? res.socket.getPeerCertificate() : null;
+          const certDays = cert && cert.valid_to ? Math.floor((new Date(cert.valid_to) - Date.now()) / 86400000) : null;
+          if (res.statusCode !== 200 || !j || j.app !== 'medialedger-portal') return resolve({ ok: false, ms, status: res.statusCode, error: res.statusCode === 200 ? 'something else answers on this address' : `the address answered ${res.statusCode}`, certDays });
+          if (j.instance !== instance) return resolve({ ok: false, ms, status: 200, error: 'a different MediaLedger portal answers on this address', certDays });
+          resolve({ ok: true, ms, status: 200, certDays, verified: u.protocol === 'https:' ? !!verify : null });
+        });
+      });
+      req.on('timeout', () => req.destroy(new Error('no answer within 12 seconds')));
+      req.on('error', (e) => resolve({ ok: false, ms: Date.now() - started, error: ({ ENOTFOUND: 'the name does not resolve (DNS)', EAI_AGAIN: 'the name does not resolve (DNS)', ECONNREFUSED: 'connection refused', ECONNRESET: 'connection reset', ETIMEDOUT: 'timed out', CERT_HAS_EXPIRED: 'the certificate has expired', DEPTH_ZERO_SELF_SIGNED_CERT: 'self-signed certificate', UNABLE_TO_VERIFY_LEAF_SIGNATURE: 'the certificate is not trusted', ERR_TLS_CERT_ALTNAME_INVALID: 'the certificate is for another name' })[e.code] || e.message }));
+      req.end();
+    });
+  }
+  async function checkOne(which, base, opts) {
+    if (!base) { checks[which] = null; return null; }
+    const prev = checks[which]; const r = await probe(base, opts); const now = new Date().toISOString();
+    const next = { ...r, url: base, at: now, since: prev && prev.ok === r.ok ? prev.since : now, fails: r.ok ? 0 : ((prev && prev.fails) || 0) + 1 };
+    checks[which] = next;
+    // One slow answer is not an outage: tell the owner on the second failure in a row, and once when it comes back.
+    if (!r.ok && next.fails === 2) { log(`portal check: ${which} address ${base} is not working: ${r.error}`); audit('portal_check_failed', '-', `${base}: ${r.error}`); if (notify) notify('portalDown', 'Family portal is not reachable', `${base}\n${r.error}\nChecked from the server itself. Open Family portal in MediaLedger for details.`, { address: base, error: r.error }).catch(() => {}); }
+    if (r.ok && prev && !prev.ok && prev.fails >= 2) { log(`portal check: ${which} address ${base} works again after ${Math.round((Date.now() - new Date(prev.since)) / 60000)} min`); if (notify) notify('portalDown', 'Family portal is reachable again', `${base}\nAnswered in ${r.ms} ms.`, { address: base, recovered: true }).catch(() => {}); }
+    if (r.ok && r.certDays != null && r.certDays < 10 && (!prev || prev.certDays == null || prev.certDays >= 10)) log(`portal check: the certificate on ${base} runs out in ${r.certDays} days`);
+    return next;
+  }
+  // One check at a time: a second caller waits for the one in flight instead of counting the same outage twice.
+  let inFlight = null;
+  function checkNow() {
+    if (inFlight) return inFlight;
+    inFlight = (async () => {
+      if (!state.enabled) { checks.public = checks.home = null; return { public: null, home: null }; }
+      await Promise.all([checkOne('public', state.publicUrl, { verify: true }), checkOne('home', state.homeUrl, { verify: false })]);
+      return { public: checks.public, home: checks.home };
+    })().finally(() => { inFlight = null; });
+    return inFlight;
+  }
+  function armChecks() {
+    if (checkTimer) { clearInterval(checkTimer); checkTimer = null; } nextCheck = null;
+    const m = Number(state.checkMinutes) || 0; if (!m || !state.enabled) return;
+    const tick = () => { nextCheck = new Date(Date.now() + m * 60000).toISOString(); checkNow().catch(e => log('portal check failed: ' + e.message)); };
+    checkTimer = setInterval(tick, m * 60000); if (checkTimer.unref) checkTimer.unref();
+    nextCheck = new Date(Date.now() + m * 60000).toISOString();
+  }
+  /** The row the Schedules table shows. */
+  const job = () => { const c = [checks.public, checks.home].filter(Boolean); const bad = c.filter(x => !x.ok && x.fails >= 2); const last = c.map(x => x.at).sort().pop() || null;
+    return { id: 'portal', label: 'Family portal address check', enabled: !!(state.enabled && state.checkMinutes && (state.publicUrl || state.homeUrl)), when: state.enabled ? (state.checkMinutes ? `every ${state.checkMinutes} min` : 'off') : 'portal is off', last, lastNote: c.length ? c.map(x => `${x.url.replace(/^https?:\/\//, '')}: ${x.ok ? 'working, ' + x.ms + ' ms' : x.error}`).join(' · ') : null, next: nextCheck, running: false, overdue: bad.length > 0, overdueWhy: bad.length ? bad.map(x => `${x.url} is not reachable (${x.error})`).join('; ') : null }; };
+
   // ---- listener ---------------------------------------------------------------------------------------
-  function stop() { if (server) { try { server.close(); } catch { /* ignore */ } server = null; } listening = null; }
+  function stop() { if (checkTimer) { clearInterval(checkTimer); checkTimer = null; } if (server) { try { server.close(); } catch { /* ignore */ } server = null; } listening = null; }
   function start() {
     stop(); lastError = null;
     if (!state.enabled) return;
     const s = http.createServer(handle);
     s.headersTimeout = 30000; s.requestTimeout = 60000; s.keepAliveTimeout = 65000;
     s.on('error', (e) => { lastError = e.code === 'EADDRINUSE' ? `port ${state.port} is already in use` : e.message; listening = null; log('portal: ' + lastError); });
-    s.listen(state.port, state.bind, () => { listening = `${state.bind}:${state.port}`; log(`family portal on http://${listening} (${Object.values(state.invites).filter(live).length} active invites)`); });
+    s.listen(state.port, state.bind, () => { armChecks(); setTimeout(() => checkNow().catch(() => {}), 5000); listening = `${state.bind}:${state.port}`; log(`family portal on http://${listening} (${Object.values(state.invites).filter(live).length} active invites)`); });
     server = s;
   }
   const restart = () => setTimeout(start, 200);
 
-  return { start, stop, status, setOptions, createInvite, renewInvite, revokeInvite, deleteInvite, handle, file };
+  return { checkNow, job, start, stop, status, setOptions, createInvite, renewInvite, revokeInvite, deleteInvite, handle, file };
 }
 
 module.exports = { createPortal, normTitle, projectSeries, projectMovie, projectEpisode, projectVersion, projectTonight, projectRequest, limiter };
