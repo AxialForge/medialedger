@@ -347,6 +347,18 @@ const MIGRATIONS = [
       ALTER TABLE plex_syncs ADD COLUMN detail TEXT;  -- JSON: per section items / matched / unmatched by reason
     `,
   },
+  {
+    version: 12, name: 'posters',
+    sql: `
+      -- One row per title that was asked for: the image is a file in the posters folder, this remembers which and why not.
+      CREATE TABLE IF NOT EXISTS posters (
+        library_type TEXT NOT NULL, title_key TEXT NOT NULL,
+        status TEXT NOT NULL,            -- ok | none (no art anywhere) | error
+        source TEXT, file TEXT, mime TEXT, bytes INTEGER, fetched_at TEXT, tries INTEGER DEFAULT 0, note TEXT,
+        PRIMARY KEY (library_type, title_key)
+      );
+    `,
+  },
 ];
 
 class Db {

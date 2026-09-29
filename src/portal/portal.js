@@ -29,6 +29,10 @@
   const mins = (m) => m ? (m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m} min`) : '';
   const tagRow = (r) => { const t = [...(r.genres || []).slice(0, 4), ...(r.tags || []).map(x => '#' + x)]; return t.length ? `<div class="tags">${t.map(x => `<span class="badge">${esc(x)}</span>`).join('')}</div>` : ''; };
   const audioBadge = (a) => a ? `<span class="badge">${esc({ sub: 'Sub', dub: 'Dub', dual: 'Sub + Dub', mixed: 'Mixed', raw: 'Raw' }[a] || a)}</span>` : '';
+  // Posters: the index says which titles have one, so no request is made for the rest.
+  let posters = {};
+  const loadPosters = async () => { try { posters = await cached('posters'); } catch { posters = {}; } };
+  const poster = (r, cls = 'pthumb') => { const v = posters[r.type + '|' + r.key]; return v ? `<img class="${cls}" loading="lazy" alt="" src="/p/poster?type=${encodeURIComponent(r.type)}&key=${encodeURIComponent(r.key)}&v=${v}">` : `<span class="${cls} none">${esc((r.title || '?').trim().slice(0, 1).toUpperCase())}</span>`; };
   const hrefOf = (r) => `#title/${r.type}/${encodeURIComponent(r.key)}`;
 
   // ---- Library ------------------------------------------------------------------------------------
@@ -43,13 +47,13 @@
       let list = rows.filter(r => (!q || r.title.toLowerCase().includes(q) || (r.tags || []).some(t => t.toLowerCase().includes(q))) && (!g || (r.genres || []).includes(g)) && (!b || r.best === b) && (!a || r.audio_type === a));
       list = list.slice().sort(s === 'rating' ? (x, y) => (y.online_rating || 0) - (x.online_rating || 0) : s === 'year' ? (x, y) => (y.year || 0) - (x.year || 0) : (x, y) => x.title.localeCompare(y.title));
       $('#count').textContent = `${list.length.toLocaleString()} of ${rows.length.toLocaleString()}`;
-      $('#list').innerHTML = list.slice(0, shown).map(r => `<a class="row" href="${hrefOf(r)}"><div class="t">${esc(r.title)}${r.year ? ` <span class="muted">(${r.year})</span>` : ''}</div><div class="s">${r.best ? `<span class="badge">${esc(r.best)}${r.hdr ? ' ' + esc(r.hdr) : ''}</span>` : ''}${audioBadge(r.audio_type)}${r.type === 'movie' ? `<span>${mins(r.minutes)}</span>${r.versions > 1 ? `<span>${r.versions} versions</span>` : ''}` : `<span>${r.episodes} episodes</span>${r.missing ? `<span class="badge warn">${r.missing} missing</span>` : r.expected ? '<span class="badge ok">complete</span>' : ''}`}${rating(r.online_rating)}${stars(r.my_rating)}</div>${tagRow(r)}</a>`).join('') || '<div class="empty">Nothing matches.</div>';
+      $('#list').innerHTML = list.slice(0, shown).map(r => `<a class="row has-poster" href="${hrefOf(r)}">${poster(r)}<div class="t">${esc(r.title)}${r.year ? ` <span class="muted">(${r.year})</span>` : ''}</div><div class="s">${r.best ? `<span class="badge">${esc(r.best)}${r.hdr ? ' ' + esc(r.hdr) : ''}</span>` : ''}${audioBadge(r.audio_type)}${r.type === 'movie' ? `<span>${mins(r.minutes)}</span>${r.versions > 1 ? `<span>${r.versions} versions</span>` : ''}` : `<span>${r.episodes} episodes</span>${r.missing ? `<span class="badge warn">${r.missing} missing</span>` : r.expected ? '<span class="badge ok">complete</span>' : ''}`}${rating(r.online_rating)}${stars(r.my_rating)}</div>${tagRow(r)}</a>`).join('') || '<div class="empty">Nothing matches.</div>';
       $('#more').innerHTML = list.length > shown ? `<button class="btn" id="moreBtn">Show more (${(list.length - shown).toLocaleString()} left)</button>` : '';
       if ($('#moreBtn')) $('#moreBtn').onclick = () => { shown += 120; draw(); };
     };
     const load = async () => {
       $('#list').innerHTML = '<div class="empty">Loading…</div>'; $('#fAudio').hidden = type !== 'anime';
-      try { rows = await cached('library?type=' + type); } catch (e) { if (e.message !== 'invite') $('#list').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+      try { await loadPosters(); rows = await cached('library?type=' + type); } catch (e) { if (e.message !== 'invite') $('#list').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
       const genres = [...new Set(rows.flatMap(r => r.genres || []))].sort();
       $('#fGenre').innerHTML = '<option value="">any genre</option>' + genres.map(g => `<option>${esc(g)}</option>`).join('');
       $('#sort').querySelector('[value=year]').hidden = type !== 'movie';
@@ -65,7 +69,8 @@
   async function title(type, key) {
     view.innerHTML = '<div class="empty">Loading…</div>';
     let t; try { t = await api(`title?type=${encodeURIComponent(type)}&key=${encodeURIComponent(key)}`); } catch (e) { if (e.message !== 'invite') view.innerHTML = `<p><a href="#library">‹ Library</a></p><div class="empty">${esc(e.message)}</div>`; return; }
-    const head = `<p><a href="#library">‹ Library</a></p><h1><span class="badge ${type}">${TYPE[type]}</span> ${esc(t.title)}${t.year ? ` <span class="muted">(${t.year})</span>` : ''}</h1>${tagRow(t)}`;
+    await loadPosters();
+    const head = `<p><a href="#library">‹ Library</a></p>${poster({ type, key, title: t.title }, 'pbig')}<h1><span class="badge ${type}">${TYPE[type]}</span> ${esc(t.title)}${t.year ? ` <span class="muted">(${t.year})</span>` : ''}</h1>${tagRow(t)}`;
     if (type === 'movie') {
       view.innerHTML = head + `<h2>${t.versions.length > 1 ? 'Versions on hand' : 'On hand'}</h2>` + t.versions.map(v => `<div class="card"><div class="row-s"><span class="badge">${esc(v.resolution || '?')}${v.hdr ? ' ' + esc(v.hdr) : ''}</span> ${v.edition ? `<span class="badge">${esc(v.edition)}</span>` : ''} <span class="muted">${mins(v.minutes)}${v.gb ? ' · ' + v.gb + ' GB' : ''}</span></div><div class="muted tiny" style="margin-top:6px">Audio: ${esc(v.audio.join(', ') || 'unknown')} · Subtitles: ${esc(v.subs.join(', ') || 'none')}</div></div>`).join('');
       return;
@@ -92,7 +97,7 @@
       <label class="chk"><input type="checkbox" id="tUnw"> Not watched yet</label><label class="chk"><input type="checkbox" id="tComp"> Complete series only</label>
       <p><button class="btn primary" id="tPick">Pick for me</button> <span class="muted tiny" id="tCount"></span></p><div id="tBox"></div><div class="list" id="tList"></div><div class="more" id="tMore"></div>
       <p class="muted tiny">"Not watched yet" follows the household's Plex account, not yours.</p>`;
-    let rows; try { rows = await cached('tonight'); } catch (e) { if (e.message !== 'invite') $('#tList').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+    let rows; try { await loadPosters(); rows = await cached('tonight'); } catch (e) { if (e.message !== 'invite') $('#tList').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
     $('#tGenre').innerHTML = '<option value="">any genre</option>' + [...new Set(rows.flatMap(r => r.genres || []))].sort().map(g => `<option>${esc(g)}</option>`).join('');
     $('#tKind').value = pref.kind || ''; $('#tGenre').value = pref.genre || ''; $('#tMin').value = pref.minutes || ''; $('#tUnw').checked = pref.unwatched !== false; $('#tComp').checked = !!pref.complete;
     let current = [], shown = 40;
@@ -106,7 +111,7 @@
       $('#tMore').innerHTML = current.length > shown ? '<button class="btn" id="tMoreBtn">Show more</button>' : '';
       if ($('#tMoreBtn')) $('#tMoreBtn').onclick = () => { shown += 80; draw(); };
     };
-    const item = (r) => `<a class="row" href="${hrefOf(r)}"><div class="t"><span class="badge ${r.type}">${r.kind === 'movie' ? 'Movie' : TYPE[r.type]}</span> ${esc(r.title)}${r.year ? ` <span class="muted">(${r.year})</span>` : ''}</div><div class="s">${r.kind === 'movie' ? `<span>${mins(r.minutes)}</span>` : `<span>${r.episodes} × ${r.minutes || '?'} min</span>${r.unwatched != null ? `<span>${r.unwatched} unwatched</span>` : ''}`}${r.best ? `<span class="badge">${esc(r.best)}</span>` : ''}${audioBadge(r.audio_type)}${rating(r.online_rating)}${stars(r.my_rating)}</div>${tagRow(r)}</a>`;
+    const item = (r) => `<a class="row has-poster" href="${hrefOf(r)}">${poster(r)}<div class="t"><span class="badge ${r.type}">${r.kind === 'movie' ? 'Movie' : TYPE[r.type]}</span> ${esc(r.title)}${r.year ? ` <span class="muted">(${r.year})</span>` : ''}</div><div class="s">${r.kind === 'movie' ? `<span>${mins(r.minutes)}</span>` : `<span>${r.episodes} × ${r.minutes || '?'} min</span>${r.unwatched != null ? `<span>${r.unwatched} unwatched</span>` : ''}`}${r.best ? `<span class="badge">${esc(r.best)}</span>` : ''}${audioBadge(r.audio_type)}${rating(r.online_rating)}${stars(r.my_rating)}</div>${tagRow(r)}</a>`;
     ['#tKind', '#tGenre', '#tMin', '#tUnw', '#tComp'].forEach(id => { $(id).onchange = () => { shown = 40; $('#tBox').innerHTML = ''; draw(); }; });
     $('#tPick').onclick = () => { if (!current.length) return toast('Nothing matches; loosen the filters', true); const r = current[Math.floor(Math.random() * current.length)]; $('#tBox').innerHTML = `<div class="card pick"><div class="muted tiny">Tonight</div>${item(r).replace('class="row"', 'class="row" style="border:0;padding:6px 0 0;background:none"')}</div>`; window.scrollTo({ top: 0, behavior: 'smooth' }); };
     draw();

@@ -66,7 +66,7 @@ const portal = createPortal({ svc, dataDir, log, audit: (...a) => sec.audit(...a
 
 // ---- roles ---------------------------------------------------------------------------------
 // What a guest (no account) may call: read-only library statistics, plus filing a media request.
-const GUEST = new Set(['app:info', 'security:me', 'data:dashboard', 'data:series', 'data:episodes', 'data:movies', 'data:movieFiles', 'data:search', 'web:channels', 'web:videos', 'ratings:list', 'meta:get', 'scan:status', 'scan:list', 'update:status', 'adult:status', 'requests:list', 'requests:add', 'roots:last', 'tags:list', 'tags:all', 'tags:get', 'data:tonight', 'data:storage', 'data:airing', 'prefs:get', 'data:snapshots']);
+const GUEST = new Set(['posters:index', 'app:info', 'security:me', 'data:dashboard', 'data:series', 'data:episodes', 'data:movies', 'data:movieFiles', 'data:search', 'web:channels', 'web:videos', 'ratings:list', 'meta:get', 'scan:status', 'scan:list', 'update:status', 'adult:status', 'requests:list', 'requests:add', 'roots:last', 'tags:list', 'tags:all', 'tags:get', 'data:tonight', 'data:storage', 'data:airing', 'prefs:get', 'data:snapshots']);
 // A standard user: everything a guest may, plus the review pages, own ratings, the adult switch for their own session.
 const STANDARD = new Set([...GUEST, 'data:watched', 'data:reclaim', 'data:nextUp', 'data:problems', 'data:duplicates', 'data:missing', 'data:quality', 'data:changes', 'data:changeStats', 'movie:plan', 'movie:batches', 'movie:batchItems', 'rename:proposals', 'rename:history', 'export:list', 'override:list', 'override:suggest', 'meta:status', 'plex:status', 'watch:status', 'schedule:nextInApp', 'db:stats', 'settings:get', 'adult:toggle', 'ratings:setUser', 'security:changePassword', 'tags:add', 'tags:remove', 'data:upgrades', 'rename:dry', 'prefs:set']);
 // Admins: every channel. Actions that write to the share or throw data away also need a fresh password (re-auth).
@@ -167,7 +167,7 @@ const webHandlers = new Map([
 // Plex webhook status/controls (admin). The URL includes the key; the Settings → Plex section shows it.
 const webhookEvents = []; // last 50 events received
 let webhookScanTimer = null;
-const webhookUrl = (req) => { const w = sec.webhook(); if (!w.key) return null; const host = req && req.headers.host ? req.headers.host : `${os.hostname()}.local:${port}`; return `${tls ? 'https' : 'http'}://${host}/api/plex/webhook?key=${w.key}`; };
+const webhookUrl = (req) => { const w = sec.webhook(); if (!w.key) return null; const host = req && req.headers.host ? req.headers.host : `${os.hostname()}.local:${port}`; return `${req && isHttps(req) ? 'https' : (tls ? 'https' : 'http')}://${host}/api/plex/webhook?key=${w.key}`; };
 webHandlers.set('prefs:get', (ctx) => sec.getPrefs(ctx.session ? ctx.session.user : null));
 webHandlers.set('prefs:set', (ctx, patch) => { if (!ctx.session) throw new Error('Sign in to save preferences'); return sec.setPrefs(ctx.session.user, patch); });
 webHandlers.set('status:info', (ctx) => { const key = sec.statusKey(false, ctx.ip, ctx.session && ctx.session.user); const host = ctx.req && ctx.req.headers.host ? ctx.req.headers.host : `${os.hostname()}.local:${servePort}`; return { available: true, url: `${tls ? 'https' : 'http'}://${host}/api/status?key=${key}` }; });
@@ -284,6 +284,17 @@ async function handle(req, res) {
       if (!tls || !sec.sessionOf(req.headers.cookie)) { res.writeHead(404); return res.end('not found'); }
       res.writeHead(200, { 'content-type': 'application/x-x509-ca-cert', 'content-disposition': 'attachment; filename="medialedger-cert.crt"', 'cache-control': 'no-store' });
       return fs.createReadStream(path.join(tlsDir, 'cert.pem')).pipe(res);
+    }
+    // Posters: /poster/<type>/<title key>. Anyone who may browse may see them; adult titles have none.
+    if (url.pathname.startsWith('/poster/')) {
+      const session = sec.sessionOf(req.headers.cookie);
+      if (!session && !sec.guestEnabled()) { res.writeHead(401); return res.end('sign in'); }
+      const m = /^\/poster\/(movie|tv|anime)\/(.+)$/.exec(url.pathname);
+      const f = m ? svc.posters.fileOf(m[1], decodeURIComponent(m[2])) : null;
+      if (!f) { res.writeHead(404, { 'cache-control': 'no-store' }); return res.end('no poster'); }
+      if (req.headers['if-none-match'] === `"${f.stamp}"`) { res.writeHead(304); return res.end(); }
+      res.writeHead(200, { 'content-type': f.mime, 'cache-control': 'private, max-age=604800', etag: `"${f.stamp}"` });
+      return fs.createReadStream(f.abs).pipe(res);
     }
     // Export downloads (admin session): /exports/<folder>/<file.csv> or /exports/<file.zip> from the export directory.
     if (url.pathname.startsWith('/exports/')) {

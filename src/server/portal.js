@@ -165,6 +165,15 @@ function createPortal({ svc, dataDir, log, audit, version, notify }) {
         const name = url.pathname.slice(3), q = url.searchParams;
         const need = (perm) => { if (!v.perms[perm]) { const e = new Error('Your invite does not include this'); e.code = 403; throw e; } };
         if (req.method === 'GET') {
+          if (name === 'posters') { need('browse'); return json(res, 200, { ok: true, result: svc.posters ? svc.posters.index() : {} }); }
+          if (name === 'poster') {
+            need('browse');
+            const type = q.get('type'), f = ['movie', 'tv', 'anime'].includes(type) && svc.posters ? svc.posters.fileOf(type, String(q.get('key') || '').slice(0, 300)) : null;
+            if (!f) { res.writeHead(404, { 'cache-control': 'no-store' }); return res.end('no poster'); }
+            if (req.headers['if-none-match'] === `"${f.stamp}"`) { res.writeHead(304); return res.end(); }
+            res.writeHead(200, { 'content-type': f.mime, 'cache-control': 'private, max-age=604800', etag: `"${f.stamp}"` });
+            return fs.createReadStream(f.abs).pipe(res);
+          }
           if (name === 'me') return json(res, 200, { ok: true, result: { name: v.name, perms: v.perms, showRatings: !!state.showRatings, app: 'MediaLedger', version } });
           if (name === 'library') {
             need('browse');

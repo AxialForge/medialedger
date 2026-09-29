@@ -217,6 +217,12 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   an id or a Plex field, and if any admin route answers there. It calls `svc.setShowAdult(false)` before every core call.
 - **`X-Forwarded-For` is believed only from loopback** (`src/server/clientip.js`). Trusting it from any socket would let
   a LAN client pick its own address and walk around LAN-only and the lockout.
+- **Posters are files, the table is the index.** `src/main/posters.js` names each file by `sha1(title key)` and the
+  `posters` table says which titles have one. Renderers ask for `posters:index` first and only request images that
+  exist, so a list of 1,400 rows does not cause 1,400 404s. The web shell serves `/poster/<type>/<key>`; the desktop
+  renderer is `file://` and gets a data URL over the bridge when the row scrolls into view. Plex resizes for us
+  (`/photo/:/transcode`), which is why there is no image library. Adult titles are excluded in `titles()`, so
+  nothing adult exists on disk to serve.
 - **`dash.js` is vendored from the Bracket kit** with four marked `[ML]` changes (the `after` hook and the editor
   level). MediaLedger has no kit `ui.js`; `ui-shim.js` provides `window.UI` and forwards to `window.__ml`, which
   `app.js` fills in. Script order matters: `ui-shim.js`, `dash.js`, `app.js`. To add a dashboard card, add an entry to

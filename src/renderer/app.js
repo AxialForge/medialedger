@@ -403,6 +403,24 @@ function storagePanel(st) {
 // ---------- views -----------------------------------------------------------
 const views = {};
 
+// ---- Posters ----------------------------------------------------------------------------------------
+// The index lists the titles that have a poster, so nothing is requested for the rest. On the web server the
+// image is a normal URL the browser caches; in the desktop app it arrives over the bridge when the row scrolls
+// into view.
+let posterIdx = {}, posterIdxAt = 0;
+const posterMem = new Map();
+async function loadPosterIndex(force) { if (!force && Date.now() - posterIdxAt < 60000) return posterIdx; try { posterIdx = await L.posters.index(); posterIdxAt = Date.now(); } catch { posterIdx = {}; } return posterIdx; }
+const posterTag = (type, key, title, cls = 'pthumb') => { const v = posterIdx[type + '|' + key]; return v ? `<img class="${cls}" alt="" decoding="async" data-poster="${esc(type)}|${esc(key)}" data-v="${v}">` : `<span class="${cls} none">${esc(String(title || '?').trim().slice(0, 1).toUpperCase())}</span>`; };
+const posterSeen = new IntersectionObserver((entries) => { for (const e of entries) { if (!e.isIntersecting) continue; const img = e.target; posterSeen.unobserve(img); const [type, ...rest] = img.dataset.poster.split('|'); const key = rest.join('|');
+  if (L.isWeb) { img.src = `poster/${type}/${encodeURIComponent(key)}?v=${img.dataset.v}`; continue; }
+  const id = img.dataset.poster + img.dataset.v; if (posterMem.has(id)) { img.src = posterMem.get(id); continue; }
+  L.posters.get(type, key).then(u => { if (u) { if (posterMem.size > 600) posterMem.delete(posterMem.keys().next().value); posterMem.set(id, u); img.src = u; } }).catch(() => {}); } }, { rootMargin: '300px' });
+new MutationObserver(() => { document.querySelectorAll('img[data-poster]:not([data-w])').forEach(i => { i.dataset.w = '1'; posterSeen.observe(i); }); }).observe(document.body, { childList: true, subtree: true });
+const wallOn = () => { try { return localStorage.getItem('medialedger.wall') === '1'; } catch { return false; } };
+const wallify = (t) => { t.node.classList.toggle('wall', wallOn()); return t; };
+const wallToggle = () => `<button class="small" id="wallBtn" title="Switch between the table and a wall of posters">${wallOn() ? '☰ Table' : '▦ Posters'}</button>`;
+const wireWall = (root) => { const b = $('#wallBtn', root); if (b) b.onclick = () => { try { localStorage.setItem('medialedger.wall', wallOn() ? '0' : '1'); } catch { /* ignore */ } route(); }; };
+
 // ---- Dashboard: every element is a card from this catalog; dash.js arranges them per account ----
 const SNAP_NOTE = 'Daily snapshots start tonight; the line appears after the second one.';
 async function dashLoad() {
@@ -506,9 +524,9 @@ views.dashboard = async () => {
 
 
 async function seriesView(type) {
-  const rows = await L.data.series(type);
+  const [rows] = await Promise.all([L.data.series(type), loadPosterIndex()]);
   const cols = [
-    { key: 'show_name', label: 'Series', cls: 'wrap' },
+    { key: 'show_name', label: 'Series', cls: 'wrap ptitle', render: r => `${posterTag(type, r.show_name, r.show_name)}<span class="pname">${esc(r.show_name)}</span>` },
     { key: 'tags', label: 'Tags', cls: 'wrap tagcell', sortVal: r => (r.tags || []).length * 100 + (r.genres || []).length, render: tagCell },
     { key: 'seasons', label: 'Seasons', num: true, render: r => r.min_season === r.max_season ? `${r.seasons}` : `${r.seasons} <span class="muted tiny">S${r.min_season}–S${r.max_season}</span>` },
     { key: 'episodes', label: 'Episodes', num: true },
@@ -526,7 +544,7 @@ async function seriesView(type) {
     { key: 'unparsed', label: 'Issues', num: true, render: r => (r.unparsed ? `<span class="badge warn">${r.unparsed} unparsed</span>` : '') + (r.probed < r.episodes ? `<span class="badge">${r.episodes - r.probed} unprobed</span>` : '') },
   ];
   rows.forEach(r => { r.unwatched = r.plex_linked ? r.episodes - r.watched : null; });
-  const build = (list) => makeTable(list, cols, { search: r => `${r.show_name} ${tagText(r)} ${r.resolutions || ''} ${r.codecs || ''} ${r.audio_langs || ''}`, defaultSort: { key: 'show_name' }, onRow: r => { location.hash = `#${type}/${encodeURIComponent(r.show_name)}`; } });
+  const build = (list) => wallify(makeTable(list, cols, { search: r => `${r.show_name} ${tagText(r)} ${r.resolutions || ''} ${r.codecs || ''} ${r.audio_langs || ''}`, defaultSort: { key: 'show_name' }, onRow: r => { location.hash = `#${type}/${encodeURIComponent(r.show_name)}`; } }));
   let table = build(rows);
   const eps = rows.reduce((a, r) => a + r.episodes, 0), bytes = rows.reduce((a, r) => a + (r.bytes || 0), 0), secs = rows.reduce((a, r) => a + (r.seconds || 0), 0);
     const linked = rows.filter(r => r.plex_linked), watchedEps = linked.reduce((a, r) => a + r.watched, 0), linkedEps = linked.reduce((a, r) => a + r.episodes, 0);
@@ -540,7 +558,7 @@ async function seriesView(type) {
     ${tile('', 'Top genres', chips(topG.map(x => x[0])), topG.slice(3, 7).map(x => `${x[0]} ${x[1]}`).join(' · ') || (topG.length ? '' : 'from TVmaze / AniList / Plex'))}
     ${tile('', 'Your tags', tagged ? `${tagged} series` : '—', topT.slice(0, 4).map(x => `${x[0]} ${x[1]}`).join(' · ') || 'type one on any series page')}
     ${tile('', 'Full captions', rows.filter(r => r.probed && r.captioned === r.episodes).length + ' series')}${linkTile('#issues', tile(rows.filter(r => r.unparsed).length ? 'warnt' : '', 'With issues', rows.filter(r => r.unparsed).length + ' series'))}</div>`;
-  const tb = searchToolbar(table, rows.length, '<span class="muted tiny">Filter also matches genres, sub/dub and your tags</span>');
+  const tb = searchToolbar(table, rows.length, wallToggle() + '<span class="muted tiny">Filter also matches genres, sub/dub and your tags</span>'); wireWall(tb);
   const fb = filterBar(rows, (list) => { const q = $('input[type=search]', tb).value; const nt = build(list); table.node.replaceWith(nt.node); table = nt; nt.node.addEventListener('count', ev => $('.count', tb).textContent = `${ev.detail} of ${rows.length}`); nt.setQuery(q); if (!q) $('.count', tb).textContent = `${list.length} of ${rows.length}`; });
   view.append(tb, fb, table.node); applyQuery(tb, table);
 }
@@ -555,7 +573,7 @@ views.upgrades = async () => {
     <div class="tiles compact">${tile(cands.length ? 'warnt' : 'okt', 'Worth upgrading', cands.length)}${tile('', 'Not worth it', rest.filter(r => !r.plays && !r.my_rating && (r.best === '720p' || r.best === '480p' || r.best === 'SD' || r.best === '576p')).length, 'low copy, never played, unrated')}${tile('', 'Already 4K or HDR', all.filter(r => r.best === '4K' || r.hdr).length)}${tile('', 'Titles scored', all.length)}</div>
     <div id="uTable"></div>`;
   const cols = [
-    { key: 'title', label: 'Title', cls: 'wrap', render: r => `<span class="badge ${r.type}">${r.kind === 'movie' ? 'Movie' : typeName(r.type)}</span> ${esc(r.title)}${r.year ? ` <span class="muted">(${r.year})</span>` : ''}` },
+    { key: 'title', label: 'Title', cls: 'wrap ptitle', render: r => `${posterTag(r.type, r.key, r.title)}<span class="badge ${r.type}">${r.kind === 'movie' ? 'Movie' : typeName(r.type)}</span> ${esc(r.title)}${r.year ? ` <span class="muted">(${r.year})</span>` : ''}` },
     { key: 'score', label: 'Score', num: true, render: r => r.score > 0 ? `<b>${Number(r.score).toFixed(1)}</b>` : '<span class="muted">0</span>' },
     { key: 'reasons', label: 'Why', cls: 'wrap', render: r => r.reasons.map(x => `<span class="badge ${/low|never/.test(x) ? 'warn' : ''}">${esc(x)}</span>`).join(' ') },
     { key: 'best', label: 'Best copy', render: r => r.best ? `<span class="badge">${esc(r.best)}</span>${r.hdr ? ' <span class="badge ok">HDR</span>' : ''}` : '' },
@@ -739,7 +757,7 @@ views.watched = async () => {
 
 // ---- Watch tonight: one list across series and movies, filtered by what you have not seen, how long you have, and your tags ----
 views.tonight = async () => {
-  const all = await L.tonight();
+  const [all] = await Promise.all([L.tonight(), loadPosterIndex()]);
   const pref = (() => { try { return JSON.parse(localStorage.getItem('medialedger.tonight') || '{}'); } catch { return {}; } })();
   view.innerHTML = `<h1>Watch tonight</h1>
     <p class="lead">Everything in the library on one list, narrowed by what Plex says you have not watched, how long you have, and your own ratings and tags. <b>Pick for me</b> chooses one at random from whatever is left.</p>
@@ -779,7 +797,7 @@ views.tonight = async () => {
   $('#tPick').onclick = () => {
     if (!current.length) return toast('Nothing matches; loosen the filters', true);
     const r = current[Math.floor(Math.random() * current.length)];
-    $('#tPickBox').innerHTML = `<div class="card" style="margin:10px 0;border-color:var(--accent)"><h3>Tonight: <span class="badge ${r.type}">${r.kind === 'movie' ? 'Movie' : typeName(r.type)}</span> ${esc(r.title)}${r.year ? ` (${r.year})` : ''}</h3><div class="tagcell">${tagCell(r)}</div><p class="muted">${r.kind === 'movie' ? fmtDur(r.minutes * 60) : `${r.episodes} episodes of about ${r.minutes} min${r.unwatched != null ? `, ${r.unwatched} unwatched` : ''}`}${r.online_rating != null ? ` · rated ${Number(r.online_rating).toFixed(1)}` : ''}</p><div class="inline"><button class="small" id="tOpen">Open</button><button class="small" id="tAgain">Pick another</button></div></div>`;
+    $('#tPickBox').innerHTML = `<div class="card" style="margin:10px 0;border-color:var(--accent);overflow:hidden">${posterTag(r.type, r.key, r.title, 'pbig')}<h3>Tonight: <span class="badge ${r.type}">${r.kind === 'movie' ? 'Movie' : typeName(r.type)}</span> ${esc(r.title)}${r.year ? ` (${r.year})` : ''}</h3><div class="tagcell">${tagCell(r)}</div><p class="muted">${r.kind === 'movie' ? fmtDur(r.minutes * 60) : `${r.episodes} episodes of about ${r.minutes} min${r.unwatched != null ? `, ${r.unwatched} unwatched` : ''}`}${r.online_rating != null ? ` · rated ${Number(r.online_rating).toFixed(1)}` : ''}</p><div class="inline"><button class="small" id="tOpen">Open</button><button class="small" id="tAgain">Pick another</button></div></div>`;
     $('#tOpen').onclick = () => { location.hash = r.kind === 'movie' ? '#movies/' + encodeURIComponent(r.key) : `#${r.type}/${encodeURIComponent(r.key)}`; };
     $('#tAgain').onclick = () => $('#tPick').click();
   };
@@ -829,7 +847,8 @@ async function episodesView(type, show) {
     { key: 'id', label: '', render: r => fixBtn(r) },
   ];
   const table = makeTable(rows, cols, { search: r => `${r.file_name} ${r.episode_title || ''} ${sxe(r)}`, defaultSort: { key: 'season' }, onRow: r => L.showItem(r.abs_path) });
-  view.innerHTML = `<div class="detail-head"><span class="back" id="back">← ${typeName(type)}</span><h1>${esc(show)}</h1><span class="muted">${live.length} episodes · ${fmtBytes(bytes)} · ${fmtHours(secs)}</span>${miss && miss.expected ? (miss.missing_count ? `<span class="badge bad">${miss.missing_count} missing of ${miss.expected}</span>` : '<span class="badge ok">complete</span>') : ''}<span class="grow"></span>${matchBtn(type, show)}</div>`;
+  await loadPosterIndex();
+  view.innerHTML = `${posterTag(type, show, show, 'pbig')}<div class="detail-head"><span class="back" id="back">← ${typeName(type)}</span><h1>${esc(show)}</h1><span class="muted">${live.length} episodes · ${fmtBytes(bytes)} · ${fmtHours(secs)}</span>${miss && miss.expected ? (miss.missing_count ? `<span class="badge bad">${miss.missing_count} missing of ${miss.expected}</span>` : '<span class="badge ok">complete</span>') : ''}<span class="grow"></span>${matchBtn(type, show)}</div>`;
   $('#back').onclick = () => { location.hash = '#' + type; };
   view.insertAdjacentHTML('beforeend', tagStrip(type, show, { genres: data.genres || [], audio: live.length ? (rows.some(r => /jpn|\bja\b/i.test(r.audio_langs || '')) ? (live.every(r => /jpn|\bja\b/i.test(r.audio_langs || '') && /eng|\ben\b/i.test(r.audio_langs || '')) ? 'dual' : live.every(r => /jpn|\bja\b/i.test(r.audio_langs || '')) ? 'sub' : 'mixed') : (type === 'anime' && live.some(r => /eng|\ben\b/i.test(r.audio_langs || '')) ? 'dub' : null)) : null, tags: data.tags || [] })); refreshTagSuggestions();
   if (miss && miss.expected) view.insertAdjacentHTML('beforeend', missingGrid(miss));
@@ -837,9 +856,9 @@ async function episodesView(type, show) {
 }
 
 views.movies = async () => {
-  const rows = await L.data.movies();
+  const [rows] = await Promise.all([L.data.movies(), loadPosterIndex()]);
   const cols = [
-    { key: 'title', label: 'Title', cls: 'wrap', render: r => `${esc(r.title)}${r.files > 1 ? ` <span class="badge warn">×${r.files}</span>` : ''}` },
+    { key: 'title', label: 'Title', cls: 'wrap ptitle', render: r => `${posterTag('movie', r.group_key, r.title)}<span class="pname">${esc(r.title)}${r.year ? `<span class="pyear muted"> (${r.year})</span>` : ''}</span>${r.files > 1 ? ` <span class="badge warn">×${r.files}</span>` : ''}` },
     { key: 'year', label: 'Year', num: true },
     { key: 'tags', label: 'Tags', cls: 'wrap tagcell', sortVal: r => (r.tags || []).length * 100 + (r.genres || []).length, render: tagCell },
     { key: 'files', label: 'Files', num: true },
@@ -853,7 +872,7 @@ views.movies = async () => {
   ];
   rows.forEach(r => { r.watched = r.watched_count > 0 ? 1 : 0; r.unwatched = r.plex_linked ? (r.watched_count > 0 ? 0 : 1) : null; });
   let onlyMulti = false, filtered = rows;
-  const build = () => makeTable((onlyMulti ? filtered.filter(r => r.files > 1) : filtered), cols, { search: r => `${r.title} ${r.year || ''} ${tagText(r)} ${r.resolutions || ''} ${r.codecs || ''} ${r.hdr || ''}`, defaultSort: { key: 'title' }, onRow: r => { location.hash = '#movies/' + encodeURIComponent(r.group_key); } });
+  const build = () => wallify(makeTable((onlyMulti ? filtered.filter(r => r.files > 1) : filtered), cols, { search: r => `${r.title} ${r.year || ''} ${tagText(r)} ${r.resolutions || ''} ${r.codecs || ''} ${r.hdr || ''}`, defaultSort: { key: 'title' }, onRow: r => { location.hash = '#movies/' + encodeURIComponent(r.group_key); } }));
   let table = build();
   const multi = rows.filter(r => r.files > 1);
     const mLinked = rows.filter(r => r.plex_linked), mWatched = mLinked.filter(r => r.watched_count > 0);
@@ -865,7 +884,7 @@ views.movies = async () => {
     ${tile('', 'Your tags', mTagged ? `${mTagged} titles` : '—', mTopT.slice(0, 4).map(x => `${x[0]} ${x[1]}`).join(' · ') || 'type one on any movie page')}
     ${mAu.sub + mAu.dub + mAu.dual + mAu.mixed ? tile('', 'Sub / dub', `${mAu.sub} subbed`, `${mAu.dual} dual · ${mAu.mixed} mixed`) : ''}
     ${linkTile('#issues/duplicates', tile(multi.length ? 'warnt' : '', 'Multiples', multi.length + ' titles', fmtBytes(multi.reduce((a, r) => a + (r.bytes || 0), 0))))}${tile('', 'With captions', rows.filter(r => r.has_captions === 1).length)}</div>`;
-  const tb = searchToolbar(table, rows.length, '<label class="inline small"><input type="checkbox" id="multi"> Only titles with multiple files</label>');
+  const tb = searchToolbar(table, rows.length, wallToggle() + '<label class="inline small"><input type="checkbox" id="multi"> Only titles with multiple files</label>'); wireWall(tb);
   const swap = () => { const q = $('input[type=search]', tb).value; const nt = build(); table.node.replaceWith(nt.node); table = nt; nt.node.addEventListener('count', ev => $('.count', tb).textContent = `${ev.detail} of ${rows.length}`); nt.setQuery(q); };
   const fb = filterBar(rows, (list) => { filtered = list; swap(); });
   view.append(tb, fb, table.node); applyQuery(tb, table);
@@ -891,7 +910,8 @@ async function movieFilesView(groupKey) {
     { key: 'id', label: '', render: r => fixBtn(r) },
   ];
   const table = makeTable(rows, cols, { onRow: r => L.showItem(r.abs_path) });
-  view.innerHTML = `<div class="detail-head"><span class="back" id="back">← Movies</span><h1>${esc(r0.movie_title || groupKey)}${r0.movie_year ? ` <span class="muted">(${r0.movie_year})</span>` : ''}</h1><span class="muted">${rows.length} file(s)</span></div>`;
+  await loadPosterIndex();
+  view.innerHTML = `${posterTag('movie', groupKey, r0.movie_title || groupKey, 'pbig')}<div class="detail-head"><span class="back" id="back">← Movies</span><h1>${esc(r0.movie_title || groupKey)}${r0.movie_year ? ` <span class="muted">(${r0.movie_year})</span>` : ''}</h1><span class="muted">${rows.length} file(s)</span></div>`;
   $('#back').onclick = () => { location.hash = '#movies'; };
   const mg = (() => { try { const g = JSON.parse(rows.map(r => r.plex_genres).find(Boolean) || '[]'); return Array.isArray(g) ? g : []; } catch { return []; } })();
   const live = rows.filter(r => !r.missing); const jp = r => /jpn|\bja\b/i.test(r.audio_langs || ''), en = r => /eng|\ben\b/i.test(r.audio_langs || '');
@@ -1505,6 +1525,11 @@ views.settings = async () => {
       <div class="field"><label></label><div class="inline"><button class="small" id="backupNow">Back up database now</button><button class="small" id="openBackups">Open backups folder</button><button class="small" id="openData">Open data folder</button><button class="small" id="openLog">Open log</button></div></div>
       <div class="field"><label>Nightly backup to a folder</label><div class="inline"><input type="checkbox" id="bkOn" ${s.backup && s.backup.enabled ? 'checked' : ''}> <input type="text" id="bkDir" style="flex:1" placeholder="${L.isWeb ? '/mnt/media/Backups/MediaLedger' : '\\\\192.168.1.204\\Apocrypha_Media_Pool\\Backups\\MediaLedger'}" value="${esc((s.backup && s.backup.dir) || '')}"><button class="small" id="pickBk">Browse…</button> <button class="small" id="bkNow">Back up there now</button> <button class="small" id="bkRestore">Restore…</button></div><div class="hint">Copies the database (every fix, rating, tag, match and the change log), the settings and, on the web server, the accounts file to that folder once a day, dated, keeping the newest N sets. <b>Restore…</b> brings one back. Put it on the NAS so a dead SD card or PC costs nothing. ${s.backup && s.backup.lastRun ? `Last: ${esc(fmtDate(s.backup.lastRun))} → <span class="mono">${esc(s.backup.lastFile || '')}</span>` : 'Never run yet.'}${s.backup && s.backup.lastError ? ` <span class="bad">Last error: ${esc(s.backup.lastError)}</span>` : ''}</div></div>
 
+      <h2>Posters</h2>
+      <div class="field"><label>Posters</label><div class="inline"><label class="inline"><input type="checkbox" id="poOn" ${!s.posters || s.posters.enabled !== false ? 'checked' : ''}> fetch posters</label> <label class="inline"><input type="checkbox" id="poOnline" ${!s.posters || s.posters.online !== false ? 'checked' : ''}> also from AniList and TVmaze</label> width <select id="poWidth" class="small">${[200, 300, 400].map(w => `<option value="${w}" ${((s.posters && s.posters.width) || 300) === w ? 'selected' : ''}>${w} px</option>`).join('')}</select></div><div class="hint">One small image per title, from Plex first (resized by Plex itself), then AniList or TVmaze for series Plex does not have. New titles are fetched after each scan and Plex sync. Adult titles never get one.</div></div>
+      <div class="field"><label>Posters folder</label><div class="inline"><input type="text" id="poDir" style="flex:1" placeholder="${L.isWeb ? '/mnt/medialedger/Posters' : '\\\\192.168.1.204\\Apocrypha_Main_Pool\\Service_Pool\\MediaLedger\\Posters'}" value="${esc((s.posters && s.posters.dir) || '')}"><button class="small" id="pickPo">Browse…</button></div><div class="hint">Empty keeps them next to the database. A folder on the NAS lets the desktop app and the web server share one set; about 100 MB for a library this size. Changing the folder does not move files: press Fetch again afterwards.</div></div>
+      <div class="field"><label></label><div><div class="status-line" id="poStatus">Checking…</div><div class="inline" style="margin-top:6px"><button class="small" id="poRun">Fetch missing posters</button><button class="small" id="poAll">Fetch all again</button><button class="small danger" id="poClear">Delete all posters</button></div></div></div>
+
       <h2>Updates</h2>
       <div class="field"><label>Automatic updates</label><input type="checkbox" id="updOn" ${s.updates.enabled ? 'checked' : ''}><div class="hint">Installed builds check GitHub Releases on launch and every 6 hours, download silently and apply on the next restart. Your database and settings are untouched by updates.</div></div>
       <div class="field"><label>GitHub token</label><input type="password" id="ghToken" value="${esc(s.githubToken)}" placeholder="not needed – the repository is public"><div class="hint">Leave empty. Only needed if the AxialForge/medialedger repository is ever made private again (fine-grained token, Contents: read). Takes effect on the next Check for updates.</div></div>
@@ -1601,6 +1626,7 @@ views.settings = async () => {
       notify: { ...(s.notify || {}), webhookUrl: $('#nfHook').value.trim(), email: { enabled: $('#nfMailOn').checked, host: $('#nfHost').value.trim(), port: Number($('#nfPort').value) || 587, secure: $('#nfSecure').checked, user: $('#nfUser').value.trim(), pass: $('#nfPass').value, from: $('#nfUser').value.trim(), to: $('#nfTo').value.trim() }, events: Object.fromEntries([...document.querySelectorAll('.nfEv')].map(c => [c.dataset.ev, c.checked])), dailyTime: $('#nfTime').value || '08:00' },
       schedule: { ...s.schedule, inAppEnabled: $('#inApp').checked, inAppIntervalHours: Number($('#inAppHours').value) || 24, taskTime: $('#taskTime').value || '03:00' },
       snapshot: { ...(s.snapshot || {}), time: $('#snapTime').value || '03:05' },
+      posters: { ...(s.posters || {}), enabled: $('#poOn').checked, online: $('#poOnline').checked, width: Number($('#poWidth').value) || 300, dir: $('#poDir').value.trim() },
       updates: { enabled: $('#updOn').checked }, githubToken: $('#ghToken').value.trim(),
       metadata: { ...s.metadata, enabled: $('#metaOn').checked, refreshDays: Number($('#metaDays').value) || 14 },
       watchFolders: $('#watchOn').checked, rootCheckMinutes: Number($('#rootCheckMin').value) || 0, watchSettleSeconds: Number($('#watchSettle').value) || 90,
@@ -1612,6 +1638,13 @@ views.settings = async () => {
     };
   };
   $('#save').onclick = async () => { await L.settings.replace(collect()); toast('Settings saved'); refreshTask(); refreshJobs(); };
+  const refreshPosters = async () => { const box = $('#poStatus'); if (!box) return; try { const p = await L.posters.status(); box.innerHTML = `${p.job.running ? `<span class="badge warn">running</span> ${esc(p.job.message)}` : `<b>${p.have.toLocaleString()}</b> of ${p.titles.toLocaleString()} titles have a poster (${fmtBytes(p.bytes)})${p.none ? ` · ${p.none.toLocaleString()} without art` : ''}${p.errors ? ` · <span class="bad">${p.errors.toLocaleString()} failed</span>` : ''}${p.bySource.length ? ' · ' + p.bySource.map(x => `${esc(x.source)} ${x.n.toLocaleString()}`).join(', ') : ''}`}<br><span class="mono tiny">${esc(p.dir)}</span> ${p.writable ? '<span class="badge ok">writable</span>' : `<span class="badge bad">${p.exists ? 'not writable' : 'not found'}</span>`}${p.lastError ? `<br><span class="bad">${esc(p.lastError)}</span>` : ''}${p.lastRun ? ` <span class="muted tiny">last run ${fmtAgo(p.lastRun)}</span>` : ''}`; } catch (e) { box.textContent = e.message; } };
+  refreshPosters();
+  L.posters.onProgress(() => { if (currentView === 'settings') refreshPosters(); posterIdxAt = 0; });
+  $('#poRun').onclick = async () => { await L.settings.replace(collect()); await L.posters.run({ retry: true }); toast('Fetching posters in the background'); setTimeout(refreshPosters, 800); };
+  $('#poAll').onclick = async () => { if (!confirm('Fetch every poster again? This replaces the ones you have.')) return; await L.settings.replace(collect()); await L.posters.run({ all: true }); toast('Fetching every poster again'); setTimeout(refreshPosters, 800); };
+  $('#poClear').onclick = async () => { if (!confirm('Delete every poster file MediaLedger fetched? They can be fetched again.')) return; const n = await L.posters.clear(); posterIdxAt = 0; toast(`${n} posters deleted`); refreshPosters(); };
+  $('#pickPo').onclick = async () => { const d = await pickFolder($('#poDir').value); if (d) $('#poDir').value = d; };
   const refreshJobs = async () => {
     const jobs = await L.jobs.list();
     $('#jobsBox').innerHTML = `<table class="jobs"><tr><th>Job</th><th>When</th><th>Last run</th><th>Next</th><th></th></tr>${jobs.map(j => `<tr class="${j.enabled ? '' : 'muted'}"><td class="nowrap"><b>${esc(j.label)}</b></td><td class="wrap">${esc(j.when)}</td><td class="wrap">${j.overdue ? `<span class="badge bad" title="${esc(j.overdueWhy || '')}">overdue</span> ` : ''}${j.running ? '<span class="badge warn">running</span>' : j.last ? `<span title="${esc(fmtDate(j.last))}">${fmtAgo(j.last)}</span>${j.lastNote ? `<span class="sub">${esc(String(j.lastNote)).slice(0, 80)}</span>` : ''}` : '<span class="muted">never</span>'}</td><td class="nowrap">${j.next ? (j.next === 'soon' ? 'soon' : fmtDate(j.next)) : '<span class="muted">—</span>'}</td><td><button class="small job-run" data-job="${j.id}" ${j.running ? 'disabled' : ''}>Run now</button></td></tr>`).join('')}</table>`;

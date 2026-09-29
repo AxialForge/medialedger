@@ -61,6 +61,7 @@ const DEFAULTS = {
     taskTime: '03:00',        // HH:MM local, daily
     taskName: 'MediaLedger Scan',
   },
+  posters: { enabled: true, dir: '', width: 300, online: true }, // dir '' = <data>/posters; point it at the NAS to share one set between the desktop and the Pi
   snapshot: { time: '03:05' }, // daily snapshot for the trend cards when no scan has taken one yet
   plex: {
     enabled: false,           // sync after every scan

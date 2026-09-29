@@ -34,6 +34,7 @@ const movieRename = require('./movieRename');
 const plex = require('./plex');
 const watched = require('./watched');
 const restore = require('./restore');
+const { createPosters } = require('./posters');
 const sysmon = require('./sysmon');
 const rootcheck = require('./rootcheck');
 
@@ -41,7 +42,7 @@ const rootcheck = require('./rootcheck');
 const EPISODE_NAME = /(?:^|[ ._\-\[(])(?:s\d{1,2}[ ._-]?e\d{1,3}|\d{1,2}x\d{2,3}(?!\d)|season[ ._-]?\d{1,2})(?:$|[ ._\-\])])/i;
 
 function createService({ userData, log, send, host }) {
-  let settings, db, scanner, scheduler, watcher;
+  let settings, db, scanner, scheduler, watcher, posters;
   let metaJob = { running: false, done: 0, total: 0, message: '' };
   const handlers = new Map();
   const h = (ch, fn) => handlers.set(ch, fn);
@@ -77,6 +78,7 @@ function createService({ userData, log, send, host }) {
       try { await runPlexSync(trigger); } catch { /* logged */ }
     }
     if (result.status === 'done') { try { takeSnapshot(); } catch (e) { log('snapshot failed: ' + e.message); } }
+    if (result.status === 'done') posters.run({}).catch(e => log('posters: ' + e.message));
     if (settings.get().autoExportAfterScan && result.status === 'done') {
       try { const out = runExport(result.scanId, trigger); log('exported to ' + out.dir); result.export = out; }
       catch (e) { log('export failed: ' + e.message); }
@@ -99,6 +101,7 @@ function createService({ userData, log, send, host }) {
       db.run('INSERT INTO plex_syncs (ts, sections, items, matched, unmatched, note, detail) VALUES (?,?,?,?,?,?,?)', r.synced_at, r.sections, r.items, r.matched, r.unmatched, trigger, JSON.stringify(r.bySection || []));
       plexJob = { running: false, message: `Plex sync: ${r.matched.toLocaleString()} of ${r.items.toLocaleString()} items matched`, result: r }; send('plex:progress', plexJob);
       log(`plex sync (${trigger}): ${r.matched}/${r.items} matched, ${r.unmatched} unmatched, ${r.shows} shows`);
+      if (trigger !== 'manual' ? !scanner.running : true) setTimeout(() => posters.run({}).catch(e => log('posters: ' + e.message)), 2000); // new links mean new art
       return r;
     } catch (e) {
       plexJob = { running: false, message: 'Plex sync failed: ' + e.message, error: e.message }; send('plex:progress', plexJob);
@@ -204,6 +207,7 @@ function createService({ userData, log, send, host }) {
   function init() {
     settings = new Settings(userData);
     db = new Db(path.join(userData, 'medialedger.db'), { log });
+    posters = createPosters({ db, settings, userData, log, send });
     scanner = new Scanner(db, settings, { log });
     scheduler = new Scheduler(host, settings, runScan);
     watcher = new Watcher(settings, runScan, log);
@@ -757,6 +761,7 @@ function createService({ userData, log, send, host }) {
       { id: 'snapshot', label: 'Daily snapshot (trend cards)', enabled: true, when: `after each scan, else at ${(s.snapshot || {}).time || '03:05'}`, last: lastSnap ? lastSnap.t : null, next: nextDaily((s.snapshot || {}).time || '03:05', lastSnap ? lastSnap.t : null) },
       { id: 'summary', label: 'Daily summary notification', enabled: !!((s.notify.webhookUrl || (s.notify.email && s.notify.email.enabled)) && !(s.notify.events && s.notify.events.dailySummary === false)), when: `daily at ${s.notify.dailyTime || '08:00'}`, last: s.notify.lastSummary || null, next: (s.notify.webhookUrl || (s.notify.email && s.notify.email.enabled)) ? nextDaily(s.notify.dailyTime || '08:00', s.notify.lastSummary) : null },
     ];
+    { const ps = posters.status(); jobs.push({ id: 'posters', label: 'Posters', enabled: ps.enabled, when: ps.enabled ? 'after each scan and Plex sync' : 'off', last: ps.lastRun, lastNote: ps.lastError ? 'failed: ' + ps.lastError : `${ps.have.toLocaleString()} of ${ps.titles.toLocaleString()} titles`, next: null, running: !!ps.job.running }); }
     // Overdue: an enabled job that has not run for twice its interval (daily jobs: 48 h), or whose last run failed.
     const age = (iso) => iso ? (Date.now() - new Date(iso).getTime()) / 3600000 : Infinity;
     const limit = { scan: s.schedule.inAppEnabled ? 2 * (Number(s.schedule.inAppIntervalHours) || 24) : null, plex: plexEvery ? Math.max(2 * plexEvery, 2) : null, backup: 48, snapshot: 48, summary: 48 };
@@ -789,6 +794,7 @@ function createService({ userData, log, send, host }) {
       case 'metadata': refreshMetadata({ onlyNew: false }).catch(e => log('metadata failed: ' + e.message)); return { started: true, message: 'Metadata refresh started' };
       case 'backup': { const b = settings.get().backup || {}; const p = backupTo(b.dir, b.keep, 'manual'); return { done: true, message: 'Backup copied to ' + p }; }
       case 'snapshot': takeSnapshot(); return { done: true, message: 'Snapshot taken' };
+      case 'posters': posters.run({ retry: true, force: true }).catch(e => log('posters: ' + e.message)); return { started: true, message: 'Fetching posters' };
       case 'summary': summaryTick(true); return { done: true, message: 'Summary sent' };
       default: throw new Error('Unknown job ' + id);
     }
@@ -830,9 +836,17 @@ function createService({ userData, log, send, host }) {
     return handlers.get('collect:get')(type, show);
   });
 
+  // ---- posters ----
+  h('posters:status', () => posters.status());
+  h('posters:index', () => posters.index());
+  h('posters:get', (type, key) => posters.dataUrl(String(type), String(key)));
+  h('posters:run', (opts) => { posters.run({ ...(opts || {}), force: true }).catch(() => {}); return { started: true }; });
+  h('posters:clear', () => posters.clear());
+
   h('data:purgeMissing', () => db.run('DELETE FROM files WHERE missing=1').changes);
 
   return {
+    get posters() { return posters; },
     notify: (event, title, message, extra) => notifier.send(event, title, message, extra),
     init, shutdown, handlers, runScan, refreshMetadata, runPlexSync, exportDir, ffprobePath, setShowAdult: (v) => { showAdult = !!v; },
     get settings() { return settings; }, get db() { return db; }, get scanner() { return scanner; },

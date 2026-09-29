@@ -82,3 +82,14 @@ label.chk input { width: 20px; height: 20px; accent-color: var(--accent); }
   .list { grid-template-columns: 1fr 1fr; }
   .toast { bottom: 24px; }
 }
+
+/* posters */
+.row.has-poster { display: grid; grid-template-columns: 54px 1fr; column-gap: 12px; align-items: start; }
+.row.has-poster > .pthumb { grid-row: span 3; }
+.pthumb { width: 54px; height: 81px; border-radius: 6px; object-fit: cover; background: var(--panel3); display: block; }
+.pthumb.none, .pbig.none { display: grid; place-items: center; color: var(--muted); font-weight: 600; font-size: 20px; }
+.pbig { width: 140px; height: 210px; border-radius: 10px; object-fit: cover; background: var(--panel3); float: left; margin: 0 14px 10px 0; }
+.pbig.none { font-size: 44px; }
+.pbig + h1 { padding-top: 4px; }
+main::after { content: ""; display: block; clear: both; }
+.season, h2 { clear: both; }

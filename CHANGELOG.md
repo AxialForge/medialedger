@@ -8,6 +8,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [2.1.0] - 2026-09-28
+
+### Added
+
+- **Posters** for series and movies: thumbnails in the TV, Anime, Movies and
+  Watch tonight lists, a large poster on title pages, and a **poster wall**
+  view of any list that keeps search, filters and sorting. Shown throughout
+  the family portal.
+- Sources: Plex first, through its own resizer, then AniList and TVmaze for
+  series Plex does not have. Fetched after each scan and Plex sync, on demand
+  from Settings → Posters, and listed under Schedules. Adult titles are
+  skipped. Schema v12.
+- **Posters folder** setting, so a folder on the NAS can serve the desktop
+  app and the web server alike.
+
+### Fixed
+
+- The Plex webhook address shows `https://` when the server sits behind a
+  proxy that terminates HTTPS.
+
 ## [2.0.1] - 2026-09-28
 
 ### Added

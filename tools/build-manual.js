@@ -49,7 +49,7 @@ const TOC_ENTRIES = [
   '2. Installing and first run', '2.1 Install', '2.2 First launch', '2.3 Where your data lives', '2.4 Updates',
   '3. The window',
   '4. Dashboard', '4.1 Top tiles', '4.2 Charts', '4.3 Panels', '4.4 What the new data adds', '4.5 Charts, colours and drill-down', '4.6 Storage forecast', '4.7 Editing the dashboard',
-  '5. TV Shows and Anime', '5.1 Episode detail', '5.2 Tags: genres, sub/dub and your own',
+  '5. TV Shows and Anime', '5.1 Episode detail', '5.2 Tags: genres, sub/dub and your own', '5.3 Posters',
   '6. Movies', '7. Web videos', '8. Adult library',
   '9. Missing episodes', '9.1 The Match dialog', '9.2 Airing next', '9.3 What you are collecting',
   '10. Issues', '10.1 Problems', '10.2 The Fix dialog', '10.3 Duplicates',
@@ -213,6 +213,10 @@ add(H1('5. TV Shows and Anime'), ...img('anime', 'The Anime list. TV Shows looks
   P('All three are exported in the series and movie title CSVs (`genres`, `audio_type`, `tags`). Guests see tags but cannot edit them; standard users and admins can.'),
   P('Click a series to open it. The header shows the totals and a **Match…** button (see chapter 10). When expected counts exist, a grid shows every season with each episode number as a green (present) or red (missing) cell.'),
   P('The table lists every file with its parsed episode number, title, file name, probed length, resolution and pixel size, fps, video codec with bit depth and HDR badge, audio languages and codecs, subtitle tracks, captions flag, bitrate and size. Badges mark files that are **missing** from disk or have a manual **fixed** override. Click a row to reveal the file in Explorer; click **Fix…** to correct its details (chapter 14.2).'),
+  H2('5.3 Posters'), ...img('title-poster', 'A series page with its poster; the lists carry a thumbnail and can switch to a poster wall.'),
+  P('Every series and movie can carry a **poster**. They appear as a thumbnail beside the title in the TV, Anime and Movies lists and in Watch tonight, large on the title page, and throughout the family portal. **▦ Posters** in the toolbar of a list turns the table into a wall of posters; search, the filters and sorting keep working, and **☰ Table** switches back. A title without art shows its first letter instead.'),
+  P('Posters come from **Plex** first, asked for at the size needed so each file is small, and from **AniList** or **TVmaze** for series that Plex does not have but the episode lookup matched. New titles are fetched after each scan and each Plex sync; Settings → **Posters** has **Fetch missing posters**, **Fetch all again** and a count by source. A title with no art anywhere is asked for again after two weeks. **Adult titles never get a poster.**'),
+  P('**Where they are kept.** By default next to the database. Set the **posters folder** to a folder on the NAS to share one set between the desktop app and the web server; a library of 2,300 titles takes about 100 MB. On the Raspberry Pi the folder must be a mounted path such as `/mnt/medialedger/Service_Pool/MediaLedger/Posters`, writable by the `medialedger` user. Files are named by a fingerprint of the title, so nothing in a title can produce an odd file name. Removing a title from the library removes its poster on the next run.'),
 );
 
 // ---------------- 6 Movies ----------------
