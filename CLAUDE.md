@@ -217,6 +217,12 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   an id or a Plex field, and if any admin route answers there. It calls `svc.setShowAdult(false)` before every core call.
 - **`X-Forwarded-For` is believed only from loopback** (`src/server/clientip.js`). Trusting it from any socket would let
   a LAN client pick its own address and walk around LAN-only and the lockout.
+- **The dashboard editor must not reload data per edit.** `dash.js` re-renders on every move, resize and option
+  save; with `cfg.load` called each time, editing took seconds per click on the Pi (`data:dashboard` is about
+  550 ms on a desktop, several times that on a Pi). It now holds the loaded data while `editing` is true.
+  Separately, `remember()` in `service.js` memoises `data:dashboard` against `dataVersion`, which every
+  non-read handler bumps (the `READS` pattern lists the read-only ones). A new handler that changes data is
+  covered automatically; a new **read-only** handler should be added to `READS` or it needlessly drops the cache.
 - **Posters are files, the table is the index.** `src/main/posters.js` names each file by `sha1(title key)` and the
   `posters` table says which titles have one. Renderers ask for `posters:index` first and only request images that
   exist, so a list of 1,400 rows does not cause 1,400 404s. The web shell serves `/poster/<type>/<key>`; the desktop

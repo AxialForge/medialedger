@@ -8,6 +8,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [2.1.1] - 2026-09-28
+
+### Fixed
+
+- **Editing the dashboard was slow**, badly so on the Raspberry Pi: every move,
+  resize and option change asked the server to recompute the whole dashboard.
+  The editor now draws from the data it already has while you edit and loads
+  fresh when you press Done.
+- The dashboard report is answered from memory while nothing in the library
+  has changed (for up to a minute, never during a scan), so opening the
+  Dashboard repeatedly no longer recomputes it.
+
 ## [2.1.0] - 2026-09-28
 
 ### Added

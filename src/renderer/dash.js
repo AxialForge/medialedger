@@ -19,7 +19,7 @@
    (may be async). A card that returns null is skipped. Colour-rule tiles should use UI.tile with
    Cards.colorFor(num, ctx.rule) so per-card thresholds apply. */
 /* Vendored from the Bracket kit (kit/renderer/dash.js). MediaLedger additions, marked [ML]:
-   cfg.after(loaded) runs after every render (list pages append their table there), and the card
+   data is held while editing so edits do not reload it, cfg.after(loaded) runs after every render (list pages append their table there), and the card
    options dialog follows the editor level (Simple / Standard / Advanced) from UI.level(). */
 (function () {
   const { $, esc, store, toast, openModal, closeModal, RANGE_LABEL, rangePicker } = window.UI;
@@ -31,7 +31,9 @@
   let byType = {}, layout = null, editing = false, layoutSource = 'default';
   let range = store.get('range', '24h');
 
+  let held = null; // [ML] the data the cards were last drawn from
   function mount(options) {
+    held = null;
     cfg = { ...cfg, ...options };
     byType = Object.fromEntries(cfg.catalog.map(c => [c.type, c]));
     layout = null;
@@ -58,7 +60,9 @@
   const handle = (item, def, size) => `<div class="dhandle" title="drag to move"><span class="grip">⋮⋮</span><b>${esc(item.o.title || def.label)}</b><span class="grow"></span>${def.sizes.map(s => `<button class="tiny ${s === size ? 'on' : ''}" data-act="size" data-size="${s}" title="${SIZE_LABEL[s]}">${s.toUpperCase()}</button>`).join('')}<button class="tiny" data-act="up" title="move up">▲</button><button class="tiny" data-act="down" title="move down">▼</button><button class="tiny" data-act="opts" title="options">⚙</button><button class="tiny" data-act="remove" title="remove">✕</button></div>`;
   async function render() {
     const view = window.UI.view();
-    const loaded = await cfg.load({ range });
+    // [ML] While editing, every move, resize and option change re-renders. Re-use the data from when edit mode
+    // began instead of asking the server again each time; leaving edit mode loads fresh.
+    const loaded = (editing && held) ? held : (held = await cfg.load({ range }));
     if (!layout) await loadLayout();
     const cards = await Promise.all(layout.map(async (item) => {
       const def = byType[item.type];
@@ -83,8 +87,8 @@
   }
 
   function wire() {
-    const sel = $('#rangeSel'); if (sel) sel.onchange = (e) => { range = e.target.value; store.set('range', range); render(); };
-    if ($('#dashEdit')) $('#dashEdit').onclick = () => { editing = true; render(); };
+    const sel = $('#rangeSel'); if (sel) sel.onchange = (e) => { range = e.target.value; store.set('range', range); held = null; render(); };
+    if ($('#dashEdit')) $('#dashEdit').onclick = () => { editing = true; render(); }; // draws from the data already on screen
     if ($('#dashDone')) $('#dashDone').onclick = () => { editing = false; saveLayout(); render(); };
     if ($('#dashReset')) $('#dashReset').onclick = () => { if (!confirm('Put the default cards back? Your arrangement is replaced.')) return; layout = normalise(cfg.defaults); saveLayout(); render(); };
     if ($('#dashAdd')) $('#dashAdd').onclick = openAdd;

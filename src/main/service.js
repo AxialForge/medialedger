@@ -45,7 +45,12 @@ function createService({ userData, log, send, host }) {
   let settings, db, scanner, scheduler, watcher, posters;
   let metaJob = { running: false, done: 0, total: 0, message: '' };
   const handlers = new Map();
-  const h = (ch, fn) => handlers.set(ch, fn);
+  // Every call that can change what the library looks like bumps `dataVersion`; read-only calls do not. Expensive
+  // reports (the dashboard) are answered from memory while the version stands and the answer is under a minute old.
+  let dataVersion = 0;
+  const READS = /^(data:|app:|scan:(status|list)$|jobs:(list|overdue)$|posters:(status|index|get)$|prefs:get$|log:|roots:(last|check|listDirs)$|meta:(get|status|search)$|plex:(status|test)$|tags:(list|all|get)$|ratings:list$|requests:list$|override:(list|suggest)$|movie:(plan|batches|batchItems)$|rename:(proposals|history|dry)$|export:list$|collect:get$|db:(stats|backups|restoreList)$|sys:|schedule:(taskStatus|nextInApp)$|update:|adult:status$|settings:get$|web:|notify:test$)/;
+  const h = (ch, fn) => handlers.set(ch, READS.test(ch) ? fn : (...a) => { dataVersion++; return fn(...a); });
+  const remember = (ch, ttlMs, fn) => { const memo = new Map(); h(ch, (...a) => { const key = `${showAdult ? 1 : 0}|${JSON.stringify(a)}`; const hit = memo.get(key); if (hit && hit.v === dataVersion && !scanner.running && Date.now() - hit.t < ttlMs) return hit.r; const r = fn(...a); if (!(r && typeof r.then === 'function')) { if (memo.size > 8) memo.clear(); memo.set(key, { v: dataVersion, t: Date.now(), r }); } return r; }); };
 
   function exportDir() { return settings.get().csvOutputDir || path.join(userData, 'exports'); }
   function ffprobePath() { return findFfprobe(settings.get().ffprobePath) || ffmpegdl.installedFfprobe(userData); }
@@ -70,6 +75,7 @@ function createService({ userData, log, send, host }) {
     log(`scan start (${trigger})`);
     const result = await scanner.scan(trigger);
     scheduler.noteRun();
+    dataVersion++;
     log(`scan ${result.status} in ${Math.round(result.duration_ms / 1000)}s: seen=${result.files_seen} added=${result.added} removed=${result.removed} modified=${result.modified} probed=${result.probed} errors=${result.errors}`);
     if (result.status === 'done' && settings.get().metadata.enabled) {
       try { await refreshMetadata({ onlyNew: true }); } catch (e) { log('metadata failed: ' + e.message); }
@@ -100,6 +106,7 @@ function createService({ userData, log, send, host }) {
       try { r.history = await plex.syncHistory(db, cfg, { log, onProgress: p => { plexJob = { running: true, ...p }; send('plex:progress', plexJob); } }); } catch (e) { log('plex history failed: ' + e.message); r.historyError = e.message; }
       db.run('INSERT INTO plex_syncs (ts, sections, items, matched, unmatched, note, detail) VALUES (?,?,?,?,?,?,?)', r.synced_at, r.sections, r.items, r.matched, r.unmatched, trigger, JSON.stringify(r.bySection || []));
       plexJob = { running: false, message: `Plex sync: ${r.matched.toLocaleString()} of ${r.items.toLocaleString()} items matched`, result: r }; send('plex:progress', plexJob);
+      dataVersion++;
       log(`plex sync (${trigger}): ${r.matched}/${r.items} matched, ${r.unmatched} unmatched, ${r.shows} shows`);
       if (trigger !== 'manual' ? !scanner.running : true) setTimeout(() => posters.run({}).catch(e => log('posters: ' + e.message)), 2000); // new links mean new art
       return r;
@@ -468,7 +475,7 @@ function createService({ userData, log, send, host }) {
   h('rename:history', () => db.listRenames(500));
 
   // ---- data queries ------------------------------------------------------------------
-  h('data:dashboard', () => {
+  remember('data:dashboard', 60000, () => {
     const byType = db.all(`SELECT library_type, COUNT(*) files, SUM(size) bytes, SUM(duration_s) seconds,
         SUM(CASE WHEN probe_ok=1 THEN 1 ELSE 0 END) probed, SUM(CASE WHEN has_captions=1 THEN 1 ELSE 0 END) captioned,
         SUM(CASE WHEN parse_ok=0 THEN 1 ELSE 0 END) unparsed, SUM(CASE WHEN probed_at IS NOT NULL AND probe_ok=0 THEN 1 ELSE 0 END) probe_errors,
