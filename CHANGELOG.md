@@ -8,6 +8,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [2.2.0] - 2026-09-29
+
+### Added
+
+- **Admin from outside on the family portal.** With *Admin sign-in from
+  outside* ticked on the Family portal page, `<public address>/admin` signs
+  you in with your admin account (same password, lockout and two-factor code
+  as the web app) and gives you Requests (approve, mark added, decline,
+  reply, delete), Invites (create with link and QR code, new link, revoke,
+  delete) and Status (library numbers, address checks, the Schedules table
+  with Run now, and the two portal options). It is a second short allow-list
+  on the portal, not a way into the web app: settings, renames, folders,
+  files and logs do not exist there, admin sessions are the portal's own
+  (twelve hours, an hour idle) and the switch, port and addresses can only
+  be changed from home. Off by default.
+
 ## [2.1.1] - 2026-09-28
 
 ### Fixed

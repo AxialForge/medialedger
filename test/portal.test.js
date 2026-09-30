@@ -57,6 +57,8 @@ const call = (method, p, { cookie, body, headers } = {}) => new Promise((resolve
     assert.strictEqual((await call(p.startsWith('/api/') ? 'POST' : 'GET', p, { body: p.startsWith('/api/') ? [] : null })).status, p.startsWith('/api/') ? 405 : 404, `${p} must not exist on the portal`);
   for (const p of ['/../server/security.js', '/..%2f..%2fserver%2fportal.js', '/%2e%2e/renderer/app.js']) assert.ok([400, 404].includes((await call('GET', p)).status), `${p} must not escape the portal folder`);
   assert.strictEqual((await call('GET', '/portal.js')).status, 200);
+  assert.strictEqual((await call('GET', '/a/me')).status, 404, 'no sec, no admin surface');
+  assert.strictEqual((await call('POST', '/a/login', { body: { username: 'admin', password: 'x' } })).status, 404);
   assert.ok(/noindex/.test((await call('GET', '/')).headers['x-robots-tag']));
 
   // the address checker: /health is public and says nothing private; a check must reach THIS portal
@@ -144,6 +146,63 @@ const call = (method, p, { cookie, body, headers } = {}) => new Promise((resolve
   portal.setOptions({ enabled: false }, 'admin', 'x');
   await new Promise(r => setTimeout(r, 500));
   await assert.rejects(call('GET', '/p/me', { cookie }), /ECONNREFUSED|socket hang up|ECONNRESET/);
+
+  // ---- the admin from outside: absent without `sec`, off by default, admin accounts only, its own allow-list
+  const verified = []; const jobsRun = [];
+  const sec = { verify: (ip, { username, password, code }) => { verified.push(username); if (username === 'admin' && password === 'right') return code === '123456' ? { ok: true, role: 'admin', username: 'admin', twoFactor: true } : { ok: false, reason: code ? 'totp_bad' : 'totp' }; if (username === 'std' && password === 'right') return { ok: true, role: 'standard', username: 'std', twoFactor: false }; return { ok: false, reason: 'password' }; }, totpEnabled: () => true };
+  handlers.set('requests:update', (id, patch) => { const r = added.find(x => x.id === Number(id)); if (!r) return null; if (patch.status) r.status = patch.status; if (patch.admin_note !== undefined) r.admin_note = patch.admin_note; return r; });
+  handlers.set('requests:delete', (id) => { const i = added.findIndex(x => x.id === Number(id)); if (i >= 0) added.splice(i, 1); return true; });
+  handlers.set('data:status', () => ({ app: 'MediaLedger', files: 10, bytes: 5e9, free_bytes: 1e12, months_left: 12.5, pending_requests: 1, missing_episodes: 2, airing_this_week: 0, next_airing: null, scanning: false, last_scan: { finished: 'x', status: 'ok', added: 1, removed: 0 }, at: 'x', secret_paths: [SECRET] }));
+  handlers.set('jobs:list', () => [{ id: 'scan', label: 'Library scan', enabled: true, when: 'every 6 h', last: null, next: null, running: false, overdue: false, dir: SECRET, lastNote: 'Backup copied to ' + SECRET }, { id: 'purge', label: 'Not for outside', enabled: true }]);
+  handlers.set('jobs:run', (id) => { jobsRun.push(id); return { started: true, message: id + ' started' }; });
+  const adir = fs.mkdtempSync(path.join(os.tmpdir(), 'ml-portal-a-'));
+  fs.writeFileSync(path.join(adir, 'portal.json'), JSON.stringify({ enabled: true, port: port + 2, bind: '127.0.0.1', publicUrl: 'https://example.ts.net', showRatings: true, checkMinutes: 0 }));
+  const adm = createPortal({ svc, dataDir: adir, log: () => {}, audit: (...a) => audits.push(a), version: 'test', notify: async () => {}, sec });
+  adm.start(); for (let i = 0; i < 50 && !adm.status().listening; i++) await new Promise(r => setTimeout(r, 50));
+  const acall = (method, p, o = {}) => call(method, p, o).catch(() => null);
+  const A = (method, p, o = {}) => new Promise((resolve, reject) => { const data = o.body ? JSON.stringify(o.body) : null; const req = http.request({ host: '127.0.0.1', port: port + 2, path: p, method, headers: { ...(o.cookie ? { cookie: o.cookie } : {}), ...(data ? { 'content-type': 'application/json', 'content-length': Buffer.byteLength(data) } : {}), ...(o.headers || {}) } }, res => { let t = ''; res.on('data', d => { t += d; }); res.on('end', () => { let j = null; try { j = JSON.parse(t); } catch { /* html */ } resolve({ status: res.statusCode, headers: res.headers, text: t, json: j }); }); }); req.on('error', reject); if (data) req.write(data); req.end(); });
+  void acall;
+  assert.strictEqual((await A('POST', '/a/login', { body: { username: 'admin', password: 'right', code: '123456' } })).status, 404, 'off by default even with sec');
+  assert.strictEqual(adm.status().admin, false);
+  adm.setOptions({ admin: true }, 'admin', 'x');
+  assert.strictEqual((await A('GET', '/admin')).status, 200, 'the admin page is served');
+  assert.strictEqual((await A('GET', '/qr.js')).status, 200, 'the QR encoder is served for invite links');
+  assert.strictEqual((await A('GET', '/a/me')).status, 401, 'no session, no data');
+  let r = await A('POST', '/a/login', { body: { username: 'admin', password: 'wrong' } }); assert.strictEqual(r.status, 401); assert.strictEqual(r.json.reason, 'password');
+  r = await A('POST', '/a/login', { body: { username: 'std', password: 'right' } }); assert.strictEqual(r.status, 401); assert.strictEqual(r.json.reason, 'role', 'a standard account is refused'); assert.ok(!r.headers['set-cookie']);
+  r = await A('POST', '/a/login', { body: { username: 'admin', password: 'right' } }); assert.strictEqual(r.json.reason, 'totp', 'password right, code wanted');
+  r = await A('POST', '/a/login', { body: { username: 'admin', password: 'right', code: '123456' } }); assert.strictEqual(r.status, 200);
+  const ac = String(r.headers['set-cookie']).split(';')[0]; assert.ok(/^mla=/.test(ac), 'its own cookie, not ml_session or mlp'); assert.ok(/HttpOnly/.test(String(r.headers['set-cookie'])) && /SameSite=Strict/.test(String(r.headers['set-cookie'])));
+  assert.strictEqual((await A('GET', '/p/library?type=movie', { cookie: ac })).status, 401, 'an admin session is not a family invite');
+  r = await A('GET', '/a/me', { cookie: ac }); assert.strictEqual(r.json.result.user, 'admin'); assert.strictEqual(r.json.result.twoFactor, true); assert.strictEqual(r.json.result.sessions, 1);
+  assert.strictEqual(adm.status().adminSessions, 1);
+  // invites
+  r = await A('POST', '/a/invites', { body: { name: 'Aunt', days: 7, perms: { request: false } }, cookie: ac }); assert.strictEqual(r.status, 200); assert.ok(r.json.result.links.public.startsWith('https://example.ts.net/i/')); assert.strictEqual(r.json.result.invite.perms.request, false);
+  r = await A('POST', '/a/invites', { body: { name: 'Aunt' }, cookie: ac }); assert.strictEqual(r.status, 400); assert.ok(/already/.test(r.json.error), 'validation messages come back as text');
+  const auntId = (await A('GET', '/a/invites', { cookie: ac })).json.result.find(i => i.name === 'Aunt').id;
+  r = await A('POST', '/a/invites/renew', { body: { id: auntId }, cookie: ac }); assert.ok(r.json.result.links.public);
+  assert.strictEqual((await A('GET', r.json.result.links.path)).status, 302, 'a link made from outside works for the family');
+  r = await A('POST', '/a/invites/revoke', { body: { id: auntId }, cookie: ac }); assert.strictEqual(r.json.result, true);
+  assert.strictEqual((await A('GET', '/a/invites', { cookie: ac })).json.result.find(i => i.name === 'Aunt').active, false);
+  // requests: all of them with who asked, status and reply
+  r = await A('GET', '/a/requests', { cookie: ac }); assert.ok(r.json.result.some(x => x.by === 'family: Other')); assert.ok(!r.text.includes('requested_by'));
+  r = await A('POST', '/a/requests/update', { body: { id: added[0].id, status: 'approved', reply: 'Next week' }, cookie: ac }); assert.strictEqual(r.json.result.status, 'approved'); assert.strictEqual(r.json.result.reply, 'Next week');
+  r = await A('POST', '/a/requests/update', { body: { id: added[0].id, status: 'bogus' }, cookie: ac }); assert.strictEqual(r.status, 400);
+  // status and jobs: projected, and only the allow-listed jobs run
+  r = await A('GET', '/a/status', { cookie: ac }); assert.strictEqual(r.status, 200); assert.ok(!r.text.includes('Apocrypha'), 'no paths in the status card'); assert.strictEqual(r.json.result.jobs.find(j => j.id === 'scan').lastNote, 'Backup copied to Alien.mkv', 'a note keeps the file name and loses the path'); assert.strictEqual(r.json.result.jobs.find(j => j.id === 'scan').remote, true); assert.strictEqual(r.json.result.jobs.find(j => j.id === 'purge').remote, false); assert.ok(r.json.result.jobs.some(j => j.id === 'portal'));
+  r = await A('POST', '/a/jobs/run', { body: { id: 'scan' }, cookie: ac }); assert.strictEqual(r.json.result.started, true); assert.deepStrictEqual(jobsRun, ['scan']);
+  r = await A('POST', '/a/jobs/run', { body: { id: 'purge' }, cookie: ac }); assert.strictEqual(r.status, 400); assert.deepStrictEqual(jobsRun, ['scan']);
+  r = await A('POST', '/a/options', { body: { showRatings: false, checkMinutes: 30, enabled: false, port: 1, admin: false }, cookie: ac }); assert.strictEqual(r.json.result.showRatings, false);
+  assert.strictEqual(adm.status().enabled, true); assert.strictEqual(adm.status().port, port + 2); assert.strictEqual(adm.status().admin, true, 'the portal switches cannot be flipped from outside');
+  assert.strictEqual((await A('POST', '/a/invites', { body: { name: 'X' }, cookie: ac, headers: { origin: 'https://evil.example' } })).status, 403, 'cross-origin posts are refused');
+  assert.ok(audits.some(a => a[0] === 'portal_admin_login'));
+  // sign out, and switching admin off at home ends every session
+  r = await A('POST', '/a/login', { body: { username: 'admin', password: 'right', code: '123456' } }); const ac2 = String(r.headers['set-cookie']).split(';')[0];
+  assert.strictEqual((await A('POST', '/a/logout', { body: {}, cookie: ac })).status, 200); assert.strictEqual((await A('GET', '/a/me', { cookie: ac })).status, 401);
+  assert.strictEqual((await A('GET', '/a/me', { cookie: ac2 })).status, 200);
+  adm.setOptions({ admin: false }, 'admin', 'x'); assert.strictEqual((await A('GET', '/a/me', { cookie: ac2 })).status, 404);
+  adm.setOptions({ admin: true }, 'admin', 'x'); assert.strictEqual((await A('GET', '/a/me', { cookie: ac2 })).status, 401, 'sessions do not survive the switch');
+  adm.stop(); fs.rmSync(adir, { recursive: true, force: true });
 
   portal.stop(); again.stop(); fs.rmSync(dir, { recursive: true, force: true });
   console.log('portal tests passed');

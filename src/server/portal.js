@@ -11,7 +11,13 @@
 // Invites: the link carries `<id>.<secret>`; only sha256(secret) is stored. Opening the link sets a
 // device cookie (only its hash is stored) and redirects to `/`. Revoking an invite kills its devices.
 //
-// State lives in <data>/portal.json (mode 0600): { enabled, port, bind, publicUrl, homeUrl, showRatings, invites, devices }.
+// Admin from outside (off by default): /admin on the same listener signs in with a web *admin* account (password,
+// lockout and 2FA come from security.js `verify`) and gets a second short allow-list under /a/: invites, media
+// requests, a status card, the jobs table and two portal options. Admin sessions are the portal's own (cookie
+// `mla`, twelve hours, an hour idle) so a portal sign-in never becomes a web-app session; the switch itself can
+// only be flipped from the desktop or the web app, never from the portal.
+//
+// State lives in <data>/portal.json (mode 0600): { enabled, port, bind, publicUrl, homeUrl, showRatings, admin, invites, devices, adminSessions }.
 const http = require('http');
 const https = require('https');
 const fs = require('fs');
@@ -23,6 +29,9 @@ const sha = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
 const rand = (n) => crypto.randomBytes(n).toString('base64url');
 const DEVICE_DAYS = 180;
 const PERMS = ['browse', 'tonight', 'request'];
+const ADMIN_HOURS = 12, ADMIN_IDLE_MINUTES = 60;
+// Jobs an admin may start from outside: each only reads the share or talks to a service the server already uses.
+const REMOTE_JOBS = ['scan', 'plex', 'metadata', 'posters', 'snapshot', 'summary', 'backup', 'portal'];
 
 // ---- rate limits: fixed windows kept in memory ----------------------------------------------------
 function limiter() {
@@ -55,13 +64,18 @@ const projectEpisode = (f) => ({ season: num(f.season), episode: num(f.episode),
 const projectVersion = (f) => ({ resolution: f.resolution || null, codec: f.video_codec || null, hdr: f.hdr && f.hdr !== 'SDR' ? String(f.hdr) : null, edition: f.edition_tag ? String(f.edition_tag) : null, minutes: f.duration_s ? Math.round(f.duration_s / 60) : null, audio: csv(f.audio_langs), subs: csv(f.sub_langs), gb: f.size ? Math.round(f.size / 1073741824 * 10) / 10 : null });
 const projectTonight = (showRatings) => (t) => ({ kind: t.kind === 'movie' ? 'movie' : 'series', type: String(t.type), key: String(t.key), title: String(t.title), year: num(t.year), episodes: num(t.episodes), minutes: num(t.minutes), unwatched: num(t.unwatched), complete: t.complete == null ? null : !!t.complete, genres: arr(t.genres), tags: arr(t.tags), audio_type: t.audio_type || null, best: t.resolution || null, online_rating: num(t.online_rating), my_rating: showRatings ? num(t.my_rating) : null, added: t.last_added ? String(t.last_added).slice(0, 10) : null });
 const projectRequest = (r) => ({ id: r.id, title: String(r.title), year: num(r.year), kind: String(r.kind), note: r.note ? String(r.note) : null, status: String(r.status), reply: r.admin_note ? String(r.admin_note) : null, created: r.created, updated: r.updated });
+// Job notes can name a file ("Backup copied to \\nas\Pool\x.db"): only the file's own name leaves the portal.
+// A path starts with a drive, a UNC prefix or a root slash (never the // of a URL) and runs to the end of its
+// clause, so folder names with spaces survive intact and get dropped as a whole.
+const noPaths = (s) => String(s).replace(/(^|\s)((?:[A-Za-z]:[\\/]|\\\\|(?<!:)\/)[^\n·;]*?)(?=\s*(?:$|·|;|\n))/g, (m, pre, p) => pre + (p.trim().split(/[\\/]/).filter(Boolean).pop() || ''));
+const projectAdminRequest = (r) => ({ ...projectRequest(r), by: r.requested_by ? String(r.requested_by) : null });
 
 const normTitle = (s) => String(s || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, ' ').replace(/\b(the|a|an)\b/g, ' ').replace(/\s+/g, ' ').trim();
 
-function createPortal({ svc, dataDir, log, audit, version, notify }) {
+function createPortal({ svc, dataDir, log, audit, version, notify, sec }) {
   const file = path.join(dataDir, 'portal.json');
   const staticDir = path.join(__dirname, '..', 'portal');
-  let state = { enabled: false, port: 8090, bind: '127.0.0.1', publicUrl: '', homeUrl: '', showRatings: true, checkMinutes: 15, invites: {}, devices: {} };
+  let state = { enabled: false, port: 8090, bind: '127.0.0.1', publicUrl: '', homeUrl: '', showRatings: true, checkMinutes: 15, admin: false, invites: {}, devices: {}, adminSessions: {} };
   const instance = rand(9); // /health echoes it, so a check knows it reached THIS portal and not something else on that name
   try { state = { ...state, ...JSON.parse(fs.readFileSync(file, 'utf8')) }; } catch { /* first run */ }
   const save = () => { fs.writeFileSync(file, JSON.stringify(state, null, 2), { mode: 0o600 }); try { fs.chmodSync(file, 0o600); } catch { /* windows */ } };
@@ -102,13 +116,14 @@ function createPortal({ svc, dataDir, log, audit, version, notify }) {
     if (o.bind != null) { if (!['127.0.0.1', '0.0.0.0'].includes(o.bind)) throw new Error('Bind must be 127.0.0.1 or 0.0.0.0'); state.bind = o.bind; }
     for (const k of ['publicUrl', 'homeUrl']) if (o[k] != null) { const v = String(o[k]).trim(); if (v && !/^https?:\/\/[a-z0-9.-]+(:\d+)?\/?$/i.test(v)) throw new Error(`${k === 'publicUrl' ? 'Public' : 'Home'} address must look like https://name.example`); state[k] = v.replace(/\/+$/, ''); }
     if (typeof o.showRatings === 'boolean') state.showRatings = o.showRatings;
+    if (typeof o.admin === 'boolean') { if (o.admin && !sec) throw new Error('Admin sign-in needs the web server'); if (state.admin && !o.admin) state.adminSessions = {}; state.admin = o.admin; }
     if (o.checkMinutes != null) { const m = Number(o.checkMinutes); if (!(m === 0 || (m >= 1 && m <= 1440))) throw new Error('Check interval must be 0 (off) or 1 to 1440 minutes'); state.checkMinutes = m; }
     save(); audit('portal_options', ip, `enabled=${state.enabled} port=${state.port}`, by);
     if (was.enabled !== state.enabled || was.port !== state.port || was.bind !== state.bind) restart();
     armChecks(); setTimeout(() => checkNow().catch(() => {}), 1500);
     return status();
   }
-  const status = () => ({ available: true, enabled: state.enabled, port: state.port, bind: state.bind, publicUrl: state.publicUrl, homeUrl: state.homeUrl, showRatings: state.showRatings, checkMinutes: state.checkMinutes, checks: { public: checks.public, home: checks.home, next: nextCheck }, listening, error: lastError, lastVisit, invites: Object.entries(state.invites).map(publicInvite).sort((a, b) => a.name.localeCompare(b.name)) });
+  const status = () => ({ available: true, enabled: state.enabled, port: state.port, bind: state.bind, publicUrl: state.publicUrl, homeUrl: state.homeUrl, showRatings: state.showRatings, checkMinutes: state.checkMinutes, admin: !!state.admin, adminSessions: Object.values(state.adminSessions).filter(adminLive).length, totp: !!(sec && sec.totpEnabled && sec.totpEnabled()), checks: { public: checks.public, home: checks.home, next: nextCheck }, listening, error: lastError, lastVisit, invites: Object.entries(state.invites).map(publicInvite).sort((a, b) => a.name.localeCompare(b.name)) });
 
   // ---- visitors -------------------------------------------------------------------------------------
   const cookieOf = (req) => { const m = /(?:^|;\s*)mlp=([A-Za-z0-9_-]{20,})/.exec(req.headers.cookie || ''); return m ? m[1] : null; };
@@ -121,6 +136,30 @@ function createPortal({ svc, dataDir, log, audit, version, notify }) {
   let dirty = false;
   const touch = (v, ip) => { const now = new Date().toISOString(); const inv = state.invites[v.id]; if (!inv.lastSeen || now.slice(0, 16) !== inv.lastSeen.slice(0, 16)) { inv.lastSeen = now; if (state.devices[v.device]) state.devices[v.device].lastSeen = now; dirty = true; } lastVisit = { at: now, name: v.name, ip }; };
   const flush = setInterval(() => { if (dirty) { dirty = false; try { save(); } catch (e) { log('portal: could not save ' + e.message); } } }, 60000); if (flush.unref) flush.unref();
+
+  // ---- the admin from outside ------------------------------------------------------------------------
+  const adminLive = (s) => !!s && new Date(s.expires) > new Date() && Date.now() - new Date(s.lastSeen).getTime() < ADMIN_IDLE_MINUTES * 60000;
+  const adminCookieOf = (req) => { const m = /(?:^|;\s*)mla=([A-Za-z0-9_-]{20,})/.exec(req.headers.cookie || ''); return m ? m[1] : null; };
+  function admin(req) {
+    if (!state.admin || !sec) return null;
+    const c = adminCookieOf(req); if (!c) return null;
+    const k = sha(c), s = state.adminSessions[k];
+    if (!adminLive(s)) { if (s) { delete state.adminSessions[k]; dirty = true; } return null; }
+    if (Date.now() - new Date(s.lastSeen).getTime() > 60000) { s.lastSeen = new Date().toISOString(); dirty = true; }
+    return { user: s.user, key: k };
+  }
+  const adminCookie = (token, secure, clear) => `mla=${clear ? '' : token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${clear ? 0 : ADMIN_HOURS * 3600}${secure ? '; Secure' : ''}`;
+  function adminLogin(req, ip, body) {
+    for (const k of Object.keys(state.adminSessions)) if (!adminLive(state.adminSessions[k])) delete state.adminSessions[k];
+    const v = sec.verify(ip, { username: body.username, password: body.password, code: body.code });
+    if (!v.ok) return v;
+    if (v.role !== 'admin') { audit('portal_admin_refused', ip, `${v.username} is not an admin`); return { ok: false, reason: 'role' }; }
+    const token = rand(32);
+    state.adminSessions[sha(token)] = { user: v.username, created: new Date().toISOString(), lastSeen: new Date().toISOString(), expires: new Date(Date.now() + ADMIN_HOURS * 3600000).toISOString(), ip, agent: String(req.headers['user-agent'] || '').slice(0, 120) };
+    save(); audit('portal_admin_login', ip, v.twoFactor ? 'with 2FA' : 'password only', v.username);
+    return { ok: true, token, user: v.username };
+  }
+  const allJobs = async () => [...(await svc.handlers.get('jobs:list')()), job()];
 
   // ---- replies --------------------------------------------------------------------------------------
   const HEADERS = { 'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'", 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'referrer-policy': 'no-referrer', 'permissions-policy': 'camera=(), microphone=(), geolocation=()', 'x-robots-tag': 'noindex, nofollow' };
@@ -154,6 +193,55 @@ function createPortal({ svc, dataDir, log, audit, version, notify }) {
         const secure = forwardedProto(req) === 'https';
         res.writeHead(302, { location: '/', 'set-cookie': `mlp=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${DEVICE_DAYS * 86400}${secure ? '; Secure' : ''}`, 'cache-control': 'no-store' });
         return res.end();
+      }
+
+      // ---- the admin from outside: POST /a/login, then GET or POST /a/<name>
+      if (url.pathname.startsWith('/a/')) {
+        if (!state.admin || !sec) return json(res, 404, { ok: false, error: 'not found' });
+        const name = url.pathname.slice(3);
+        const post = req.method === 'POST';
+        if (post) {
+          const origin = req.headers.origin; if (origin && new URL(origin).host !== req.headers.host) { audit('portal_cross_origin', ip, origin); return json(res, 403, { ok: false, error: 'cross-origin request refused' }); }
+          if (!/^application\/json/.test(req.headers['content-type'] || '')) return json(res, 415, { ok: false, error: 'JSON body required' });
+        } else if (req.method !== 'GET') return json(res, 405, { ok: false, error: 'method not allowed' });
+        const body = post ? JSON.parse(await readBody(req) || '{}') : {};
+        const secure = forwardedProto(req) === 'https';
+        if (name === 'login' && post) {
+          if (!within('alogin:' + ip, 12, 15 * 60000)) { audit('portal_admin_blocked', ip, 'too many attempts'); res.setHeader('retry-after', '900'); return json(res, 429, { ok: false, reason: 'locked', error: 'Too many attempts; wait fifteen minutes' }); }
+          const r = adminLogin(req, ip, body);
+          if (!r.ok) return json(res, ({ locked: 429, nopassword: 503 })[r.reason] || 401, { ok: false, reason: r.reason, error: ({ locked: 'Too many failed attempts; this address is locked for 15 minutes', nopassword: 'No account exists on the server yet', totp: 'Enter the code from your authenticator app', totp_bad: 'Wrong code', role: 'Only an admin account can sign in here', password: 'Wrong username or password' })[r.reason] || 'Sign-in refused' });
+          res.setHeader('set-cookie', adminCookie(r.token, secure));
+          return json(res, 200, { ok: true, result: { user: r.user } });
+        }
+        const a = admin(req);
+        if (!a) return json(res, 401, { ok: false, reason: 'login', error: 'Sign in with an admin account' });
+        if (!within('adm:' + a.key, 240, 60000)) { res.setHeader('retry-after', '60'); return json(res, 429, { ok: false, error: 'Too many requests; wait a minute' }); }
+        if (name === 'logout' && post) { delete state.adminSessions[a.key]; save(); audit('portal_admin_logout', ip, '', a.user); res.setHeader('set-cookie', adminCookie('', secure, true)); return json(res, 200, { ok: true }); }
+        if (name === 'me' && !post) return json(res, 200, { ok: true, result: { user: a.user, twoFactor: !!(sec.totpEnabled && sec.totpEnabled()), version, showRatings: !!state.showRatings, checkMinutes: state.checkMinutes, publicUrl: state.publicUrl, homeUrl: state.homeUrl, sessions: Object.values(state.adminSessions).filter(adminLive).length } });
+        if (name === 'invites' && !post) return json(res, 200, { ok: true, result: status().invites });
+        if (name === 'invites' && post) return json(res, 200, { ok: true, result: createInvite({ name: body.name, days: body.days, perms: body.perms }, a.user, ip) });
+        if (name === 'invites/renew' && post) return json(res, 200, { ok: true, result: renewInvite(String(body.id || ''), a.user, ip) });
+        if (name === 'invites/revoke' && post) return json(res, 200, { ok: true, result: revokeInvite(String(body.id || ''), a.user, ip) });
+        if (name === 'invites/delete' && post) return json(res, 200, { ok: true, result: deleteInvite(String(body.id || ''), a.user, ip) });
+        if (name === 'requests' && !post) return json(res, 200, { ok: true, result: (await core('requests:list')).map(projectAdminRequest) });
+        if (name === 'requests/update' && post) {
+          const patch = {}; if (body.status != null) { if (!['pending', 'approved', 'added', 'rejected'].includes(body.status)) return json(res, 400, { ok: false, error: 'Bad status' }); patch.status = body.status; } if (body.reply !== undefined) patch.admin_note = body.reply == null ? '' : String(body.reply).slice(0, 1000);
+          const row = await core('requests:update', Number(body.id), patch); audit('portal_admin_request', ip, `#${body.id}: ${patch.status || 'reply'}`, a.user);
+          return json(res, 200, { ok: true, result: row ? projectAdminRequest(row) : null });
+        }
+        if (name === 'requests/delete' && post) { await core('requests:delete', Number(body.id)); audit('portal_admin_request', ip, `#${body.id}: deleted`, a.user); return json(res, 200, { ok: true }); }
+        if (name === 'status' && !post) {
+          const st = await core('data:status');
+          return json(res, 200, { ok: true, result: { files: num(st.files), bytes: num(st.bytes), free_bytes: num(st.free_bytes), months_left: num(st.months_left), pending_requests: num(st.pending_requests), missing_episodes: num(st.missing_episodes), airing_this_week: num(st.airing_this_week), scanning: !!st.scanning, last_scan: st.last_scan || null, checks: { public: checks.public, home: checks.home }, jobs: (await allJobs()).map(j => ({ id: String(j.id), label: String(j.label), enabled: !!j.enabled, when: j.when || null, last: j.last || null, lastNote: j.lastNote ? noPaths(j.lastNote) : null, next: j.next || null, running: !!j.running, overdue: !!j.overdue, overdueWhy: j.overdueWhy ? noPaths(j.overdueWhy) : null, remote: REMOTE_JOBS.includes(j.id) })) } });
+        }
+        if (name === 'jobs/run' && post) {
+          const id = String(body.id || ''); if (!REMOTE_JOBS.includes(id)) return json(res, 400, { ok: false, error: 'That job cannot be started from outside' });
+          audit('portal_admin_job', ip, id, a.user);
+          if (id === 'portal') { const r = await checkNow(); const c = [r.public, r.home].filter(Boolean); return json(res, 200, { ok: true, result: { done: true, message: c.length ? c.map(x => `${x.url}: ${x.ok ? 'working' : x.error}`).join(' · ') : 'No address is set' } }); }
+          const r = await svc.handlers.get('jobs:run')(id); return json(res, 200, { ok: true, result: { started: !!r.started, done: !!r.done, message: String(r.message || '') } });
+        }
+        if (name === 'options' && post) { const o = {}; if (typeof body.showRatings === 'boolean') o.showRatings = body.showRatings; if (body.checkMinutes != null) o.checkMinutes = body.checkMinutes; setOptions(o, a.user, ip); return json(res, 200, { ok: true, result: { showRatings: state.showRatings, checkMinutes: state.checkMinutes } }); }
+        return json(res, 404, { ok: false, error: 'not found' });
       }
 
       // ---- the data API: GET /p/<name>, POST /p/requests
@@ -228,7 +316,8 @@ function createPortal({ svc, dataDir, log, audit, version, notify }) {
 
       // ---- the site itself: static files from src/portal only
       if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
-      let rel = url.pathname === '/' ? '/index.html' : url.pathname;
+      if (url.pathname === '/qr.js') { res.writeHead(200, { 'content-type': TYPES['.js'], 'cache-control': 'no-cache' }); return req.method === 'HEAD' ? res.end() : fs.createReadStream(path.join(__dirname, '..', 'renderer', 'qr.js')).pipe(res); }
+      let rel = url.pathname === '/' ? '/index.html' : url.pathname === '/admin' || url.pathname === '/admin/' ? '/admin.html' : url.pathname;
       rel = path.normalize(rel).replace(/^(\.\.[/\\])+/, '');
       const abs = path.join(staticDir, rel);
       if (!abs.startsWith(staticDir + path.sep) || !fs.existsSync(abs) || !fs.statSync(abs).isFile()) { res.writeHead(404, { 'content-type': 'text/plain' }); return res.end('not found'); }
@@ -236,6 +325,7 @@ function createPortal({ svc, dataDir, log, audit, version, notify }) {
       return req.method === 'HEAD' ? res.end() : fs.createReadStream(abs).pipe(res);
     } catch (e) {
       if (e.code === 403) return json(res, 403, { ok: false, error: e.message });
+      if (url.pathname.startsWith('/a/') && admin(req) && !res.headersSent && !/SQLITE|ENOENT|EACCES/.test(String(e.code || '')) && !(e instanceof SyntaxError)) return json(res, 400, { ok: false, error: e.message }); // validation messages are written for people
       log(`portal ${req.method} ${url.pathname}: ${e.message}`);
       if (!res.headersSent) json(res, 500, { ok: false, error: 'Something went wrong' }); else res.end();
     }
@@ -317,4 +407,4 @@ function createPortal({ svc, dataDir, log, audit, version, notify }) {
   return { checkNow, job, start, stop, status, setOptions, createInvite, renewInvite, revokeInvite, deleteInvite, handle, file };
 }
 
-module.exports = { createPortal, normTitle, projectSeries, projectMovie, projectEpisode, projectVersion, projectTonight, projectRequest, limiter };
+module.exports = { createPortal, normTitle, noPaths, projectSeries, projectMovie, projectEpisode, projectVersion, projectTonight, projectRequest, limiter };

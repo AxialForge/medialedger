@@ -215,6 +215,11 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   static folder (`src/portal/`). Never add an admin channel to it and never return a core row directly: every reply
   goes through a `project*` function that copies named fields. `test/portal.test.js` fails if a reply contains a path,
   an id or a Plex field, and if any admin route answers there. It calls `svc.setShowAdult(false)` before every core call.
+  The one admin surface it does have (2.2.0, `/admin` + `/a/…`, off by default) is a *second* allow-list of nine
+  routes with its own cookie `mla` and sessions in `portal.json`; it checks credentials through `sec.verify()` and
+  never creates a web session. Cookies ignore ports, so reusing `ml_session` would have made a portal sign-in on
+  `medialedger.home:8090` a full web-app session on `:8080`. Job notes pass through `noPaths()`: the backup job's
+  note names the backup file with its full path. Add a route there only if it cannot change settings or files.
 - **`X-Forwarded-For` is believed only from loopback** (`src/server/clientip.js`). Trusting it from any socket would let
   a LAN client pick its own address and walk around LAN-only and the lockout.
 - **The dashboard editor must not reload data per edit.** `dash.js` re-renders on every move, resize and option

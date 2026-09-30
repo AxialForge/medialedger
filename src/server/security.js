@@ -141,7 +141,9 @@ function createSecurity({ dataDir, log = () => {} }) {
   const shortId = (id) => id.slice(0, 8);
 
   // ---- login ----
-  function login(ip, ua, { username, password, code }) {
+  /** The checks behind a sign-in (lockout, password, 2FA for admins) without opening a session.
+   *  The family portal uses this for its admin sign-in and keeps its own sessions. */
+  function verify(ip, { username, password, code }) {
     if (isBanned(ip)) { audit('login_blocked', ip, 'locked out'); return { ok: false, reason: 'locked' }; }
     if (!hasUsers()) return { ok: false, reason: 'nopassword' };
     const u = normUser(username); const user = state.users[u];
@@ -151,9 +153,13 @@ function createSecurity({ dataDir, log = () => {} }) {
       if (!totp.verify(state.totp.secret, code)) { failed(ip); audit('login_failed', ip, 'wrong 2FA code', u); return { ok: false, reason: 'totp_bad' }; }
     }
     fails.delete(ip);
-    const id = newSession(u, ip, ua);
-    audit('login', ip, `${user.role}${state.totp.enabled && user.role === 'admin' ? ' + 2FA' : ''}`, u);
-    return { ok: true, id, role: user.role, username: u };
+    return { ok: true, role: user.role, username: u, twoFactor: !!(state.totp.enabled && user.role === 'admin') };
+  }
+  function login(ip, ua, creds) {
+    const v = verify(ip, creds); if (!v.ok) return v;
+    const id = newSession(v.username, ip, ua);
+    audit('login', ip, `${v.role}${v.twoFactor ? ' + 2FA' : ''}`, v.username);
+    return { ok: true, id, role: v.role, username: v.username };
   }
   function logout(s, ip) { delete state.sessions[s.id]; save(); audit('logout', ip, '', s.user); }
 
@@ -225,10 +231,10 @@ function createSecurity({ dataDir, log = () => {} }) {
   function revokeOthers(current, ip) { let n = 0; for (const k of Object.keys(state.sessions)) if (k !== current.id) { delete state.sessions[k]; n++; } save(); audit('sessions_revoked', ip, `${n} other session(s)`, current.user); return n; }
 
   return {
-    get state() { return state; }, audit, isBanned, isAllowedIp, login, logout, sessionOf, setSessionFlag, cookieFor, clearCookie,
+    get state() { return state; }, audit, isBanned, isAllowedIp, verify, login, logout, sessionOf, setSessionFlag, cookieFor, clearCookie,
     setPassword, hasPassword: hasUsers, changePassword, needsReauth, reauth, totpSetup, totpEnable, totpDisable, setOptions, status, revoke, revokeOthers,
     listUsers, addUser, setRole, resetPassword, deleteUser, userOf, guestEnabled: () => state.guestEnabled, statusKey, statusOk, getPrefs, setPrefs,
-    webhookSet, webhookOk, webhook: () => state.webhook,
+    webhookSet, webhookOk, webhook: () => state.webhook, totpEnabled: () => !!state.totp.enabled,
   };
 }
 

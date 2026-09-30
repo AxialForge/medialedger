@@ -62,7 +62,7 @@ const send = (channel, payload) => { const data = `data: ${JSON.stringify({ chan
 const svc = createService({ userData: dataDir, log, send, host: { isPackaged: true, getAppPath: () => path.join(__dirname, '..', '..'), restart: () => setTimeout(() => process.exit(0), 1500) } });
 svc.init();
 // The family portal: its own listener, its own routes, its own static folder (see portal.js).
-const portal = createPortal({ svc, dataDir, log, audit: (...a) => sec.audit(...a), version: pkg.version, notify: (...a) => svc.notify(...a) });
+const portal = createPortal({ svc, dataDir, log, audit: (...a) => sec.audit(...a), version: pkg.version, notify: (...a) => svc.notify(...a), sec });
 
 // ---- roles ---------------------------------------------------------------------------------
 // What a guest (no account) may call: read-only library statistics, plus filing a media request.
