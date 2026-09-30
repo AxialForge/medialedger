@@ -8,6 +8,35 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [2.3.0] - 2026-09-30
+
+### Added
+
+- **Sort by** menu on the TV, Anime and Movies pages with an ascending or
+  descending button: title, year, online / audience / critic / own rating,
+  unwatched, last episode added, date added, date viewed, plays, episodes,
+  seasons, duration, size, resolution, bitrate, missing episodes, progress
+  and versions (movies) and Randomly. Remembered per list.
+- **Poster wall details**: seasons and episodes (length and quality for a
+  movie) under each title, and a card of details when the pointer rests on a
+  tile.
+- **The sidebar folds to icons** with the « button; badges and tooltips stay.
+- **Settings in groups** with a tab per group and a *Find a setting* filter.
+
+### Changed
+
+- **HTTPS behind Caddy** no longer shows as a warning: when a reverse proxy
+  on the same machine serves HTTPS, the Security checklist passes and the
+  built-in certificate is not offered.
+- **Family portal address check** explains a failed secure connection in
+  words instead of `write EPROTO 6014…`, shows the whole message on the
+  page, and tries a dropped connection a second time before counting it.
+
+### Fixed
+
+- Lone checkboxes in Settings and on the Family portal page no longer
+  stretch across the row.
+
 ## [2.2.0] - 2026-09-29
 
 ### Added

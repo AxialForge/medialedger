@@ -220,6 +220,13 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   never creates a web session. Cookies ignore ports, so reusing `ml_session` would have made a portal sign-in on
   `medialedger.home:8090` a full web-app session on `:8080`. Job notes pass through `noPaths()`: the backup job's
   note names the backup file with its full path. Add a route there only if it cannot change settings or files.
+- **Settings is grouped after it is drawn.** `groupSettings()` moves each `<h2>` and what follows it into a
+  `.ssec` inside a `.sgroup`, so a new section is just a new `<h2>` in the template plus its title in
+  `SETTINGS_GROUPS` (unlisted titles land in "Other"). Do not split the template into per-tab renders: Save reads
+  every control by id and must find them all, hidden or not.
+- **List sorts that are not columns** go in the `sorts` array passed to `makeTable` (`val` computes the key);
+  nulls always sort last in both directions. The sort state object is shared with `sortControl` and survives the
+  table being rebuilt by the filter bar, which is why it lives in the view and not in the table.
 - **`X-Forwarded-For` is believed only from loopback** (`src/server/clientip.js`). Trusting it from any socket would let
   a LAN client pick its own address and walk around LAN-only and the lockout.
 - **The dashboard editor must not reload data per edit.** `dash.js` re-renders on every move, resize and option

@@ -55,26 +55,63 @@ $('#modal').addEventListener('click', e => { if (e.target === $('#modal')) close
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
 // Sortable, filterable table. cols: [{key, label, num, render, sortVal, cls}]
-function makeTable(rows, cols, { onRow, search, defaultSort, short } = {}) {
-  let sortKey = defaultSort ? defaultSort.key : null, asc = defaultSort ? defaultSort.asc !== false : true, q = '';
+function makeTable(rows, cols, { onRow, search, defaultSort, short, sorts, hover } = {}) {
+  let sortKey = defaultSort ? defaultSort.key : null, asc = defaultSort ? defaultSort.asc !== false : true, q = '', shown = [];
   const wrap = el(`<div class="table-wrap ${short ? 'short' : ''}"></div>`);
   const render = () => {
     let data = rows;
     if (q && search) { const lq = q.toLowerCase(); data = rows.filter(r => search(r).toLowerCase().includes(lq)); }
     if (sortKey) {
-      const c = cols.find(x => x.key === sortKey);
-      const val = r => c.sortVal ? c.sortVal(r) : r[sortKey];
+      const c = cols.find(x => x.key === sortKey) || {}, extra = (sorts || []).find(x => x.key === sortKey);
+      const val = r => extra && extra.val ? extra.val(r) : c.sortVal ? c.sortVal(r) : r[sortKey];
       data = [...data].sort((a, b) => { const va = val(a), vb = val(b); if (va == null && vb == null) return 0; if (va == null) return 1; if (vb == null) return -1; const r = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb), undefined, { numeric: true, sensitivity: 'base' }); return asc ? r : -r; });
     }
     const head = cols.map(c => `<th class="${c.num ? 'num' : ''} ${c.key === sortKey ? 'sorted' + (asc ? ' asc' : '') : ''}" data-key="${c.key}">${esc(c.label)}</th>`).join('');
     const body = data.length ? data.map((r, i) => `<tr class="${onRow ? 'clickable' : ''}" data-i="${i}">${cols.map(c => `<td class="${c.num ? 'num' : ''} ${c.cls || ''}">${c.render ? c.render(r) : esc(r[c.key])}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length}" class="empty">Nothing here.</td></tr>`;
     wrap.innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
-    wrap.querySelectorAll('th').forEach(th => th.onclick = () => { const k = th.dataset.key; if (sortKey === k) asc = !asc; else { sortKey = k; asc = true; } render(); });
+    wrap.querySelectorAll('th').forEach(th => th.onclick = () => { const k = th.dataset.key; if (sortKey === k) asc = !asc; else { sortKey = k; asc = true; } render(); wrap.dispatchEvent(new CustomEvent('sort', { detail: { key: sortKey, asc } })); });
+    shown = data;
     if (onRow) wrap.querySelectorAll('tbody tr').forEach(tr => tr.onclick = (ev) => { if (ev.target.closest('button,a')) return; onRow(data[Number(tr.dataset.i)]); });
     wrap.dispatchEvent(new CustomEvent('count', { detail: data.length }));
   };
   render();
-  return { node: wrap, setQuery: v => { q = v; render(); }, rerender: render };
+  if (hover) {
+    let cur = null;
+    wrap.addEventListener('mouseover', (e) => { if (!wrap.classList.contains('wall')) return; const tr = e.target.closest('tbody tr'); if (!tr) { cur = null; return hoverCard.hide(); } if (tr === cur) return; cur = tr; const r = shown[Number(tr.dataset.i)]; if (r) hoverCard.later(tr, () => hover(r)); });
+    wrap.addEventListener('mouseleave', () => { cur = null; hoverCard.hide(); });
+    wrap.addEventListener('click', () => hoverCard.hide());
+  }
+  return { node: wrap, setQuery: v => { q = v; render(); }, rerender: render, setSort: (k, a) => { sortKey = k; asc = a; render(); } };
+}
+// One floating card for the poster wall: more about a title without leaving the wall.
+const hoverCard = (() => {
+  let node = null, timer = null;
+  const hide = () => { clearTimeout(timer); if (node) node.hidden = true; };
+  const show = (anchor, html) => {
+    if (!anchor.isConnected) return;
+    if (!node) { node = el('<div class="hovercard" hidden></div>'); document.body.append(node); }
+    node.innerHTML = html; node.hidden = false;
+    const a = anchor.getBoundingClientRect(), w = node.offsetWidth, h = node.offsetHeight;
+    let x = a.right + 10; if (x + w > innerWidth - 8) x = a.left - w - 10; if (x < 8) x = 8;
+    node.style.left = x + 'px'; node.style.top = Math.max(8, Math.min(a.top, innerHeight - h - 8)) + 'px';
+  };
+  window.addEventListener('scroll', hide, true); window.addEventListener('hashchange', hide);
+  return { hide, later: (anchor, html) => { clearTimeout(timer); timer = setTimeout(() => show(anchor, html()), 350); } };
+})();
+const hcRow = (k, v) => v ? `<div class="hc-row"><span>${k}</span><span>${v}</span></div>` : '';
+const dayOf = (iso) => iso ? new Date(iso).toLocaleDateString([], { dateStyle: 'medium' }) : '';
+// The sort menu of a list page: every entry sorts both ways and the choice is remembered per list.
+// sorts: [{ key, label, desc (start descending), val (when it is not a column), pick (run when chosen) }]
+const loadSort = (id, dflt) => { try { return { ...dflt, ...JSON.parse(localStorage.getItem('medialedger.sort.' + id) || '{}') }; } catch { return { ...dflt }; } };
+function sortControl(id, sorts, state, apply) {
+  const node = el(`<span class="sortctl inline"><span class="muted tiny">Sort by</span><select class="small" title="Sort the list"><option value="" hidden>a column</option>${sorts.map(s => `<option value="${s.key}">${esc(s.label)}</option>`).join('')}</select><button class="small dir"></button></span>`);
+  const sel = $('select', node), dir = $('.dir', node);
+  const paint = () => { sel.value = sorts.some(s => s.key === state.key) ? state.key : ''; dir.textContent = state.asc ? '↑' : '↓'; dir.title = state.asc ? 'Ascending. Click for descending' : 'Descending. Click for ascending'; try { localStorage.setItem('medialedger.sort.' + id, JSON.stringify({ key: state.key, asc: state.asc })); } catch { /* private mode */ } };
+  sel.onchange = () => { const s = sorts.find(x => x.key === sel.value); if (!s) return; state.key = s.key; state.asc = !s.desc; if (s.pick) s.pick(); paint(); apply(); };
+  dir.onclick = () => { state.asc = !state.asc; const s = sorts.find(x => x.key === state.key); if (s && s.pick) s.pick(); paint(); apply(); };
+  const first = sorts.find(x => x.key === state.key); if (first && first.pick) first.pick();
+  paint();
+  return { node, paint };
 }
 function searchToolbar(table, total, extra = '') {
   const tb = el(`<div class="toolbar"><input type="search" placeholder="Filter…"><span class="muted small count"></span><span class="grow"></span>${extra}</div>`);
@@ -526,7 +563,7 @@ views.dashboard = async () => {
 async function seriesView(type) {
   const [rows] = await Promise.all([L.data.series(type), loadPosterIndex()]);
   const cols = [
-    { key: 'show_name', label: 'Series', cls: 'wrap ptitle', render: r => `${posterTag(type, r.show_name, r.show_name)}<span class="pname">${esc(r.show_name)}</span>` },
+    { key: 'show_name', label: 'Series', cls: 'wrap ptitle', render: r => `${posterTag(type, r.show_name, r.show_name)}<span class="pname">${esc(r.show_name)}</span><span class="pmeta">${r.seasons} season${r.seasons === 1 ? '' : 's'} · ${r.episodes} episode${r.episodes === 1 ? '' : 's'}</span>` },
     { key: 'tags', label: 'Tags', cls: 'wrap tagcell', sortVal: r => (r.tags || []).length * 100 + (r.genres || []).length, render: tagCell },
     { key: 'seasons', label: 'Seasons', num: true, render: r => r.min_season === r.max_season ? `${r.seasons}` : `${r.seasons} <span class="muted tiny">S${r.min_season}–S${r.max_season}</span>` },
     { key: 'episodes', label: 'Episodes', num: true },
@@ -544,8 +581,23 @@ async function seriesView(type) {
     { key: 'unparsed', label: 'Issues', num: true, render: r => (r.unparsed ? `<span class="badge warn">${r.unparsed} unparsed</span>` : '') + (r.probed < r.episodes ? `<span class="badge">${r.episodes - r.probed} unprobed</span>` : '') },
   ];
   rows.forEach(r => { r.unwatched = r.plex_linked ? r.episodes - r.watched : null; });
-  const build = (list) => wallify(makeTable(list, cols, { search: r => `${r.show_name} ${tagText(r)} ${r.resolutions || ''} ${r.codecs || ''} ${r.audio_langs || ''}`, defaultSort: { key: 'show_name' }, onRow: r => { location.hash = `#${type}/${encodeURIComponent(r.show_name)}`; } }));
+  const sorts = [
+    { key: 'show_name', label: 'Title' }, { key: 'year', label: 'Year', desc: true }, { key: 'online_rating', label: 'Online rating', desc: true },
+    { key: 'audience_rating', label: 'Audience rating (Plex)', desc: true }, { key: 'critic_rating', label: 'Critic rating (Plex)', desc: true }, { key: 'my_rating', label: 'My rating', desc: true },
+    { key: 'unwatched', label: 'Unwatched episodes', desc: true }, { key: 'last_added', label: 'Last episode added', desc: true }, { key: 'added', label: 'Date added', desc: true }, { key: 'last_viewed', label: 'Date viewed', desc: true },
+    { key: 'plays', label: 'Plays', desc: true }, { key: 'episodes', label: 'Episodes', desc: true }, { key: 'seasons', label: 'Seasons', desc: true }, { key: 'seconds', label: 'Duration', desc: true }, { key: 'bytes', label: 'Size', desc: true },
+    { key: 'height', label: 'Resolution', desc: true }, { key: 'bitrate', label: 'Bitrate', desc: true }, { key: 'missing_count', label: 'Missing episodes', desc: true },
+    { key: 'random', label: 'Randomly', val: r => r._rnd, pick: () => rows.forEach(r => { r._rnd = Math.random(); }) },
+  ];
+  const sortState = loadSort(type, { key: 'show_name', asc: true }); let sc = null;
+  const hover = (r) => `<b>${esc(r.show_name)}</b><div class="muted tiny">${[r.year, r.meta_status, AUDIO_LABEL[r.audio_type]].filter(Boolean).map(esc).join(' · ')}</div>
+    ${hcRow('On hand', `${r.seasons} season${r.seasons === 1 ? '' : 's'} · ${r.episodes} episodes`)}${hcRow('Runtime', `${fmtHours(r.seconds)} · ${fmtBytes(r.bytes)}`)}${hcRow('Quality', esc((r.resolutions || '').split(',').filter(Boolean).join(', ')))}
+    ${hcRow('Missing', r.expected ? (r.missing_count ? `${r.missing_count} of ${r.expected}` : 'complete') : '')}${hcRow('Watched', r.plex_linked ? `${pct(r.watched, r.episodes)}%${r.last_viewed ? ' · last ' + dayOf(r.last_viewed) : ''}` : '')}
+    ${hcRow('Rating', [r.online_rating != null ? `${Number(r.online_rating).toFixed(1)} online` : '', r.my_rating ? `${r.my_rating}★ mine` : ''].filter(Boolean).join(' · '))}${hcRow('Next episode', r.next_airing ? dayOf(r.next_airing) : '')}${hcRow('Added', r.added ? `${dayOf(r.added)}${r.last_added && dayOf(r.last_added) !== dayOf(r.added) ? ' · newest ' + dayOf(r.last_added) : ''}` : '')}
+    ${(r.genres || []).length || (r.tags || []).length ? `<div class="hc-tags">${chips(r.genres || [], 'tag-genre', 5)}${(r.tags || []).map(t => `<span class="badge">#${esc(t)}</span>`).join('')}</div>` : ''}`;
+  const build = (list) => { const t = wallify(makeTable(list, cols, { search: r => `${r.show_name} ${tagText(r)} ${r.resolutions || ''} ${r.codecs || ''} ${r.audio_langs || ''}`, defaultSort: sortState, sorts, hover, onRow: r => { location.hash = `#${type}/${encodeURIComponent(r.show_name)}`; } })); t.node.addEventListener('sort', e => { Object.assign(sortState, e.detail); if (sc) sc.paint(); }); return t; };
   let table = build(rows);
+  sc = sortControl(type, sorts, sortState, () => table.setSort(sortState.key, sortState.asc)); table.setSort(sortState.key, sortState.asc);
   const eps = rows.reduce((a, r) => a + r.episodes, 0), bytes = rows.reduce((a, r) => a + (r.bytes || 0), 0), secs = rows.reduce((a, r) => a + (r.seconds || 0), 0);
     const linked = rows.filter(r => r.plex_linked), watchedEps = linked.reduce((a, r) => a + r.watched, 0), linkedEps = linked.reduce((a, r) => a + r.episodes, 0);
   const matched = rows.filter(r => r.expected > 0), complete = matched.filter(r => !r.missing_count);
@@ -558,7 +610,7 @@ async function seriesView(type) {
     ${tile('', 'Top genres', chips(topG.map(x => x[0])), topG.slice(3, 7).map(x => `${x[0]} ${x[1]}`).join(' · ') || (topG.length ? '' : 'from TVmaze / AniList / Plex'))}
     ${tile('', 'Your tags', tagged ? `${tagged} series` : '—', topT.slice(0, 4).map(x => `${x[0]} ${x[1]}`).join(' · ') || 'type one on any series page')}
     ${tile('', 'Full captions', rows.filter(r => r.probed && r.captioned === r.episodes).length + ' series')}${linkTile('#issues', tile(rows.filter(r => r.unparsed).length ? 'warnt' : '', 'With issues', rows.filter(r => r.unparsed).length + ' series'))}</div>`;
-  const tb = searchToolbar(table, rows.length, wallToggle() + '<span class="muted tiny">Filter also matches genres, sub/dub and your tags</span>'); wireWall(tb);
+  const tb = searchToolbar(table, rows.length, wallToggle() + '<span class="muted tiny">Filter also matches genres, sub/dub and your tags</span>'); wireWall(tb); $('.grow', tb).before(sc.node);
   const fb = filterBar(rows, (list) => { const q = $('input[type=search]', tb).value; const nt = build(list); table.node.replaceWith(nt.node); table = nt; nt.node.addEventListener('count', ev => $('.count', tb).textContent = `${ev.detail} of ${rows.length}`); nt.setQuery(q); if (!q) $('.count', tb).textContent = `${list.length} of ${rows.length}`; });
   view.append(tb, fb, table.node); applyQuery(tb, table);
 }
@@ -598,12 +650,13 @@ views.family = async () => {
   const st = await L.portal.status();
   if (!st.available) { view.innerHTML = `<h1>Family portal</h1><div class="card"><p>The family portal is part of the web server. It gives people you invite a small read-only site: browse the libraries, pick something for tonight, and send media requests. Nothing on it can change the library.</p><p class="muted">Open this page on the Raspberry Pi's site to set it up.</p></div>`; return; }
   const active = st.invites.filter(i => i.active);
-  const checkTile = (title, c, url) => !url ? tile('', title, 'not set', 'add it under Addresses') : !c ? tile('', title, 'not checked yet', esc(url.replace(/^https?:\/\//, ''))) : tile(c.ok ? 'okt' : (c.fails >= 2 ? 'badt' : 'warnt'), title, c.ok ? 'working' : (c.fails >= 2 ? 'not reachable' : 'one failed check'), `${c.ok ? `${c.ms} ms` : esc(c.error)} · checked ${fmtAgo(c.at)}${c.since && c.since !== c.at ? ` · ${c.ok ? 'up' : 'down'} since ${fmtAgo(c.since).replace(' ago', '')}` : ''}${c.certDays != null ? ` · certificate ${c.certDays} days left` : ''}${c.verified === false ? ' · certificate not verified' : ''}`);
+  const checkTile = (title, c, url) => !url ? tile('', title, 'not set', 'add it under Addresses') : !c ? tile('', title, 'not checked yet', esc(url.replace(/^https?:\/\//, ''))) : tile(c.ok ? 'okt' : (c.fails >= 2 ? 'badt' : 'warnt'), title, c.ok ? 'working' : (c.fails >= 2 ? 'not reachable' : 'one failed check'), `${c.ok ? `${c.ms} ms` : `<span title="${esc(c.error)}">${esc(c.error)}</span>`} · checked ${fmtAgo(c.at)}${c.since && c.since !== c.at ? ` · ${c.ok ? 'up' : 'down'} since ${fmtAgo(c.since).replace(' ago', '')}` : ''}${c.certDays != null ? ` · certificate ${c.certDays} days left` : ''}${c.verified === false ? ' · certificate not verified' : ''}`);
   const hasAddress = !!(st.publicUrl || st.homeUrl);
   const linkBox = (title, url, note) => url ? `<div><div class="qrbox">${qrSvg(url, { size: 168, label: title })}</div><div class="muted tiny" style="margin:6px 0 2px">${esc(title)}${note ? ' · ' + esc(note) : ''}</div><div class="inline"><input type="text" readonly value="${esc(url)}" onclick="this.select()"><button class="small copyLink" data-url="${esc(url)}">Copy</button></div></div>` : '';
   view.innerHTML = `<h1>Family portal</h1>
     <p class="lead">A second front door for people you invite: they can browse the libraries, use What to watch tonight, and send media requests. It serves its own small site on its own port. Sign-in, settings, scans, renames, file paths, watch history and the adult library do not exist there.</p>
     <div class="tiles compact">${tile(st.enabled ? (st.listening ? 'okt' : 'badt') : '', 'Portal', st.enabled ? (st.listening ? 'on' : 'not running') : 'off', st.listening ? `listening on ${esc(st.listening)}` : esc(st.error || 'switched off'))}${tile('', 'Active invites', active.length, `${st.invites.length - active.length} revoked or expired`)}${tile('', 'Requests from family', st.invites.reduce((a, i) => a + (i.requests || 0), 0))}${tile('', 'Last visit', st.lastVisit ? fmtAgo(st.lastVisit.at) : 'none yet', st.lastVisit ? `${esc(st.lastVisit.name)} · ${esc(st.lastVisit.ip)}` : 'since the server started')}${checkTile('Public address', st.checks && st.checks.public, st.publicUrl)}${checkTile('Home address', st.checks && st.checks.home, st.homeUrl)}</div>
+    ${[['Public address', st.checks && st.checks.public], ['Home address', st.checks && st.checks.home]].filter(([, c]) => c && !c.ok).map(([n, c]) => `<div class="warnbox" style="margin:8px 0"><b>${n} is not answering:</b> ${esc(c.error)}.</div>`).join('')}
     <div class="toolbar" style="margin-top:4px"><button class="small" id="fvCheck" ${st.enabled && hasAddress ? '' : 'disabled'}>Check the addresses now</button><span class="muted tiny">${st.enabled ? (st.checkMinutes ? `The server opens each address the way a visitor would, every ${st.checkMinutes} minutes${st.checks && st.checks.next ? `; next ${fmtDate(st.checks.next)}` : ''}. Two failures in a row send a notification.` : 'Automatic checks are off.') : 'Switch the portal on to check its addresses.'}</span></div>
     <h2>Invites</h2>
     <div class="card"><div class="inline" style="flex-wrap:wrap;gap:8px"><input type="text" id="fvName" placeholder="Name, e.g. Mom" maxlength="40" style="width:200px"><select id="fvDays" class="small"><option value="0">never expires</option><option value="7">7 days</option><option value="30">30 days</option><option value="365">1 year</option></select><label class="inline small"><input type="checkbox" id="fvBrowse" checked> browse</label><label class="inline small"><input type="checkbox" id="fvTonight" checked> tonight</label><label class="inline small"><input type="checkbox" id="fvRequest" checked> requests</label><button class="primary" id="fvAdd" ${hasAddress ? '' : 'disabled title="Set a public or home address first"'}>Create invite</button></div>${hasAddress ? '' : '<div class="warnbox" style="margin-top:10px">Set a <b>public</b> or <b>home address</b> below and press Save before creating invites: the link and the QR code are built from it.</div>'}<div id="fvNew"></div></div>
@@ -859,7 +912,7 @@ async function episodesView(type, show) {
 views.movies = async () => {
   const [rows] = await Promise.all([L.data.movies(), loadPosterIndex()]);
   const cols = [
-    { key: 'title', label: 'Title', cls: 'wrap ptitle', render: r => `${posterTag('movie', r.group_key, r.title)}<span class="pname">${esc(r.title)}${r.year ? `<span class="pyear muted"> (${r.year})</span>` : ''}</span>${r.files > 1 ? ` <span class="badge warn">×${r.files}</span>` : ''}` },
+    { key: 'title', label: 'Title', cls: 'wrap ptitle', render: r => `${posterTag('movie', r.group_key, r.title)}<span class="pname">${esc(r.title)}${r.year ? `<span class="pyear muted"> (${r.year})</span>` : ''}</span><span class="pmeta">${[fmtDur(r.seconds), (r.resolutions || '').split(',').filter(Boolean).join(' '), r.hdr && r.hdr !== 'SDR' ? r.hdr : ''].filter(Boolean).map(esc).join(' · ')}</span>${r.files > 1 ? ` <span class="badge warn">×${r.files}</span>` : ''}` },
     { key: 'year', label: 'Year', num: true },
     { key: 'tags', label: 'Tags', cls: 'wrap tagcell', sortVal: r => (r.tags || []).length * 100 + (r.genres || []).length, render: tagCell },
     { key: 'files', label: 'Files', num: true },
@@ -873,8 +926,21 @@ views.movies = async () => {
   ];
   rows.forEach(r => { r.watched = r.watched_count > 0 ? 1 : 0; r.unwatched = r.plex_linked ? (r.watched_count > 0 ? 0 : 1) : null; });
   let onlyMulti = false, filtered = rows;
-  const build = () => wallify(makeTable((onlyMulti ? filtered.filter(r => r.files > 1) : filtered), cols, { search: r => `${r.title} ${r.year || ''} ${tagText(r)} ${r.resolutions || ''} ${r.codecs || ''} ${r.hdr || ''}`, defaultSort: { key: 'title' }, onRow: r => { location.hash = '#movies/' + encodeURIComponent(r.group_key); } }));
+  const sorts = [
+    { key: 'title', label: 'Title' }, { key: 'year', label: 'Year', desc: true }, { key: 'audience_rating', label: 'Audience rating (Plex)', desc: true }, { key: 'my_rating', label: 'My rating', desc: true },
+    { key: 'seconds', label: 'Duration', desc: true }, { key: 'progress', label: 'Progress', desc: true, val: r => r.offset_ms && r.seconds ? r.offset_ms / 1000 / r.seconds : (r.watched_count > 0 ? 1 : null) }, { key: 'watched_count', label: 'Plays', desc: true },
+    { key: 'added', label: 'Date added', desc: true }, { key: 'last_viewed', label: 'Date viewed', desc: true }, { key: 'height', label: 'Resolution', desc: true }, { key: 'bitrate', label: 'Bitrate', desc: true }, { key: 'bytes', label: 'Size', desc: true }, { key: 'files', label: 'Versions', desc: true },
+    { key: 'random', label: 'Randomly', val: r => r._rnd, pick: () => rows.forEach(r => { r._rnd = Math.random(); }) },
+  ];
+  const sortState = loadSort('movie', { key: 'title', asc: true }); let sc = null;
+  const hover = (r) => `<b>${esc(r.title)}${r.year ? ` <span class="muted">(${r.year})</span>` : ''}</b><div class="muted tiny">${[fmtDur(r.seconds), AUDIO_LABEL[r.audio_type]].filter(Boolean).map(esc).join(' · ')}</div>
+    ${hcRow('Versions', `${r.files} file${r.files === 1 ? '' : 's'} · ${fmtBytes(r.bytes)}`)}${hcRow('Quality', esc([(r.resolutions || '').split(',').filter(Boolean).join(', '), r.hdr && r.hdr !== 'SDR' ? r.hdr : '', r.bitrate ? (r.bitrate / 1000).toFixed(1) + ' Mbps' : ''].filter(Boolean).join(' · ')))}${hcRow('Editions', esc(r.editions || ''))}
+    ${hcRow('Watched', r.plex_linked ? (r.watched_count > 0 ? `${r.watched_count} play${r.watched_count === 1 ? '' : 's'}${r.last_viewed ? ' · last ' + dayOf(r.last_viewed) : ''}` : 'not yet') : '')}${hcRow('Rating', [r.audience_rating != null ? `${Number(r.audience_rating).toFixed(1)} audience` : '', r.my_rating ? `${r.my_rating}★ mine` : ''].filter(Boolean).join(' · '))}
+    ${hcRow('Audio', esc(uniqList(r.audio_langs)))}${hcRow('Subtitles', esc(uniqList(r.sub_langs)))}${hcRow('Added', dayOf(r.added))}
+    ${(r.genres || []).length || (r.tags || []).length ? `<div class="hc-tags">${chips(r.genres || [], 'tag-genre', 5)}${(r.tags || []).map(t => `<span class="badge">#${esc(t)}</span>`).join('')}</div>` : ''}`;
+  const build = () => { const t = wallify(makeTable((onlyMulti ? filtered.filter(r => r.files > 1) : filtered), cols, { search: r => `${r.title} ${r.year || ''} ${tagText(r)} ${r.resolutions || ''} ${r.codecs || ''} ${r.hdr || ''}`, defaultSort: sortState, sorts, hover, onRow: r => { location.hash = '#movies/' + encodeURIComponent(r.group_key); } })); t.node.addEventListener('sort', e => { Object.assign(sortState, e.detail); if (sc) sc.paint(); }); return t; };
   let table = build();
+  sc = sortControl('movie', sorts, sortState, () => table.setSort(sortState.key, sortState.asc)); table.setSort(sortState.key, sortState.asc);
   const multi = rows.filter(r => r.files > 1);
     const mLinked = rows.filter(r => r.plex_linked), mWatched = mLinked.filter(r => r.watched_count > 0);
   const mTopG = topOf(rows, r => r.genres), mTopT = topOf(rows, r => r.tags), mTagged = rows.filter(r => r.tags && r.tags.length).length;
@@ -885,7 +951,7 @@ views.movies = async () => {
     ${tile('', 'Your tags', mTagged ? `${mTagged} titles` : '—', mTopT.slice(0, 4).map(x => `${x[0]} ${x[1]}`).join(' · ') || 'type one on any movie page')}
     ${mAu.sub + mAu.dub + mAu.dual + mAu.mixed ? tile('', 'Sub / dub', `${mAu.sub} subbed`, `${mAu.dual} dual · ${mAu.mixed} mixed`) : ''}
     ${linkTile('#issues/duplicates', tile(multi.length ? 'warnt' : '', 'Multiples', multi.length + ' titles', fmtBytes(multi.reduce((a, r) => a + (r.bytes || 0), 0))))}${tile('', 'With captions', rows.filter(r => r.has_captions === 1).length)}</div>`;
-  const tb = searchToolbar(table, rows.length, wallToggle() + '<label class="inline small"><input type="checkbox" id="multi"> Only titles with multiple files</label>'); wireWall(tb);
+  const tb = searchToolbar(table, rows.length, wallToggle() + '<label class="inline small"><input type="checkbox" id="multi"> Only titles with multiple files</label>'); wireWall(tb); $('.grow', tb).before(sc.node);
   const swap = () => { const q = $('input[type=search]', tb).value; const nt = build(); table.node.replaceWith(nt.node); table = nt; nt.node.addEventListener('count', ev => $('.count', tb).textContent = `${ev.detail} of ${rows.length}`); nt.setQuery(q); };
   const fb = filterBar(rows, (list) => { filtered = list; swap(); });
   view.append(tb, fb, table.node); applyQuery(tb, table);
@@ -1462,6 +1528,45 @@ views.ratings = async () => {
   $('#rTable').addEventListener('click', e => { if (e.target.closest('.ratingnote')) e.stopPropagation(); }, true);
 };
 
+// Settings is one long form. This splits it at its headings into named groups with a tab per group and a filter,
+// after the form is drawn, so every control keeps its id and the Save button still reads the whole form.
+const SETTINGS_GROUPS = [
+  ['Library', 'Where the files are and how they are read', ['Library roots', 'Scanning', 'ffprobe', 'Folder watch', 'Adult content']],
+  ['Episodes and quality', 'What counts as complete and as good enough', ['Expected episodes', 'Quality thresholds', 'Posters']],
+  ['Automation', 'What runs by itself and what it tells you', ['Schedules', 'Notifications', 'Updates']],
+  ['Connections', 'Other programs MediaLedger talks to', ['Plex', 'CSV export']],
+  ['Renaming', 'Changes to file names on the share', ['Renaming']],
+  ['Backup and data', 'The database, its backups and restore', ['Data']],
+  ['Appearance', 'How this device shows MediaLedger', ['Appearance']],
+];
+function groupSettings(form) {
+  const saveRow = $('#save', form).closest('.inline');
+  const secs = []; let cur = null;
+  for (const n of [...form.childNodes]) {
+    if (n === saveRow) break;
+    if (n.nodeType === 1 && n.tagName === 'H2') { cur = el('<section class="ssec"></section>'); cur.dataset.title = n.childNodes[0].textContent.trim(); secs.push(cur); }
+    if (cur) cur.append(n);
+  }
+  const groups = SETTINGS_GROUPS.map(([name, about, titles]) => ({ name, about, secs: secs.filter(s => titles.some(t => s.dataset.title.startsWith(t))) }));
+  const rest = secs.filter(s => !groups.some(g => g.secs.includes(s))); if (rest.length) groups.push({ name: 'Other', about: '', secs: rest });
+  const tabs = el(`<div class="stabs"><button data-g="">All</button>${groups.map(g => `<button data-g="${esc(g.name)}" title="${esc(g.about)}">${esc(g.name)}</button>`).join('')}<span class="grow"></span><input type="search" placeholder="Find a setting…" id="setFind"></div>`);
+  form.insertBefore(tabs, saveRow);
+  for (const g of groups) { const box = el(`<div class="sgroup" data-g="${esc(g.name)}"><div class="sgroup-title">${esc(g.name)}<span>${esc(g.about)}</span></div></div>`); box.append(...g.secs); form.insertBefore(box, saveRow); }
+  let on = ''; try { on = localStorage.getItem('medialedger.settingsTab') || ''; } catch { /* private mode */ }
+  if (!groups.some(g => g.name === on)) on = '';
+  const paint = () => {
+    const q = $('#setFind', form).value.trim().toLowerCase();
+    tabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', !q && b.dataset.g === on));
+    form.querySelectorAll('.sgroup').forEach(box => {
+      let any = false;
+      box.querySelectorAll('.ssec').forEach(s => { const hit = !q || s.textContent.toLowerCase().includes(q) || [...s.querySelectorAll('input,select')].some(i => String(i.value || '').toLowerCase().includes(q)); s.hidden = !hit; any = any || hit; });
+      box.hidden = q ? !any : !!on && box.dataset.g !== on;
+    });
+  };
+  tabs.onclick = (e) => { const b = e.target.closest('button'); if (!b) return; on = b.dataset.g; $('#setFind', form).value = ''; try { localStorage.setItem('medialedger.settingsTab', on); } catch { /* private mode */ } paint(); view.scrollTo({ top: 0 }); };
+  $('#setFind', form).oninput = paint;
+  paint();
+}
 views.settings = async () => {
   const s = await L.settings.get();
   const info = await L.appInfo();
@@ -1553,6 +1658,7 @@ views.settings = async () => {
 
       <div class="inline" style="margin-top:18px"><button class="primary" id="save">Save settings</button></div>
     </div>`;
+  groupSettings($('.form', view));
 
   const rootsBody = $('#roots');
   const rootRow = (r) => el(`<tr><td><input type="checkbox" class="r-on" ${r.enabled ? 'checked' : ''}></td><td><input type="text" class="r-label" value="${esc(r.label)}" style="width:110px"></td><td><div class="inline"><input type="text" class="r-path" value="${esc(r.path)}" style="flex:1"><button class="small r-pick" title="${L.isWeb ? 'Browse folders on the server' : 'Browse…'}">…</button></div></td><td><select class="r-type">${['tv', 'anime', 'movie', 'web', 'adult'].map(t => `<option value="${t}" ${r.type === t ? 'selected' : ''}>${t === 'adult' ? 'Adult (auto-detect anime / TV / movie)' : t === 'web' ? 'Web videos' : typeName(t)}</option>`).join('')}</select></td><td class="r-status muted tiny">…</td><td><button class="small r-del">✕</button></td></tr>`);
@@ -1803,7 +1909,7 @@ views.security = async () => {
   const EVENT_TEXT = { login: 'Signed in', login_failed: 'Failed sign-in', login_blocked: 'Blocked (locked out)', ip_locked: 'Address locked out', logout: 'Signed out', reauth: 'Password re-entered', reauth_failed: 'Re-entry failed', sensitive_action: 'Sensitive action', password_changed: 'Password changed', password_change_failed: 'Password change refused', '2fa_enabled': '2FA turned on', '2fa_disabled': '2FA turned off', options_changed: 'Options changed', session_revoked: 'Session revoked', sessions_revoked: 'Other sessions revoked', tls_enabled: 'HTTPS turned on', refused_non_lan: 'Refused: outside LAN', cross_origin_refused: 'Refused: cross-origin' };
   const evClass = (e) => /failed|blocked|locked|refused/.test(e) ? 'bad' : /sensitive|changed|revoked|disabled/.test(e) ? 'warn' : '';
   view.innerHTML = `<h1>Security</h1>
-    <p class="muted">Web server on ${st.https ? 'HTTPS' : 'HTTP'} port ${st.port} · ${st.sessions.length} active session${st.sessions.length === 1 ? '' : 's'} · ${st.failedLogins24h} failed sign-in${st.failedLogins24h === 1 ? '' : 's'} in 24 h · ${st.banned.length} address${st.banned.length === 1 ? '' : 'es'} locked out</p>
+    <p class="muted">Web server on ${st.https ? 'HTTPS' : 'HTTP'} port ${st.port}${st.proxyHttps ? ', behind a reverse proxy that serves HTTPS' : ''} · ${st.sessions.length} active session${st.sessions.length === 1 ? '' : 's'} · ${st.failedLogins24h} failed sign-in${st.failedLogins24h === 1 ? '' : 's'} in 24 h · ${st.banned.length} address${st.banned.length === 1 ? '' : 'es'} locked out</p>
     <div class="checks">${st.checks.map(c => `<div class="check ${c.ok ? '' : c.level}"><div class="dot"></div><div><b>${esc(c.name)}</b><span>${esc(c.detail)}</span></div></div>`).join('')}</div>
     <div class="grid2" style="margin-top:14px">
       <div class="card"><h3>Password</h3>
@@ -1826,8 +1932,8 @@ views.security = async () => {
         ${st.totpEnabled
           ? `<p>Sign-in requires your password and a 6-digit code from your authenticator app.</p><div class="field"><label>Password</label><input type="password" id="totpPw"></div><div class="inline"><button class="danger" id="totpOff">Turn off 2FA</button></div>`
           : `<p class="muted">Adds a code from Google Authenticator, Aegis, Bitwarden, 1Password or any TOTP app. Even a leaked password then cannot sign in.</p><div id="totpBox"><button class="primary" id="totpStart">Set up 2FA</button></div>`}
-        <h3 style="margin-top:16px">HTTPS ${st.https ? '<span class="right ok">on</span>' : '<span class="right muted">off</span>'}</h3>
-        ${st.https
+        <h3 style="margin-top:16px">HTTPS ${st.https ? '<span class="right ok">on</span>' : st.proxyHttps ? '<span class="right ok">on, by the reverse proxy</span>' : '<span class="right muted">off</span>'}</h3>
+        ${st.proxyHttps ? `<p class="muted">A reverse proxy on this machine (Caddy) serves HTTPS in front of this server, so browsers already get an encrypted connection and nothing needs turning on here. The built-in certificate is for a server with no proxy; switching it on now would break the proxy's connection to this port.</p>` : st.https
           ? `<p class="muted">Traffic between browsers and this server is encrypted with a self-signed certificate on port ${st.port}. Each device warns once until the certificate is installed on it.</p><div class="inline"><button class="danger" id="tlsOff" title="Behind a reverse proxy such as Caddy the proxy should hold the certificate, not this server">Turn HTTPS off</button> <a href="tls/medialedger-cert.crt" download="medialedger-cert.crt"><button>Download certificate</button></a></div>`
           : `<p class="muted">Encrypts the traffic between browsers and this server with a self-signed certificate made here, for every name and address the server answers to. The service restarts, sign-in sessions are kept${st.tlsPort !== st.port ? `, and the site moves to port ${st.tlsPort} with a redirect left on ${st.port}` : ''}.</p><div class="inline"><button class="primary" id="tlsOn" ${st.opensslAvailable ? '' : 'disabled title="openssl is not installed on the server"'}>Turn on HTTPS</button></div>`}
         <details style="margin-top:8px"><summary class="muted tiny" style="cursor:pointer">Removing the browser warning: install the certificate once per device</summary><div class="tiny" style="margin-top:6px;line-height:1.6">
@@ -1973,6 +2079,11 @@ window.addEventListener('hashchange', route);
 const closeNav = () => document.body.classList.remove('nav-open');
 $('#navToggle').onclick = () => document.body.classList.toggle('nav-open');
 $('#navShade').onclick = closeNav;
+// On a wide screen the sidebar folds to a strip of icons; each link's name becomes its tooltip.
+const navMini = (on) => { document.body.classList.toggle('nav-mini', on); const b = $('#navMini'); b.textContent = on ? '»' : '«'; b.title = on ? 'Expand the sidebar' : 'Collapse the sidebar to icons'; };
+document.querySelectorAll('.sidebar a[data-view]').forEach(a => { a.title = [...a.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent.trim()).join(' ').trim(); });
+$('#navMini').onclick = () => { const on = !document.body.classList.contains('nav-mini'); navMini(on); try { localStorage.setItem('medialedger.navmini', on ? '1' : '0'); } catch { /* private mode */ } };
+try { navMini(localStorage.getItem('medialedger.navmini') === '1'); } catch { navMini(false); }
 document.querySelectorAll('.sidebar a').forEach(a => a.addEventListener('click', closeNav));
 $('#topScan').onclick = () => $('#btnScan').hidden ? $('#btnCancel').click() : $('#btnScan').click();
 loadMe().then(() => { if (currentView) route(); });

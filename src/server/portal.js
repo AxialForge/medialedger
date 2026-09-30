@@ -337,6 +337,17 @@ function createPortal({ svc, dataDir, log, audit, version, notify, sec }) {
   // does not know, so there the certificate is not verified (the result says so).
   const checks = { public: null, home: null };
   let checkTimer = null, nextCheck = null;
+  // Node reports a failed TLS handshake as "write EPROTO 60147694…:error:0A000438:SSL routines:…:tlsv1 alert internal error…".
+  // The number is a memory address; the words after it are what matters.
+  function tlsError(e) {
+    const m = String(e && e.message || ''); if (e.code !== 'EPROTO' && !/SSL routines/.test(m)) return null;
+    if (/alert internal error|alert number 80/.test(m)) return 'the address refused the secure connection (TLS alert "internal error"): the proxy in front has no certificate ready for this name. With Tailscale: run "tailscale funnel status" and check HTTPS certificates are on for the tailnet';
+    if (/wrong version number/.test(m)) return 'the address does not speak HTTPS on that port: use http:// in the address, or fix the proxy in front';
+    if (/handshake failure|alert number 40/.test(m)) return 'the secure connection was refused (TLS handshake failure): the proxy in front does not serve this name';
+    if (/unrecognized name|alert number 112/.test(m)) return 'the proxy in front does not know this name (TLS "unrecognized name")';
+    const tail = m.split(':').map(x => x.trim()).filter(x => x && !/^[0-9A-F]+$/i.test(x) && !/^(error|write EPROTO.*|SSL routines|ssl3_read_bytes|\.\..*)$/i.test(x) && !/\.(c|cc)$/.test(x)).shift();
+    return 'the secure connection failed' + (tail ? `: ${tail}` : '');
+  }
   function probe(base, { verify }) {
     return new Promise((resolve) => {
       const started = Date.now();
@@ -354,13 +365,16 @@ function createPortal({ svc, dataDir, log, audit, version, notify, sec }) {
         });
       });
       req.on('timeout', () => req.destroy(new Error('no answer within 12 seconds')));
-      req.on('error', (e) => resolve({ ok: false, ms: Date.now() - started, error: ({ ENOTFOUND: 'the name does not resolve (DNS)', EAI_AGAIN: 'the name does not resolve (DNS)', ECONNREFUSED: 'connection refused', ECONNRESET: 'connection reset', ETIMEDOUT: 'timed out', CERT_HAS_EXPIRED: 'the certificate has expired', DEPTH_ZERO_SELF_SIGNED_CERT: 'self-signed certificate', UNABLE_TO_VERIFY_LEAF_SIGNATURE: 'the certificate is not trusted', ERR_TLS_CERT_ALTNAME_INVALID: 'the certificate is for another name' })[e.code] || e.message }));
+      req.on('error', (e) => resolve({ ok: false, ms: Date.now() - started, error: tlsError(e) || ({ ENOTFOUND: 'the name does not resolve (DNS)', EAI_AGAIN: 'the name does not resolve (DNS)', ECONNREFUSED: 'connection refused', ECONNRESET: 'connection reset', ETIMEDOUT: 'timed out', CERT_HAS_EXPIRED: 'the certificate has expired', DEPTH_ZERO_SELF_SIGNED_CERT: 'self-signed certificate', UNABLE_TO_VERIFY_LEAF_SIGNATURE: 'the certificate is not trusted', ERR_TLS_CERT_ALTNAME_INVALID: 'the certificate is for another name' })[e.code] || e.message }));
       req.end();
     });
   }
   async function checkOne(which, base, opts) {
     if (!base) { checks[which] = null; return null; }
-    const prev = checks[which]; const r = await probe(base, opts); const now = new Date().toISOString();
+    const prev = checks[which]; let r = await probe(base, opts);
+    // A dropped connection or a handshake that failed once is tried again before it counts (a name that does not resolve is not).
+    if (!r.ok && r.status == null && !/DNS|valid address/.test(r.error || '')) { await new Promise(res => setTimeout(res, 2500)); const again = await probe(base, opts); if (again.ok) r = { ...again, retried: true }; }
+    const now = new Date().toISOString();
     const next = { ...r, url: base, at: now, since: prev && prev.ok === r.ok ? prev.since : now, fails: r.ok ? 0 : ((prev && prev.fails) || 0) + 1 };
     checks[which] = next;
     // One slow answer is not an outage: tell the owner on the second failure in a row, and once when it comes back.

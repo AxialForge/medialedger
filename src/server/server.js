@@ -120,7 +120,7 @@ const webHandlers = new Map([
   ['portal:remove', (ctx, id) => portal.deleteInvite(String(id), ctx.session.user, ctx.ip)],
   // security
   ['security:me', (ctx) => ({ available: true, guest: ctx.role === 'guest', username: ctx.session ? ctx.session.user : null, role: ctx.role, guestEnabled: sec.guestEnabled(), hasUsers: sec.hasPassword() })],
-  ['security:status', (ctx) => sec.status(ctx.session, { available: true, https: !!tls, port: servePort, tlsPort: port === 80 ? 443 : port, bindHost, dataDir, checks: posture(), opensslAvailable: hasOpenssl() })],
+  ['security:status', (ctx) => sec.status(ctx.session, { available: true, https: !!tls, port: servePort, tlsPort: port === 80 ? 443 : port, bindHost, dataDir, proxyHttps: behindHttpsProxy(ctx.req), checks: posture(ctx.req), opensslAvailable: hasOpenssl() })],
   // Creates a self-signed certificate for every name this Pi answers to, then exits so systemd restarts the service on HTTPS.
   ['security:tlsDisable', (ctx) => {
     if (!tls) return { ok: true, already: true };
@@ -180,8 +180,14 @@ const handlers = new Map([...svc.handlers, ...webHandlers]);
 const hasOpenssl = () => { try { return require('child_process').spawnSync('openssl', ['version'], { encoding: 'utf8', timeout: 5000 }).status === 0; } catch { return false; } };
 
 // Security posture checklist shown at the top of the Security tab.
-function posture() {
+// A reverse proxy on this machine (Caddy) that serves HTTPS and forwards here over loopback: clientip.js believes
+// X-Forwarded-Proto only from loopback, so a LAN client cannot fake it. Remembered for the life of the process so the
+// check does not flip back when the same admin opens the bare port.
+let proxyHttpsSeen = false;
+function behindHttpsProxy(req) { if (!tls && req && realIp.forwardedProto(req) === 'https') proxyHttpsSeen = true; return !tls && proxyHttpsSeen; }
+function posture(req) {
   const st = sec.state;
+  const proxied = behindHttpsProxy(req);
   const checks = [];
   const add = (ok, name, detail, level = 'warn') => checks.push({ ok, name, detail, level: ok ? 'ok' : level });
   const admins = Object.values(st.users).filter(u => u.role === 'admin').length;
@@ -189,7 +195,7 @@ function posture() {
   add(st.totp.enabled, 'Two-factor codes for admins', st.totp.enabled ? 'a phone code is required at admin sign-in' : 'optional: turn on below so a leaked admin password alone is not enough');
   add(st.lanOnly, 'LAN-only access', st.lanOnly ? 'connections from outside private address ranges are refused' : 'off: any address that can reach the port may try to sign in');
   add(!st.guestEnabled, 'Guest access', st.guestEnabled ? 'on: anyone on the LAN sees library statistics without signing in (never adult content, never controls)' : 'off: every page needs an account');
-  add(!!tls, 'HTTPS', tls ? `serving TLS on port ${servePort} from <data>/tls` : 'plain HTTP: fine on a trusted LAN; turn it on below');
+  add(!!tls || proxied, 'HTTPS', tls ? `serving TLS on port ${servePort} from <data>/tls` : proxied ? 'a reverse proxy on this machine (Caddy) serves HTTPS in front of this port; the built-in certificate is not needed' : 'plain HTTP: fine on a trusted LAN; turn it on below');
   add(process.getuid ? process.getuid() !== 0 : true, 'Not running as root', process.getuid && process.getuid() === 0 ? 'the service runs as root; use the installer\'s medialedger user' : 'service user has no shell and no sudo', 'bad');
   try { const m = fs.statSync(path.join(dataDir, 'web.json')).mode & 0o777; add(process.platform === 'win32' || m === 0o600, 'Secrets file permissions', `web.json mode ${m.toString(8)}`); } catch { /* none */ }
   try { const m = fs.statSync('/etc/medialedger-cifs.cred').mode & 0o777; add(m === 0o600, 'Share credentials file', `/etc/medialedger-cifs.cred mode ${m.toString(8)}, root only`); } catch { /* not the Pi install */ }
