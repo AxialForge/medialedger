@@ -21,8 +21,8 @@ desktop database over, and troubleshooting.
 | OS | **Raspberry Pi OS Lite (64-bit)**, Trixie or newer. 32-bit is not supported |
 | Card | 32 GB A2 microSD or a USB SSD |
 | Network | Ethernet to the same LAN as the NAS |
-| Installed by the script | Node 22 (NodeSource), ffmpeg, cifs-utils, curl, openssl |
-| You need to know | the NAS share username and password; a web password of your choosing (8+ characters) |
+| Installed by the script | Node 22 (NodeSource), ffmpeg, cifs-utils, smbclient, curl, openssl |
+| You need to know | the file server's address (for example `192.168.1.50`), a username and password that may read the media; a web password of your choosing (8+ characters) |
 | Ports | 8080 on the Pi, LAN only |
 
 ## The whole thing in four commands
@@ -39,9 +39,10 @@ On the Pi:
 curl -fsSL https://raw.githubusercontent.com/AxialForge/medialedger/main/server/install.sh -o install.sh && sudo bash install.sh
 ```
 
-Answer the share username, share password and web password prompts. Then open
-`http://medialedger.local:8080`, sign in, set the roots under Settings, press
-Scan now. Later:
+The installer asks for the file server's address and sign-in, lists its shares,
+connects the ones you pick, and asks for a web password. Then open
+`http://medialedger.local:8080` and sign in: a welcome guide finds the TV, Anime
+and Movies folders and starts the first scan. Later:
 
 ```bash
 sudo medialedger-update
@@ -61,9 +62,10 @@ sudo medialedger --set-password
 | `journalctl -u medialedger -f` | follow the log live |
 | `journalctl -u medialedger -n 50 --no-pager` | last 50 log lines |
 | `sudo systemctl restart medialedger` | restart (also `stop`, `start`) |
-| `ls /mnt/media` | is the share mounted |
-| `sudo mount /mnt/media` | re-mount after a NAS reboot |
-| `sudo rm /etc/medialedger-cifs.cred` + rerun installer | change share credentials |
+| `sudo medialedger-setup` | the guided setup again: connect more shares, set the password, show the addresses |
+| `ls /mnt/medialedger` | the connected shares, one folder each (`/mnt/media` on installs from before 2.4) |
+| `sudo mount /mnt/medialedger/<name>` | re-mount by hand after a NAS reboot (the watchdog does this every minute) |
+| Settings → Library → Network shares → Remove, then connect again | change a share's sign-in |
 | `sudo bash install.sh` | rerun: repairs service, mount and commands, keeps data |
 | `sudo bash install.sh --https` | add a self-signed certificate and serve HTTPS |
 | `sudo bash install.sh --port=80 --domain=medialedger.home` | serve on the default port under your own internal name (router DNS record needed, section 7a) |
@@ -135,12 +137,17 @@ The installer is idempotent, so you can rerun it any time. It:
    (`medialedger-server.tar.gz`), verifies its SHA-256 and unpacks it to
    `/opt/medialedger`. This package contains only the core, the web UI and the
    server. It has no Electron, no Windows installer and no dependencies;
-4. asks once for the **NAS share username and password**, stores them in
-   `/etc/medialedger-cifs.cred` (root-only) and mounts
-   `//192.168.1.204/Apocrypha_Media_Pool` at `/mnt/media` through fstab, so the
-   mount returns after reboots;
-5. installs a hardened systemd service on port 8080 and the commands
-   `medialedger` and `medialedger-update`;
+4. asks for the **file server's address, username and password**, lists the
+   shares that server offers, and mounts the ones you pick at
+   `/mnt/medialedger/<share>` through fstab, so they return after reboots. The
+   sign-in is stored in `/etc/medialedger-shares/<share>.cred` (root-only).
+   Press Enter at the address question to skip and connect shares later from
+   the web app. An install from before 2.4 keeps its single share at
+   `/mnt/media`;
+5. installs a hardened systemd service on port 8080, the **share helper** (so
+   the web app can connect shares without the service having root), a status
+   banner shown when you sign in over SSH, and the commands `medialedger`,
+   `medialedger-update` and `medialedger-setup`;
 6. asks for the **web password** (at least 8 characters) if none is set yet.
 
 At the end it prints the address. Open it from your PC:
@@ -152,7 +159,8 @@ http://medialedger.local:8080
 or `http://192.168.1.203:8080` with the address from step 2 if `.local` names
 do not resolve on your network.
 
-Options: `--share=//host/share` to use a different share, `--port=9000` for a
+Options: `--share=//host/share` to mount one share at `/mnt/media` without being
+asked (the old behaviour), `--setup` to run only the questions, `--port=9000` for a
 different port, `--branch=main` to run from the git main branch instead of a
 release.
 
@@ -409,10 +417,13 @@ Refreshes every 15 seconds and keeps an hour of history in memory:
 | `/var/lib/medialedger/exports/` | CSV exports |
 | `/var/lib/medialedger/backups/` | pre-migration database backups |
 | `/var/lib/medialedger/tls/` | optional cert.pem + key.pem |
-| `/etc/medialedger-cifs.cred` | NAS share credentials (root, 0600) |
+| `/etc/medialedger-shares/<name>.cred` | sign-in for each connected share (root, 0600). `/etc/medialedger-cifs.cred` on installs from before 2.4 |
+| `/var/lib/medialedger/shares/` | where the web app leaves a request for the share helper; empty at rest |
+| `/etc/systemd/system/medialedger-share.path` + `.service`, `/opt/medialedger/server/share-helper.js` | the share helper: runs as root only when a request appears, validates it, mounts under `/mnt/medialedger/` only |
+| `/etc/profile.d/medialedger-welcome.sh` | the status lines shown at SSH sign-in; delete it to silence them |
 | `/etc/systemd/system/medialedger.service` | the service |
 | `/etc/systemd/system/medialedger-mount.timer` + `.service`, `/usr/local/sbin/medialedger-mount-check` | the mount watchdog (every minute: not mounted and NAS answers → mount) |
-| `/mnt/media` | the share |
+| `/mnt/medialedger/<name>` | the connected shares (`/mnt/media` on installs from before 2.4) |
 
 ## 12. Uninstall
 

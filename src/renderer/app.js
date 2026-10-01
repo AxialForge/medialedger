@@ -1531,7 +1531,7 @@ views.ratings = async () => {
 // Settings is one long form. This splits it at its headings into named groups with a tab per group and a filter,
 // after the form is drawn, so every control keeps its id and the Save button still reads the whole form.
 const SETTINGS_GROUPS = [
-  ['Library', 'Where the files are and how they are read', ['Library roots', 'Scanning', 'ffprobe', 'Folder watch', 'Adult content']],
+  ['Library', 'Where the files are and how they are read', ['Library roots', 'Network shares', 'Scanning', 'ffprobe', 'Folder watch', 'Adult content']],
   ['Episodes and quality', 'What counts as complete and as good enough', ['Expected episodes', 'Quality thresholds', 'Posters']],
   ['Automation', 'What runs by itself and what it tells you', ['Schedules', 'Notifications', 'Updates']],
   ['Connections', 'Other programs MediaLedger talks to', ['Plex', 'CSV export']],
@@ -1580,6 +1580,8 @@ views.settings = async () => {
       <table class="roots-table"><thead><tr><th>On</th><th>Label</th><th>Path (UNC or local)</th><th>Type</th><th>Status</th><th></th></tr></thead><tbody id="roots"></tbody></table>
       <div class="hint" id="rootDiag" hidden style="margin-top:6px"></div>
       <div class="inline" style="margin-top:8px"><button class="small" id="addRoot">Add root</button></div>
+
+      ${L.isWeb ? '<h2>Network shares</h2><p class="muted" style="margin-top:0">The file servers this server reads from. Connect one here, then add folders inside it as library roots above.</p><div id="sharesBox"><p class="muted">Loading…</p></div>' : ''}
 
       <h2>Scanning</h2>
       <div class="field"><label>Multi-threaded listing</label><div class="inline"><input type="checkbox" id="mt" ${s.multiThreaded ? 'checked' : ''}> <span class="muted small">use</span> <input type="number" id="threads" min="0" max="32" value="${s.scanThreads}" style="width:70px"> <span class="muted small">worker threads (0 = auto, this PC has ${info.cpus} cores)</span></div><div class="hint">Deals the show folders out to worker threads so the SMB directory listing overlaps instead of queueing. Turn off if the NAS struggles.</div></div>
@@ -1659,6 +1661,7 @@ views.settings = async () => {
       <div class="inline" style="margin-top:18px"><button class="primary" id="save">Save settings</button></div>
     </div>`;
   groupSettings($('.form', view));
+  if ($('#sharesBox')) paintShares($('#sharesBox')).catch(e => { $('#sharesBox').innerHTML = `<p class="muted">${esc(e.message)}</p>`; });
 
   const rootsBody = $('#roots');
   const rootRow = (r) => el(`<tr><td><input type="checkbox" class="r-on" ${r.enabled ? 'checked' : ''}></td><td><input type="text" class="r-label" value="${esc(r.label)}" style="width:110px"></td><td><div class="inline"><input type="text" class="r-path" value="${esc(r.path)}" style="flex:1"><button class="small r-pick" title="${L.isWeb ? 'Browse folders on the server' : 'Browse…'}">…</button></div></td><td><select class="r-type">${['tv', 'anime', 'movie', 'web', 'adult'].map(t => `<option value="${t}" ${r.type === t ? 'selected' : ''}>${t === 'adult' ? 'Adult (auto-detect anime / TV / movie)' : t === 'web' ? 'Web videos' : typeName(t)}</option>`).join('')}</select></td><td class="r-status muted tiny">…</td><td><button class="small r-del">✕</button></td></tr>`);
@@ -1987,15 +1990,25 @@ views.security = async () => {
 function browseServerFolder(start) {
   return new Promise((resolve) => {
     let current = start || '';
-    const card = openModal(`<h2>Choose a folder</h2><div class="inline" style="margin-bottom:8px"><button class="small" id="fbUp">↑ Up</button><input type="text" id="fbPath" style="flex:1" placeholder="/mnt/media"><button class="small" id="fbGo">Go</button></div><div id="fbList" class="preview" style="max-height:340px;overflow:auto"></div><div class="actions"><span class="muted tiny" id="fbHint">Folders only. Hidden folders are not shown.</span><span class="grow"></span><button id="fbCancel">Cancel</button><button class="primary" id="fbUse">Use this folder</button></div>`);
+    const card = openModal(`<h2>Choose a folder</h2><div class="fb-short" id="fbShort"></div><div class="inline" style="margin-bottom:8px"><button class="small" id="fbUp">↑ Up</button><input type="text" id="fbPath" style="flex:1" placeholder="/mnt/medialedger"><button class="small" id="fbGo">Go</button></div><div id="fbList" class="preview" style="max-height:340px;overflow:auto"></div><div class="actions"><span class="muted tiny" id="fbHint">Click a folder to open it. Hidden folders are not shown.</span><span class="grow"></span><button id="fbCancel">Cancel</button><button class="primary" id="fbUse">Use this folder</button></div>`);
     let parent = null;
     const load = async (p) => {
       const r = await L.roots.listDirs(p);
       current = r.path; parent = r.parent; $('#fbPath', card).value = r.path;
-      $('#fbList', card).innerHTML = r.error ? `<div class="bad">Cannot list: ${esc(r.error)}</div>` : (r.dirs.map(d => `<div class="fb-item" data-p="${esc(d.path)}">📁 ${esc(d.name)}</div>`).join('') || '<div class="muted">No sub-folders</div>');
-      card.querySelectorAll('.fb-item').forEach(el => { el.style.cursor = 'pointer'; el.style.padding = '3px 4px'; el.onclick = () => load(el.dataset.p); });
+      const files = r.files ? `${r.files.toLocaleString()} file${r.files === 1 ? '' : 's'} here` : '';
+      $('#fbList', card).innerHTML = r.error ? `<div class="bad">Cannot open this folder: ${esc(r.error === 'ENOENT' ? 'it does not exist' : r.error === 'EACCES' ? 'the server is not allowed to read it' : r.error)}</div>` : (r.dirs.map(d => `<div class="fb-item" data-p="${esc(d.path)}">📁 ${esc(d.name)}</div>`).join('') || `<div class="muted">No folders inside this one${files ? ` (${files})` : ''}. If this is where the media is, press <b>Use this folder</b>.</div>`);
+      $('#fbHint', card).textContent = r.error ? '' : `${r.dirs.length.toLocaleString()}${r.total > r.dirs.length ? ` of ${r.total.toLocaleString()}` : ''} folder${r.dirs.length === 1 ? '' : 's'}${files ? ` · ${files}` : ''}`;
+      card.querySelectorAll('.fb-item').forEach(n => { n.onclick = () => load(n.dataset.p); });
       $('#fbUp', card).disabled = parent == null;
     };
+    // Shortcuts: each connected share, and the way to connect another (web server on Linux only).
+    L.shares.status().then(st => {
+      const up = (st.shares || []).filter(x => x.mounted);
+      $('#fbShort', card).innerHTML = (up.length ? '<span class="muted tiny">Shares:</span>' + up.map(x => `<button class="small fb-jump" data-p="${esc(x.mount)}" title="${esc(x.source)}">⛁ ${esc(x.name)}</button>`).join('') : '') + (st.available ? '<button class="small" id="fbShare">＋ Connect a network share…</button>' : '');
+      card.querySelectorAll('.fb-jump').forEach(b => { b.onclick = () => load(b.dataset.p); });
+      if ($('#fbShare', card)) $('#fbShare', card).onclick = async () => { const m = await connectShareDialog(); resolve(await browseServerFolder(m || current)); };
+      if (!start && up.length) load(up[0].mount);
+    }).catch(() => {});
     $('#fbUp', card).onclick = () => load(parent == null ? '' : parent);
     $('#fbGo', card).onclick = () => load($('#fbPath', card).value.trim());
     $('#fbPath', card).onkeydown = e => { if (e.key === 'Enter') $('#fbGo', card).click(); };
@@ -2003,6 +2016,130 @@ function browseServerFolder(start) {
     $('#fbUse', card).onclick = () => { closeModal(); resolve(current); };
     load(current);
   });
+}
+
+// ---- Network shares: sign in to a file server, tick its shares, and the server's root helper mounts them ----
+// Resolves with the folder of the first share connected, or null.
+function connectShareDialog() {
+  return new Promise((resolve) => { (async () => {
+    const st = await L.shares.status();
+    if (!st.available) { const c = openModal(`<h2>Connect a network share</h2><p>${esc(st.why || 'Not available here.')}</p><div class="actions"><span class="grow"></span><button id="csCancel">Close</button></div>`); $('#csCancel', c).onclick = () => { closeModal(); resolve(null); }; return; }
+    const known = (st.shares[0] && /^\/\/([^/]+)\//.exec(st.shares[0].source) || [])[1] || '';
+    const card = openModal(`<h2>Connect a network share</h2><p class="muted">Sign in to the file server that holds your media: a NAS, or a PC that shares folders. MediaLedger lists its shares, and the ones you tick appear as folders under <span class="mono">${esc(st.base)}</span>, ready to pick as library folders.</p>
+      <div class="field"><label>Server address</label><input type="text" id="csHost" value="${esc(known)}" placeholder="192.168.1.50 or nas.home" autocomplete="off" spellcheck="false"></div>
+      <div class="field"><label>Username</label><input type="text" id="csUser" autocomplete="off" spellcheck="false"></div>
+      <div class="field"><label>Password</label><input type="password" id="csPass" autocomplete="new-password"></div>
+      ${st.canProbe ? '' : '<div class="field"><label>Share name</label><input type="text" id="csShare" placeholder="the name of the shared folder" autocomplete="off"></div>'}
+      <div id="csOut"></div>
+      <div class="actions"><span class="muted tiny" style="max-width:380px">The sign-in is kept on the server in a file only root can read, so the share reconnects after a restart. It is never stored in MediaLedger's own settings.</span><span class="grow"></span><button id="csCancel">Cancel</button><button class="primary" id="csFind">${st.canProbe ? 'Find shares' : 'Connect'}</button></div>`);
+    let first = null;
+    const creds = () => ({ host: $('#csHost', card).value.trim(), user: $('#csUser', card).value.trim(), pass: $('#csPass', card).value });
+    const out = $('#csOut', card);
+    const connect = async (names) => {
+      const c = creds(); const lines = [];
+      for (const share of names) {
+        out.innerHTML = `<p class="muted">Connecting ${esc(share)}…</p>` + lines.join('');
+        try { const r = await L.shares.add({ ...c, share }); first = first || r.mount; lines.push(`<div class="ok">✓ ${esc(share)} connected at <span class="mono">${esc(r.mount)}</span></div>`); }
+        catch (e) { lines.push(`<div class="bad">✗ ${esc(share)}: ${esc(e.message)}</div>`); }
+      }
+      out.innerHTML = lines.join('') + (first ? '<p class="muted tiny">Next: pick the folders inside it that hold TV, Anime and Movies.</p>' : '');
+      if (first) { $('#csFind', card).textContent = 'Done'; $('#csFind', card).onclick = () => { closeModal(); resolve(first); }; }
+    };
+    $('#csCancel', card).onclick = () => { closeModal(); resolve(first); };
+    $('#csFind', card).onclick = async () => {
+      const c = creds(); if (!c.host) return toast('Type the server address', true);
+      if (!st.canProbe) { const sh = $('#csShare', card).value.trim(); if (!sh) return toast('Type the share name', true); return connect([sh]); }
+      out.innerHTML = '<p class="muted">Asking the server for its shares…</p>';
+      try {
+        const r = await L.shares.probe(c);
+        const have = new Set(st.shares.filter(x => x.source.toLowerCase().startsWith(`//${c.host.toLowerCase()}/`)).map(x => x.source.split('/').pop().toLowerCase()));
+        out.innerHTML = `<div class="sharelist">${r.shares.map(x => `<label class="inline"><input type="checkbox" value="${esc(x.name)}" ${have.has(x.name.toLowerCase()) ? 'disabled' : ''}> <b>${esc(x.name)}</b> <span class="muted tiny">${have.has(x.name.toLowerCase()) ? 'already connected' : esc(x.comment || '')}</span></label>`).join('')}</div><p class="muted tiny">Tick the shares that hold your media, then press Connect.</p>`;
+        $('#csFind', card).textContent = 'Connect'; $('#csFind', card).onclick = () => { const names = [...out.querySelectorAll('input:checked')].map(i => i.value); if (!names.length) return toast('Tick at least one share', true); connect(names); };
+      } catch (e) { out.innerHTML = `<div class="warnbox">${esc(e.message)}.</div>`; }
+    };
+    $('#csHost', card).focus();
+  })().catch(e => { toast(e.message, true); resolve(null); }); });
+}
+async function paintShares(box, after) {
+  const st = await L.shares.status();
+  if (st.platform !== 'linux') { box.innerHTML = `<p class="muted">${esc(st.why || '')}</p>`; return st; }
+  box.innerHTML = `${st.shares.length ? `<table class="roots-table"><thead><tr><th>Share</th><th>Folder on this server</th><th>Status</th><th></th></tr></thead><tbody>${st.shares.map(x => `<tr><td class="mono">${esc(x.source)}</td><td class="mono">${esc(x.mount)}</td><td>${x.mounted ? `<span class="ok">● Connected</span>${x.entries != null ? ` <span class="muted tiny">${x.entries} entries</span>` : ''}` : '<span class="bad">● Not connected</span> <span class="muted tiny">the server retries every minute</span>'}</td><td>${x.managed ? `<button class="small danger sh-del" data-n="${esc(x.name)}">Remove</button>` : '<span class="muted tiny" title="Made by the installer; edit /etc/fstab to change it">installer</span>'}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">No network share is connected yet.</p>'}
+    <div class="inline" style="margin-top:8px"><button class="small" id="shAdd" ${st.available ? '' : 'disabled'}>＋ Connect a network share…</button><a href="#welcome" class="small">Open the setup guide</a></div>${st.available ? '' : `<div class="warnbox" style="margin-top:8px">${esc(st.why)}</div>`}`;
+  const again = () => paintShares(box, after).then(x => { if (after) after(x); });
+  if ($('#shAdd', box)) $('#shAdd', box).onclick = async () => { await connectShareDialog(); again(); };
+  box.querySelectorAll('.sh-del').forEach(b => { b.onclick = async () => { if (!confirm(`Disconnect ${b.dataset.n}? Library folders inside it will show as unreachable until it is connected again. Nothing on the file server is changed.`)) return; try { await L.shares.remove(b.dataset.n); toast('Share removed'); } catch (e) { toast(e.message, true); } again(); }; });
+  return st;
+}
+
+// ---- The welcome guide: storage, folders, a check, the first scan. Opens by itself on a new install. ----
+views.welcome = async () => {
+  const [s, info, scans] = await Promise.all([L.settings.get(), L.appInfo(), L.scan.list(1).catch(() => [])]);
+  const KINDS = [['tv', 'TV shows', /^(tv|tv[ _-]?shows?|shows?|series)$/i], ['anime', 'Anime', /anime/i], ['movie', 'Movies', /^(movies?|films?)$/i]];
+  const rootOf = (type) => (s.roots || []).find(r => r.type === type) || null;
+  view.innerHTML = `<h1>Welcome to MediaLedger</h1>
+    <p class="lead">MediaLedger reads your TV, anime and movie folders, records what is in each file, and shows what is missing, duplicated or worth upgrading. It only looks: nothing is renamed or moved unless you switch that on later. Four steps get it going.</p>
+    <div class="wz">
+      <div class="card wz-step"><h2><span class="wz-n">1</span> Connect your storage</h2><div id="wzShares"><p class="muted">Loading…</p></div></div>
+      <div class="card wz-step"><h2><span class="wz-n">2</span> Point at the folders</h2>
+        <p class="muted">One folder per kind of media. Press <b>Browse…</b> and open the folder that holds the shows (one folder per series inside it) or the movies. Leave a kind empty if you do not have it.</p>
+        ${KINDS.map(([t, label]) => { const r = rootOf(t); return `<div class="field"><label>${label}</label><div class="inline"><input type="text" class="wz-path" data-t="${t}" value="${esc(r && r.path || '')}" placeholder="${L.isWeb ? '/mnt/medialedger/…' : '\\\\server\\share\\…'}" style="flex:1" spellcheck="false"><button class="small wz-pick" data-t="${t}">Browse…</button><span class="wz-st tiny" data-t="${t}"></span></div></div>`; }).join('')}
+        <div class="inline"><button class="primary" id="wzSave">Save and check the folders</button><button class="small" id="wzGuess" title="Look inside the connected shares for folders named TV, Anime, Movies…">Find them for me</button><span class="muted tiny" id="wzSaved"></span></div>
+        <p class="muted tiny">More folders, web videos and other kinds are added later under Settings, Library.</p></div>
+      <div class="card wz-step"><h2><span class="wz-n">3</span> Check</h2><div id="wzCheck"><p class="muted">Save the folders first.</p></div></div>
+      <div class="card wz-step"><h2><span class="wz-n">4</span> First scan</h2>
+        <p class="muted">The scan lists every file and measures each one with ffprobe (resolution, codecs, languages, length). The first one takes a while on a big library; progress shows in the sidebar, and you can use the app while it runs.</p>
+        <div class="inline"><button class="primary" id="wzScan">Start the first scan</button><span class="muted tiny" id="wzScanMsg">${scans.length ? 'A scan has already run here.' : ''}</span></div></div>
+      <div class="card wz-step"><h2><span class="wz-n">✓</span> Worth doing next</h2>
+        <ul class="wz-next"><li><a href="#settings">Plex</a>: watched state, ratings and posters from your Plex server (Settings, Connections).</li>${L.isWeb ? '<li><a href="#security">Two-factor codes</a> for the admin account (Security).</li><li><a href="#family">Family portal</a>: let family browse and send requests.</li>' : ''}<li><a href="#settings">Schedules and backups</a>: when scans and backups run (Settings, Automation).</li></ul>
+        <div class="inline"><button class="primary" id="wzDone">Finish and open the dashboard</button><button class="small" id="wzSkip">Skip the guide</button></div></div>
+    </div>`;
+  const pathOf = (t) => view.querySelector(`.wz-path[data-t="${t}"]`), stOf = (t) => view.querySelector(`.wz-st[data-t="${t}"]`);
+  const pick = async (start) => L.isWeb ? browseServerFolder(start) : L.pickFolder(start);
+  view.querySelectorAll('.wz-pick').forEach(b => { b.onclick = async () => { const p = await pick(pathOf(b.dataset.t).value); if (p) pathOf(b.dataset.t).value = p; }; });
+  let shareState = null;
+  const sharesBox = $('#wzShares');
+  const afterShares = (st) => { shareState = st; };
+  afterShares(await paintShares(sharesBox, afterShares));
+  if (shareState.platform !== 'linux') sharesBox.innerHTML = `<p>On this computer there is nothing to connect: in step 2, browse straight to the folders. For a NAS, type its path once in the address bar of File Explorer (for example <span class="mono">\\\\192.168.1.50\\Media</span>), sign in there and tick <i>Remember my credentials</i>; MediaLedger then reaches it the same way.</p>`;
+  // Look one and two levels into each connected share for folders with the usual names.
+  $('#wzGuess').onclick = async () => {
+    const bases = L.isWeb ? ((await L.shares.status()).shares || []).filter(x => x.mounted).map(x => x.mount) : [];
+    if (!bases.length) return toast(L.isWeb ? 'Connect a share first (step 1)' : 'Use Browse… on this computer', true);
+    let found = 0;
+    for (const b of bases) { const top = await L.roots.listDirs(b); const level = [...(top.dirs || [])]; for (const d of (top.dirs || []).slice(0, 12)) { try { level.push(...((await L.roots.listDirs(d.path)).dirs || [])); } catch { /* skip */ } }
+      for (const [t, , re] of KINDS) { const hit = level.find(d => re.test(d.name)); if (hit) { pathOf(t).value = hit.path; found++; } } }
+    toast(found ? `Found ${found} folder${found === 1 ? '' : 's'}. Check them, then save.` : 'No folders with the usual names. Use Browse…', !found);
+  };
+  const check = async () => {
+    const roots = (await L.settings.get()).roots.filter(r => r.enabled);
+    const box = $('#wzCheck'); box.innerHTML = '<p class="muted">Checking…</p>';
+    const res = roots.length ? await L.roots.check(roots) : [];
+    KINDS.forEach(([t]) => { const i = roots.findIndex(r => r.type === t); const r = i >= 0 ? res[i] : null; stOf(t).innerHTML = r ? (r.status === 'ok' ? '<span class="ok">● readable</span>' : '<span class="bad">● not readable</span>') : ''; });
+    const bad = res.filter(r => r.status !== 'ok');
+    box.innerHTML = `<div class="wz-line">${info.ffprobe ? '<span class="ok">✓</span> ffprobe is installed, so files can be measured.' : '<span class="bad">✗</span> ffprobe is missing. ' + (L.isWeb ? 'On the server run: <span class="mono">sudo apt-get install -y ffmpeg</span>' : 'It is downloading in the background; see Settings, Library.')}</div>
+      ${roots.map((r, i) => `<div class="wz-line">${res[i] && res[i].status === 'ok' ? '<span class="ok">✓</span>' : '<span class="bad">✗</span>'} <b>${esc(r.label)}</b> <span class="mono tiny">${esc(r.path)}</span> <span class="muted">${esc((res[i] && res[i].detail) || '')}</span></div>`).join('') || '<div class="wz-line"><span class="bad">✗</span> No folder is set yet.</div>'}
+      ${bad.length ? '<div class="warnbox" style="margin-top:8px">A folder that cannot be read is usually a share that is not connected (step 1) or a path typed slightly wrong. Use Browse… to pick it instead.</div>' : ''}`;
+    return roots.length > 0 && !bad.length;
+  };
+  $('#wzSave').onclick = async () => {
+    const cur = (await L.settings.get()).roots || []; const next = cur.filter(r => !KINDS.some(([t]) => t === r.type));
+    for (const [t, label] of KINDS) { const p = pathOf(t).value.trim(); if (!p) continue; const old = cur.find(r => r.type === t); next.push({ id: old ? old.id : t === 'movie' ? 'movies' : t, label: old ? old.label : label, path: p, type: t, enabled: true }); }
+    await L.settings.set({ roots: next }); $('#wzSaved').textContent = 'Saved.'; const ok = await check(); refreshBadges();
+    toast(ok ? 'Folders saved and readable' : 'Saved, but check step 3', !ok);
+  };
+  $('#wzScan').onclick = async () => { try { await L.scan.start('manual'); $('#wzScanMsg').textContent = 'Scan started. Progress is in the sidebar.'; refreshScanUi(); } catch (e) { toast(e.message, true); } };
+  const done = async () => { await L.settings.set({ welcomeDone: true }); location.hash = '#dashboard'; };
+  $('#wzDone').onclick = done; $('#wzSkip').onclick = done;
+  if ((s.roots || []).length && scans.length) check();
+};
+// A new install (no scan has ever run and the guide was not finished) opens the guide instead of an empty dashboard.
+async function maybeWelcome() {
+  try {
+    if (me && me.role && me.role !== 'admin') return;
+    const s = await L.settings.get(); if (s.welcomeDone) return;
+    const scans = await L.scan.list(1); if (scans && scans.length) return;
+    if (!location.hash || location.hash === '#dashboard') location.hash = '#welcome';
+  } catch { /* not signed in yet, or a guest */ }
 }
 
 views.about = async () => {
@@ -2055,7 +2192,15 @@ views.about = async () => {
 
 // ---------- router -----------------------------------------------------------
 let currentView = 'dashboard';
-async function route() {
+// One page load at a time. A page that was still loading when another was asked for used to finish last and paint
+// over it; now the later request waits, and only the newest address is drawn.
+let routeRunning = null, routeQueued = false;
+function route() {
+  if (routeRunning) { routeQueued = true; return routeRunning; }
+  routeRunning = routeNow().catch(() => {}).then(() => { routeRunning = null; if (routeQueued) { routeQueued = false; return route(); } });
+  return routeRunning;
+}
+async function routeNow() {
   const hash = location.hash.slice(1) || 'dashboard';
   const qIdx = hash.indexOf('?'); const query = Object.fromEntries(new URLSearchParams(qIdx >= 0 ? hash.slice(qIdx + 1) : '')); const path = qIdx >= 0 ? hash.slice(0, qIdx) : hash;
   routeQuery = query;
@@ -2086,7 +2231,7 @@ $('#navMini').onclick = () => { const on = !document.body.classList.contains('na
 try { navMini(localStorage.getItem('medialedger.navmini') === '1'); } catch { navMini(false); }
 document.querySelectorAll('.sidebar a').forEach(a => a.addEventListener('click', closeNav));
 $('#topScan').onclick = () => $('#btnScan').hidden ? $('#btnCancel').click() : $('#btnScan').click();
-loadMe().then(() => { if (currentView) route(); });
+loadMe().then(() => { if (currentView) route(); maybeWelcome(); });
 L.appInfo().then(async i => {
   $('#versionLine').textContent = `v${i.version}${i.packaged ? '' : ' (dev)'}`;
   updateState = i.updateStatus || updateState; paintUpdatePill();

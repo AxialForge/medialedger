@@ -209,6 +209,10 @@ function createWindow() {
   h('plex:webhookInfo', () => ({ available: false })); // Plex can only call an always-on server
   h('status:info', () => ({ available: false }));       // the Home Assistant status URL is a web-server thing
   h('status:rotate', () => { throw new Error('Only available on the web server'); });
+  h('shares:status', () => ({ available: false, platform: process.platform, canProbe: false, shares: [], why: 'On Windows the library folders are picked directly: browse to them, or type a path like \\\\server\\share\\Movies. Windows remembers the sign-in.' }));
+  h('shares:probe', () => { throw new Error('Only available on the web server'); });
+  h('shares:add', () => { throw new Error('Only available on the web server'); });
+  h('shares:remove', () => { throw new Error('Only available on the web server'); });
   h('portal:status', () => ({ available: false }));     // the family portal is served by the web server
   h('portal:check', () => { throw new Error('Only available on the web server'); });
   h('portal:set', () => { throw new Error('Only available on the web server'); });

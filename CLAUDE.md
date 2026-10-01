@@ -227,6 +227,17 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 - **List sorts that are not columns** go in the `sorts` array passed to `makeTable` (`val` computes the key);
   nulls always sort last in both directions. The sort state object is shared with `sortControl` and survives the
   table being rebuilt by the filter bar, which is why it lives in the view and not in the table.
+- **The web service cannot mount, and must not be given sudo.** The unit has `NoNewPrivileges=true`, which also
+  blocks `sudo`, so "allow one sudo command" is not available. Shares are connected by `server/share-helper.js`,
+  started as root by `medialedger-share.path` when `src/server/shares.js` drops `request-<id>.json` in
+  `<data>/shares/`. The helper treats the request as hostile: owner and size checked, opened `O_NOFOLLOW`, every
+  field matched against a pattern, mounts only at `/mnt/medialedger/<name>`, no shell, answer written `O_EXCL`.
+  A failed mount restores fstab and deletes the credentials file, because a stale `cifs` line can hang a boot.
+  `test/shares.test.js` covers it with a pretend system; the real mount only runs on the Pi.
+- **`readdir` types are "unknown" on some CIFS mounts.** `d.isDirectory()` is then false for real folders and the
+  picker said "No sub-folders". `rootcheck.listDirs` stats anything that is not plainly a file.
+- **Routes are serialised.** `route()` queues behind the page still loading and then draws only the newest hash;
+  before, a slow first page (the dashboard) finished last and painted over the welcome guide.
 - **`X-Forwarded-For` is believed only from loopback** (`src/server/clientip.js`). Trusting it from any socket would let
   a LAN client pick its own address and walk around LAN-only and the lockout.
 - **The dashboard editor must not reload data per edit.** `dash.js` re-renders on every move, resize and option

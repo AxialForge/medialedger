@@ -8,6 +8,39 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [2.4.0] - 2026-09-30
+
+### Added
+
+- **Connect a network share from the web app** (Raspberry Pi / Linux
+  server): Settings → Library → Network shares, and the folder picker, take
+  the file server's address, username and password, list its shares and
+  connect the ones you tick under `/mnt/medialedger/`. The service still has
+  no root: a root helper started by systemd validates each request and does
+  the mount. The sign-in is kept in a root-only file, never in the settings.
+- **Welcome guide** on a new install: connect storage, point at the TV,
+  Anime and Movies folders (or let it find them), check they can be read,
+  start the first scan. Reopen it from Settings → Library.
+- **Guided installer on the Pi**: asks for the file server and sign-in,
+  lists its shares, connects the ones you pick, and ends with the address to
+  open. `sudo medialedger-setup` runs the questions again. Signing in over
+  SSH shows whether MediaLedger is running and which shares are connected.
+
+### Changed
+
+- The folder picker has a button per connected share, says how many files a
+  folder holds when it has no sub-folders, sorts "Season 2" before "Season
+  10", and lists up to 2,000 folders instead of 500.
+- The installer no longer assumes one particular share; an existing install
+  keeps its `/mnt/media` mount and credentials unchanged.
+- The mount watchdog looks after every connected share.
+
+### Fixed
+
+- The folder picker showed "No sub-folders" on network mounts that do not
+  report whether an entry is a file or a folder.
+- A page that was still loading could paint over the page opened after it.
+
 ## [2.3.0] - 2026-09-30
 
 ### Added

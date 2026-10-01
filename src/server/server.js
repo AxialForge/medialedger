@@ -25,6 +25,7 @@ const os = require('os');
 const { createService } = require('../main/service');
 const { createSecurity } = require('./security');
 const { createPortal } = require('./portal');
+const { createShares } = require('./shares');
 const realIp = require('./clientip');
 const plex = require('../main/plex');
 const pkg = require('../../package.json');
@@ -61,6 +62,8 @@ const clients = new Set(); // SSE responses
 const send = (channel, payload) => { const data = `data: ${JSON.stringify({ channel, payload })}\n\n`; for (const res of clients) { try { res.write(data); } catch { clients.delete(res); } } };
 const svc = createService({ userData: dataDir, log, send, host: { isPackaged: true, getAppPath: () => path.join(__dirname, '..', '..'), restart: () => setTimeout(() => process.exit(0), 1500) } });
 svc.init();
+// Network shares: listed here, connected by the root helper (see shares.js and server/share-helper.js).
+const shares = createShares({ dataDir, log, audit: (...a) => sec.audit(...a) });
 // The family portal: its own listener, its own routes, its own static folder (see portal.js).
 const portal = createPortal({ svc, dataDir, log, audit: (...a) => sec.audit(...a), version: pkg.version, notify: (...a) => svc.notify(...a), sec });
 
@@ -70,7 +73,7 @@ const GUEST = new Set(['posters:index', 'app:info', 'security:me', 'data:dashboa
 // A standard user: everything a guest may, plus the review pages, own ratings, the adult switch for their own session.
 const STANDARD = new Set([...GUEST, 'data:watched', 'data:reclaim', 'data:nextUp', 'data:problems', 'data:duplicates', 'data:missing', 'data:quality', 'data:changes', 'data:changeStats', 'movie:plan', 'movie:batches', 'movie:batchItems', 'rename:proposals', 'rename:history', 'export:list', 'override:list', 'override:suggest', 'meta:status', 'plex:status', 'watch:status', 'schedule:nextInApp', 'db:stats', 'settings:get', 'adult:toggle', 'ratings:setUser', 'security:changePassword', 'tags:add', 'tags:remove', 'data:upgrades', 'rename:dry', 'prefs:set']);
 // Admins: every channel. Actions that write to the share or throw data away also need a fresh password (re-auth).
-const SENSITIVE = new Set(['portal:set', 'portal:invite', 'portal:renew', 'db:restoreStage', 'security:tlsEnable', 'security:tlsDisable', 'status:rotate', 'plex:webhookSet', 'movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']);
+const SENSITIVE = new Set(['shares:add', 'shares:remove', 'portal:set', 'portal:invite', 'portal:renew', 'db:restoreStage', 'security:tlsEnable', 'security:tlsDisable', 'status:rotate', 'plex:webhookSet', 'movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']);
 const isSensitive = (ch, args) => ch === 'movie:run' ? !!(args[1] && args[1].live) : SENSITIVE.has(ch);
 const allowed = (role, ch) => role === 'admin' || (role === 'standard' ? STANDARD.has(ch) : GUEST.has(ch));
 // Settings hold secrets (Plex token, GitHub token); a standard user sees them blanked.
@@ -106,6 +109,11 @@ const webHandlers = new Map([
   ['adult:status', (ctx) => { const base = svc.handlers.get('adult:status')(); return { ...base, showAdult: ctx.role === 'guest' ? false : !!ctx.session.showAdult, canToggle: ctx.role !== 'guest' }; }],
   ['adult:toggle', (ctx, on) => { if (ctx.role === 'guest') throw new Error('Sign in to see adult content'); sec.setSessionFlag(ctx.session.id, 'showAdult', !!on); svc.setShowAdult(!!on); return { ...svc.handlers.get('adult:status')(), showAdult: !!on, canToggle: true }; }],
   ['requests:add', (ctx, r) => svc.handlers.get('requests:add')({ ...(r || {}), requested_by: ctx.role === 'guest' ? `guest: ${String((r || {}).requested_by || 'anonymous').slice(0, 40)}` : ctx.session.user })],
+  // network shares (admin only). Connecting and removing change what the server can read, so they ask for the password again.
+  ['shares:status', () => shares.status()],
+  ['shares:probe', (ctx, o) => shares.probe(o || {})],
+  ['shares:add', (ctx, o) => shares.add(o || {}, ctx.session.user, ctx.ip)],
+  ['shares:remove', (ctx, name) => shares.remove(String(name), ctx.session.user, ctx.ip)],
   // family portal (admin only; not in the guest or standard lists)
   ['portal:status', () => portal.status()],
   ['portal:check', async () => { await portal.checkNow(); return portal.status(); }],
@@ -174,7 +182,7 @@ webHandlers.set('status:info', (ctx) => { const key = sec.statusKey(false, ctx.i
 webHandlers.set('status:rotate', (ctx) => { sec.statusKey(true, ctx.ip, ctx.session.user); return webHandlers.get('status:info')(ctx); });
 webHandlers.set('plex:webhookInfo', (ctx) => ({ available: true, enabled: sec.webhook().enabled, url: webhookUrl(ctx.req), events: webhookEvents.slice().reverse() }));
 webHandlers.set('plex:webhookSet', (ctx, opts) => { sec.webhookSet(opts || {}, ctx.ip, ctx.session.user); return { enabled: sec.webhook().enabled, url: webhookUrl(ctx.req) }; });
-const CTX_HANDLERS = new Set([...webHandlers.keys()].filter(k => k.startsWith('security:') || (k.startsWith('portal:') && k !== 'portal:status') || ['settings:get', 'adult:status', 'adult:toggle', 'requests:add', 'plex:webhookInfo', 'plex:webhookSet', 'status:info', 'status:rotate', 'prefs:get', 'prefs:set'].includes(k)));
+const CTX_HANDLERS = new Set([...webHandlers.keys()].filter(k => k.startsWith('security:') || (k.startsWith('portal:') && k !== 'portal:status') || (k.startsWith('shares:') && k !== 'shares:status') || ['settings:get', 'adult:status', 'adult:toggle', 'requests:add', 'plex:webhookInfo', 'plex:webhookSet', 'status:info', 'status:rotate', 'prefs:get', 'prefs:set'].includes(k)));
 const handlers = new Map([...svc.handlers, ...webHandlers]);
 
 const hasOpenssl = () => { try { return require('child_process').spawnSync('openssl', ['version'], { encoding: 'utf8', timeout: 5000 }).status === 0; } catch { return false; } };

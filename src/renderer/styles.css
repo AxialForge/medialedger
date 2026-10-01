@@ -429,3 +429,13 @@ td.ptitle .pname { display: inline-block; vertical-align: middle; white-space: n
 .ssec[hidden], .sgroup[hidden] { display: none; }
 /* A bare checkbox in a settings row sits at the start of its cell instead of stretching across it. */
 .field > input[type=checkbox] { justify-self: start; width: auto; }
+
+/* ---- Folder picker, network shares and the welcome guide ---- */
+.fb-short { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0 10px; }
+.fb-item { cursor: pointer; padding: 4px 6px; border-radius: 5px; } .fb-item:hover { background: var(--panel2); }
+.sharelist { display: grid; gap: 6px; margin: 10px 0 4px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel2); }
+.wz { display: grid; gap: 14px; max-width: 980px; }
+.wz-step h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 15px; text-transform: none; letter-spacing: 0; color: var(--text); }
+.wz-n { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #0b0d12; font-weight: 700; font-size: 13px; flex: none; }
+.wz-line { padding: 4px 0; } .wz-next { margin: 4px 0 12px; padding-left: 20px; line-height: 1.7; }
+.wz .field { grid-template-columns: 110px 1fr; } .wz-st { min-width: 90px; }

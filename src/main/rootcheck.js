@@ -74,11 +74,18 @@ function listDirs(p) {
     p = '/';
   }
   const abs = path.resolve(p);
-  let names = [];
-  try { names = fs.readdirSync(abs, { withFileTypes: true }).filter(d => { try { return d.isDirectory() || (d.isSymbolicLink() && fs.statSync(path.join(abs, d.name)).isDirectory()); } catch { return false; } }).map(d => d.name).filter(n => !n.startsWith('.')).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })); }
+  let names = [], files = 0;
+  // Some network mounts report an entry's type as "unknown", which is neither a file nor a folder to readdir:
+  // those, like links, are asked directly. Files are counted so an empty list can say why it is empty.
+  try {
+    const isDir = (d) => { try { return d.isDirectory() || (!d.isFile() && fs.statSync(path.join(abs, d.name)).isDirectory()); } catch { return false; } };
+    const all = fs.readdirSync(abs, { withFileTypes: true }).filter(d => !d.name.startsWith('.'));
+    names = all.filter(isDir).map(d => d.name).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true }));
+    files = all.length - names.length;
+  }
   catch (e) { return { path: abs, parent: path.dirname(abs) !== abs ? path.dirname(abs) : (process.platform === 'win32' ? '' : null), dirs: [], error: e.code || e.message }; }
   const parent = path.dirname(abs) === abs ? (process.platform === 'win32' ? '' : null) : path.dirname(abs);
-  return { path: abs, parent, dirs: names.slice(0, 500).map(n => ({ name: n, path: path.join(abs, n) })) };
+  return { path: abs, parent, files, total: names.length, dirs: names.slice(0, 2000).map(n => ({ name: n, path: path.join(abs, n) })) };
 }
 
 module.exports = { checkRoot, checkRoots, listDirs, hostOf, tcpReachable };

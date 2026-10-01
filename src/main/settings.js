@@ -13,6 +13,7 @@ const DEFAULTS = {
     { id: 'tv', label: 'TV Shows', path: SHARE + 'TV_Shows', type: 'tv', enabled: true },
   ],
   adult: { exportCsv: false, defaultSubtype: 'anime' }, // adult roots: hidden by default (runtime toggle), kept out of CSVs unless allowed
+  welcomeDone: false,         // the first-run guide was finished or dismissed
   ffprobePath: '',            // empty = auto-detect
   probeConcurrency: 8,        // parallel ffprobe processes (SMB is the bottleneck)
   reprobeUnchanged: false,    // true = re-run ffprobe even if size+mtime unchanged
