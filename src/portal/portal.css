@@ -39,7 +39,7 @@ h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: v
 .seg button.on { background: var(--panel3); color: var(--text); }
 .bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 .bar input[type=search] { flex: 1 1 100%; }
-input[type=search], input[type=text], input[type=number], select, textarea { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-height: 42px; width: 100%; }
+input[type=search], input[type=text], input[type=password], input[type=number], select, textarea { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-height: 42px; width: 100%; }
 .bar select { flex: 1 1 120px; width: auto; }
 textarea { min-height: 80px; resize: vertical; }
 label.chk { display: flex; align-items: center; gap: 8px; padding: 6px 2px; }

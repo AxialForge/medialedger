@@ -40,6 +40,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The folder picker showed "No sub-folders" on network mounts that do not
   report whether an entry is a file or a folder.
 - A page that was still loading could paint over the page opened after it.
+- The password box on the family portal's admin sign-in was unstyled.
 
 ## [2.3.0] - 2026-09-30
 
