@@ -445,3 +445,7 @@ td.ptitle .pname { display: inline-block; vertical-align: middle; white-space: n
 .pickseg button { border: 0; border-radius: 0; background: var(--panel); padding: 6px 12px; border-right: 1px solid var(--line); }
 .pickseg button:last-child { border-right: 0; }
 .pickseg button.on { background: var(--accent); color: #0b0d12; font-weight: 600; } .pickseg button.on .muted { color: #0b0d12; opacity: .7; }
+
+/* The buttons at the end of a table row: the column is as wide as its buttons and sits against the right edge,
+   instead of taking a share of the table's spare width and leaving a gap beside them. */
+td.rowacts { width: 1%; text-align: right; white-space: nowrap; }

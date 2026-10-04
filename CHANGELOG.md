@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [2.4.2] - 2026-10-04
+
+### Fixed
+
+- **Missing page**: the Match and Collect buttons sat in a column wider than
+  they are, leaving an uneven gap beside them. The column now fits its
+  buttons and sits against the right edge.
+- The heading of the "Airing next" card no longer wraps into two columns.
+
 ## [2.4.1] - 2026-10-04
 
 ### Added
