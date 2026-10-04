@@ -250,6 +250,7 @@ add(H1('8. Adult library'),
 
 // ---------------- 9 Missing ----------------
 add(H1('9. Missing episodes'), ...img('missing', 'Series ranked by how many episodes are missing.'),
+  P('**One library at a time.** The buttons at the top of the page, **All libraries**, **TV** and **Anime**, narrow the whole page to one library: the tiles, the two airing cards and the table. Each button shows how many of its series have gaps. **Only series with gaps** hides the complete and unmatched series. Both choices are remembered on the device.'),
   P('After each scan MediaLedger looks up every series it has not seen before on TVmaze (TV) or AniList (anime) and stores the number of episodes in each season. Both services are free and need no key; lookups run at about one series per second in the background, and airing series are re-checked every two weeks. Comparing those counts with what is on disk, per season, gives an exact list of what you lack.'),
   table(['Column', 'Meaning'], [
     ['Source', 'tvmaze, anilist, manual or none. A lock badge means you chose the match or entered counts yourself; automatic re-checks never overwrite a locked series.'],

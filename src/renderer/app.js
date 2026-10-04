@@ -1098,7 +1098,13 @@ views.export = async () => {
 };
 
 views.missing = async () => {
-  const [rows, s] = await Promise.all([L.data.missing(), L.settings.get()]);
+  const [all, s] = await Promise.all([L.data.missing(), L.settings.get()]);
+  // Work on one library at a time: the choice narrows the tiles, the two airing cards and the table, and is remembered.
+  const types = [...new Set(all.map(r => r.library_type))];
+  const stored = (k) => { try { return localStorage.getItem('medialedger.missing.' + k) || ''; } catch { return ''; } };
+  const pickType = types.includes(stored('type')) ? stored('type') : '', onlyGaps = stored('gaps') === '1';
+  const inType = (r) => !pickType || r.library_type === pickType;
+  const rows = all.filter(inType);
   const matched = rows.filter(r => r.expected > 0), withMissing = matched.filter(r => r.missing_count > 0), unmatched = rows.filter(r => r.source === 'none'), pending = rows.filter(r => !r.source);
   view.innerHTML = `<h1>Missing episodes</h1>
     <p class="lead">Expected episode counts come from ${s.metadata.enabled ? 'TVmaze (TV) and AniList (anime), fetched in the background after each scan' : 'lookups that are currently <b>disabled</b> in Settings'}. Compared with what is on disk per season. Use <b>Match…</b> when a series was matched to the wrong entry, was not found, or you want to enter counts by hand.</p>
@@ -1121,14 +1127,22 @@ views.missing = async () => {
     { key: 'missing', label: 'Which', cls: 'wrap', render: r => esc(missingText(r.missing)) + (r.absolute ? ' <span class="badge warn" title="episode numbers on disk exceed the season length; that season was skipped">absolute numbering</span>' : '') },
     { key: 'id', label: '', render: r => matchBtn(r.library_type, r.show_name) + ` <button class="small collectbtn" data-type="${esc(r.library_type)}" data-show="${esc(r.show_name)}" data-raw="${r.raw_missing_count || 0}">Collect…</button>` },
   ];
-  const t = makeTable(rows, cols, { search: r => `${r.show_name} ${r.matched_title || ''} ${r.source || ''}`, defaultSort: { key: 'missing_count', asc: false } });
+  const listed = onlyGaps ? rows.filter(r => r.expected > 0 && r.missing_count > 0) : rows;
+  const t = makeTable(listed, cols, { search: r => `${r.show_name} ${r.matched_title || ''} ${r.source || ''}`, defaultSort: { key: 'missing_count', asc: false } });
   L.airing().then(a => {
     const day = (d) => { const diff = Math.round((Date.parse(d) - Date.parse(a.today)) / 86400000); return diff === 0 ? 'today' : diff === 1 ? 'tomorrow' : diff < 7 ? new Date(d + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long' }) : d; };
-    const box = el(`<div class="grid2" style="margin:12px 0"><div class="card"><h3>Airing next <span class="muted tiny">from TVmaze / AniList; the "missing" count leaves out episodes that have not aired</span></h3>${a.upcoming.length ? `<table>${a.upcoming.slice(0, 25).map(u => `<tr class="${u.this_week ? '' : 'muted'}"><td class="nowrap"><b>${day(u.next_airing)}</b><span class="sub">${esc(u.next_airing)}</span></td><td class="wrap"><a href="#${u.library_type}/${encodeURIComponent(u.show_name)}">${esc(u.show_name)}</a> <span class="muted tiny">${esc(u.next_episode || '')}</span></td><td class="num">${u.missing_count ? `<span class="badge bad">${u.missing_count} missing</span>` : '<span class="badge ok">up to date</span>'}</td></tr>`).join('')}</table>${a.upcoming.length > 25 ? `<p class="muted tiny">…and ${a.upcoming.length - 25} more</p>` : ''}` : '<p class="muted">Nothing scheduled. Series show up here once their match reports a next episode.</p>'}</div>
-      <div class="card"><h3>Finished airing, still incomplete</h3>${a.finished.length ? `<table>${a.finished.slice(0, 25).map(f => `<tr><td class="wrap"><a href="#${f.library_type}/${encodeURIComponent(f.show_name)}">${esc(f.show_name)}</a> <span class="muted tiny">${esc(f.status || '')}</span></td><td class="num"><span class="badge bad">${f.missing_count} of ${f.expected}</span></td></tr>`).join('')}</table>` : '<p class="muted">Every ended series you have is complete.</p>'}</div></div>`);
+    const up = a.upcoming.filter(inType), fin = a.finished.filter(inType);
+    const box = el(`<div class="grid2" style="margin:12px 0"><div class="card"><h3>Airing next <span class="muted tiny">from TVmaze / AniList; the "missing" count leaves out episodes that have not aired</span></h3>${up.length ? `<table>${up.slice(0, 25).map(u => `<tr class="${u.this_week ? '' : 'muted'}"><td class="nowrap"><b>${day(u.next_airing)}</b><span class="sub">${esc(u.next_airing)}</span></td><td class="wrap"><a href="#${u.library_type}/${encodeURIComponent(u.show_name)}">${esc(u.show_name)}</a> <span class="muted tiny">${esc(u.next_episode || '')}</span></td><td class="num">${u.missing_count ? `<span class="badge bad">${u.missing_count} missing</span>` : '<span class="badge ok">up to date</span>'}</td></tr>`).join('')}</table>${up.length > 25 ? `<p class="muted tiny">…and ${up.length - 25} more</p>` : ''}` : '<p class="muted">Nothing scheduled. Series show up here once their match reports a next episode.</p>'}</div>
+      <div class="card"><h3>Finished airing, still incomplete</h3>${fin.length ? `<table>${fin.slice(0, 25).map(f => `<tr><td class="wrap"><a href="#${f.library_type}/${encodeURIComponent(f.show_name)}">${esc(f.show_name)}</a> <span class="muted tiny">${esc(f.status || '')}</span></td><td class="num"><span class="badge bad">${f.missing_count} of ${f.expected}</span></td></tr>`).join('')}</table>` : '<p class="muted">Every ended series you have is complete.</p>'}</div></div>`);
     view.insertBefore(box, view.querySelector('.toolbar'));
   }).catch(() => {});
-  view.append(searchToolbar(t, rows.length), t.node);
+  const tb = searchToolbar(t, listed.length, `<label class="inline small"><input type="checkbox" id="mGaps" ${onlyGaps ? 'checked' : ''}> Only series with gaps</label>`);
+  const seg = el(`<div class="pickseg" id="mType" title="Show one library at a time">${[['', 'All libraries'], ...types.map(x => [x, typeName(x)])].map(([v, l]) => `<button data-t="${esc(v)}" class="${v === pickType ? 'on' : ''}">${esc(l)} <span class="muted tiny">${(v ? all.filter(r => r.library_type === v) : all).filter(r => r.expected > 0 && r.missing_count > 0).length}</span></button>`).join('')}</div>`);
+  seg.style.marginBottom = '12px'; view.querySelector('.tiles').before(seg); // at the top: it changes everything below it
+  const remember = (k, v) => { try { localStorage.setItem('medialedger.missing.' + k, v); } catch { /* private mode */ } route(); };
+  seg.onclick = (e) => { const b = e.target.closest('button'); if (b) remember('type', b.dataset.t); };
+  $('#mGaps', tb).onchange = (e) => remember('gaps', e.target.checked ? '1' : '0');
+  view.append(tb, t.node);
   t.node.addEventListener('click', e => { const a = e.target.closest('a.ext'); if (a) { e.preventDefault(); e.stopPropagation(); L.openExternal(a.dataset.url); } });
   $('#refreshNew').onclick = async () => { toast('Looking up series in the background…'); L.meta.refresh({ onlyNew: true }); };
   $('#refreshAll').onclick = async () => { toast('Re-checking all unlocked series in the background…'); L.meta.refresh({ onlyNew: false }); };

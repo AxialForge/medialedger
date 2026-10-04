@@ -8,6 +8,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [2.4.1] - 2026-10-04
+
+### Added
+
+- **Missing: pick a library.** A row of buttons (All libraries, TV, Anime)
+  at the top of the page narrows the tiles, the two airing cards and the table to
+  one library, with the number of series with gaps on each button. *Only
+  series with gaps* hides the complete and unmatched ones. Both are
+  remembered.
+
+### Changed
+
+- The button that folds the sidebar is larger.
+
 ## [2.4.0] - 2026-09-30
 
 ### Added
