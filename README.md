@@ -316,7 +316,6 @@ No. An unreachable root is logged as `root_offline` and skipped.
 | Document | For |
 |---|---|
 | [User Manual (PDF)](docs/MediaLedger-User-Manual.pdf) | The manual, arranged by task: a task finder, first scan to Pi server, every page and dialog, troubleshooting, glossary. |
-| [Reference manual (Word)](docs/MediaLedger-Manual.docx) | Generated from the screenshots: every tab and dialog, step-by-step procedures, settings reference, the Pi chapter, troubleshooting. Screenshots throughout. |
 | [Raspberry Pi guide](docs/RASPBERRY-PI.md) | Requirements, OS, install, commands, security, moving the database, troubleshooting, uninstall. Also the README inside the server package. |
 | [CHANGELOG](CHANGELOG.md) | What changed in each release. |
 | [CLAUDE.md](CLAUDE.md) | Architecture map, non-negotiables and the gotchas list, for anyone changing the code. |
