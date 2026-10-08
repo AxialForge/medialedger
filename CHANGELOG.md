@@ -8,6 +8,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [2.6.0] - 2026-10-08
+
+### Added
+
+- **Content rating and release date** from Plex (schema v13): two more
+  entries in the Sort by menu on the TV, Anime and Movies pages, shown on
+  the poster wall's details card. Filled in by the next Plex sync.
+- **Continue watching** card for the dashboard (Watching group): titles Plex
+  says are part-way through, with how much is left and when they were last
+  played. Add it with Edit dashboard.
+- **Family portal sort menu**: title, rating, year, release date, content
+  rating, date added, last episode added, unwatched, episodes and length,
+  with a button for ascending or descending. Series rows now show their year
+  and content rating.
+
 ## [2.5.0] - 2026-10-08
 
 ### Changed

@@ -39,15 +39,18 @@
   async function library() {
     let type = store.get('lib', 'movie');
     view.innerHTML = `<div class="seg" id="libSeg">${['movie', 'tv', 'anime'].map(t => `<button data-t="${t}" class="${t === type ? 'on' : ''}">${t === 'movie' ? 'Movies' : TYPE[t]}</button>`).join('')}</div>
-      <div class="bar"><input type="search" id="q" placeholder="Search…" autocomplete="off"><select id="fGenre"><option value="">any genre</option></select><select id="fBest"><option value="">any quality</option><option>4K</option><option>1080p</option><option>720p</option></select><select id="fAudio" hidden><option value="">sub or dub</option><option value="sub">Sub</option><option value="dub">Dub</option><option value="dual">Sub + Dub</option></select><select id="sort"><option value="title">A to Z</option><option value="rating">best rated</option><option value="year">newest first</option></select></div>
+      <div class="bar"><input type="search" id="q" placeholder="Search…" autocomplete="off"><select id="fGenre"><option value="">any genre</option></select><select id="fBest"><option value="">any quality</option><option>4K</option><option>1080p</option><option>720p</option></select><select id="fAudio" hidden><option value="">sub or dub</option><option value="sub">Sub</option><option value="dub">Dub</option><option value="dual">Sub + Dub</option></select><select id="sort"><option value="title">Title</option><option value="rating">Rating</option><option value="year">Year</option><option value="released">Release date</option><option value="rated">Content rating</option><option value="added">Date added</option><option value="last_added">Last episode added</option><option value="unwatched">Unwatched</option><option value="episodes">Episodes</option><option value="minutes">Length</option></select><button id="sortDir" class="btn" title="Ascending or descending">↓</button></div>
       <div class="muted tiny" id="count"></div><div class="list" id="list"><div class="empty">Loading…</div></div><div class="more" id="more"></div>`;
     let rows = [], shown = 60;
     const draw = () => {
       const q = $('#q').value.trim().toLowerCase(), g = $('#fGenre').value, b = $('#fBest').value, a = $('#fAudio').value, s = $('#sort').value;
       let list = rows.filter(r => (!q || r.title.toLowerCase().includes(q) || (r.tags || []).some(t => t.toLowerCase().includes(q))) && (!g || (r.genres || []).includes(g)) && (!b || r.best === b) && (!a || r.audio_type === a));
-      list = list.slice().sort(s === 'rating' ? (x, y) => (y.online_rating || 0) - (x.online_rating || 0) : s === 'year' ? (x, y) => (y.year || 0) - (x.year || 0) : (x, y) => x.title.localeCompare(y.title));
+      // Every sort has a natural direction (titles up, everything else newest or highest first); the button flips it.
+      const key = { rating: 'online_rating', rated: 'rated', title: 'title' }[s] || s, natural = s === 'title' || s === 'rated' ? 1 : -1, dir = (store.get('sortDir', 1)) * natural;
+      const val = (r) => key === 'online_rating' && r.online_rating == null ? r.audience_rating : r[key];
+      list = list.slice().sort((x, y) => { const a = val(x), b = val(y); if (a == null && b == null) return 0; if (a == null) return 1; if (b == null) return -1; return (typeof a === 'number' ? a - b : String(a).localeCompare(String(b), undefined, { numeric: true })) * dir; });
       $('#count').textContent = `${list.length.toLocaleString()} of ${rows.length.toLocaleString()}`;
-      $('#list').innerHTML = list.slice(0, shown).map(r => `<a class="row has-poster" href="${hrefOf(r)}">${poster(r)}<div class="t">${esc(r.title)}${r.year ? ` <span class="muted">(${r.year})</span>` : ''}</div><div class="s">${r.best ? `<span class="badge">${esc(r.best)}${r.hdr ? ' ' + esc(r.hdr) : ''}</span>` : ''}${audioBadge(r.audio_type)}${r.type === 'movie' ? `<span>${mins(r.minutes)}</span>${r.versions > 1 ? `<span>${r.versions} versions</span>` : ''}` : `<span>${r.episodes} episodes</span>${r.missing ? `<span class="badge warn">${r.missing} missing</span>` : r.expected ? '<span class="badge ok">complete</span>' : ''}`}${rating(r.online_rating)}${stars(r.my_rating)}</div>${tagRow(r)}</a>`).join('') || '<div class="empty">Nothing matches.</div>';
+      $('#list').innerHTML = list.slice(0, shown).map(r => `<a class="row has-poster" href="${hrefOf(r)}">${poster(r)}<div class="t">${esc(r.title)}${r.year ? ` <span class="muted">(${r.year})</span>` : ''}</div><div class="s">${r.best ? `<span class="badge">${esc(r.best)}${r.hdr ? ' ' + esc(r.hdr) : ''}</span>` : ''}${audioBadge(r.audio_type)}${r.type === 'movie' ? `<span>${mins(r.minutes)}</span>${r.versions > 1 ? `<span>${r.versions} versions</span>` : ''}` : `<span>${r.episodes} episodes</span>${r.missing ? `<span class="badge warn">${r.missing} missing</span>` : r.expected ? '<span class="badge ok">complete</span>' : ''}`}${r.rated ? `<span class="badge" title="content rating">${esc(r.rated)}</span>` : ''}${rating(r.online_rating != null ? r.online_rating : r.audience_rating)}${stars(r.my_rating)}</div>${tagRow(r)}</a>`).join('') || '<div class="empty">Nothing matches.</div>';
       $('#more').innerHTML = list.length > shown ? `<button class="btn" id="moreBtn">Show more (${(list.length - shown).toLocaleString()} left)</button>` : '';
       if ($('#moreBtn')) $('#moreBtn').onclick = () => { shown += 120; draw(); };
     };
@@ -56,12 +59,15 @@
       try { await loadPosters(); rows = await cached('library?type=' + type); } catch (e) { if (e.message !== 'invite') $('#list').innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
       const genres = [...new Set(rows.flatMap(r => r.genres || []))].sort();
       $('#fGenre').innerHTML = '<option value="">any genre</option>' + genres.map(g => `<option>${esc(g)}</option>`).join('');
-      $('#sort').querySelector('[value=year]').hidden = type !== 'movie';
+      for (const [v, when] of [['year', 'movie'], ['released', ''], ['last_added', 'series'], ['unwatched', 'series'], ['episodes', 'series'], ['minutes', 'movie']]) $('#sort').querySelector(`[value=${v}]`).hidden = when === 'movie' ? type !== 'movie' : when === 'series' ? type === 'movie' : false;
+      $('#sort').value = store.get('sort.' + type, 'title'); paintDir();
       shown = 60; draw();
     };
     $('#libSeg').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; type = b.dataset.t; store.set('lib', type); [...$('#libSeg').children].forEach(x => x.classList.toggle('on', x === b)); $('#q').value = ''; load(); };
     let deb = null; $('#q').oninput = () => { clearTimeout(deb); deb = setTimeout(() => { shown = 60; draw(); }, 150); };
-    ['#fGenre', '#fBest', '#fAudio', '#sort'].forEach(id => { $(id).onchange = () => { shown = 60; draw(); }; });
+    const paintDir = () => { $('#sortDir').textContent = store.get('sortDir', 1) === 1 ? '↓' : '↑'; };
+    ['#fGenre', '#fBest', '#fAudio', '#sort'].forEach(id => { $(id).onchange = () => { shown = 60; if (id === '#sort') store.set('sort.' + type, $('#sort').value); draw(); }; });
+    $('#sortDir').onclick = () => { store.set('sortDir', store.get('sortDir', 1) === 1 ? -1 : 1); paintDir(); draw(); };
     await load();
   }
 

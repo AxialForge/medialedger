@@ -547,19 +547,19 @@ function createService({ userData, log, send, host }) {
       MIN(${FILE_ADDED}) added, MAX(${FILE_ADDED}) last_added, MAX(plex_last_viewed) last_viewed, MAX(height) height, CAST(AVG(bitrate_kbps) AS INTEGER) bitrate, SUM(COALESCE(plex_view_count,0)) plays,
       ${AUDIO_COUNTS}
     FROM files WHERE library_type=? AND missing=0 AND ignored=0${AF()} GROUP BY show_name ORDER BY show_name COLLATE NOCASE`, type);
-    const plexShows = new Map(db.all('SELECT rating_key, user_rating, genres, year, audience_rating, rating FROM plex_shows').map(s => [s.rating_key, s]));
+    const plexShows = new Map(db.all('SELECT rating_key, user_rating, genres, year, audience_rating, rating, content_rating, released FROM plex_shows').map(s => [s.rating_key, s]));
     const tagMap = db.tagsFor(type);
     const miss = new Map(missingSummary(type).map(m => [m.show_name, m]));
     const metas = db.allSeriesMeta(type);
     const ur = new Map(db.userRatings(type).map(u => [u.title_key, u]));
-    return rows.map(r => { const m = miss.get(r.show_name); const sm = metas.get(r.show_name); const u = ur.get(r.show_name); const ps = r.plex_show_key ? plexShows.get(r.plex_show_key) : null; return { ...r, expected: m ? m.expected : 0, missing_count: m ? m.missing_count : 0, meta_source: m ? m.source : null, meta_status: m ? m.status : null, online_rating: sm ? sm.rating : null, my_rating: u ? u.stars : null, plex_user: ps ? ps.user_rating : null, year: ps ? ps.year : null, audience_rating: ps ? ps.audience_rating : null, critic_rating: ps ? ps.rating : null, next_airing: sm ? sm.next_airing || null : null, genres: onlineTags(sm).length ? onlineTags(sm) : onlineTags({ genres: ps && ps.genres }), audio_type: titleAudioType({ files: r.probed_audio, jpn: r.jpn_files, eng: r.eng_files, dual: r.dual_files }, { anime: type === 'anime' }), tags: tagMap.get(r.show_name) || [] }; });
+    return rows.map(r => { const m = miss.get(r.show_name); const sm = metas.get(r.show_name); const u = ur.get(r.show_name); const ps = r.plex_show_key ? plexShows.get(r.plex_show_key) : null; return { ...r, expected: m ? m.expected : 0, missing_count: m ? m.missing_count : 0, meta_source: m ? m.source : null, meta_status: m ? m.status : null, online_rating: sm ? sm.rating : null, my_rating: u ? u.stars : null, plex_user: ps ? ps.user_rating : null, year: ps ? ps.year : null, audience_rating: ps ? ps.audience_rating : null, critic_rating: ps ? ps.rating : null, content_rating: ps ? ps.content_rating || null : null, released: ps ? ps.released || null : null, next_airing: sm ? sm.next_airing || null : null, genres: onlineTags(sm).length ? onlineTags(sm) : onlineTags({ genres: ps && ps.genres }), audio_type: titleAudioType({ files: r.probed_audio, jpn: r.jpn_files, eng: r.eng_files, dual: r.dual_files }, { anime: type === 'anime' }), tags: tagMap.get(r.show_name) || [] }; });
   });
   h('data:episodes', (type, show) => ({ tags: db.tagsOf(type, show), genres: onlineTags(db.getSeriesMeta(type, show)), files: db.all(`SELECT * FROM files WHERE library_type=? AND show_name=? AND ignored=0${AF()} ORDER BY missing, season, episode, file_name`, type, show), missing: missingSummary(type).find(m => m.show_name === show) || null }));
   h('data:movies', () => { const movieTags = db.tagsFor('movie'); const mine = new Map(db.userRatings('movie').map(u => [u.title_key, u.stars])); return db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, SUM(size) bytes, MAX(duration_s) seconds,
       GROUP_CONCAT(DISTINCT resolution) resolutions, GROUP_CONCAT(DISTINCT video_codec) codecs, GROUP_CONCAT(DISTINCT audio_langs) audio_langs, GROUP_CONCAT(DISTINCT sub_langs) sub_langs,
       MAX(has_captions) has_captions, SUM(CASE WHEN probe_ok=1 THEN 1 ELSE 0 END) probed, GROUP_CONCAT(edition_tag, ' | ') editions, MAX(plex_genres) plex_genres,
       MAX(plex_view_count) watched_count, MAX(plex_user_rating) plex_user, SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) plex_linked, MAX(hdr) hdr,
-      MIN(${FILE_ADDED}) added, MAX(plex_last_viewed) last_viewed, MAX(height) height, MAX(bitrate_kbps) bitrate, MAX(plex_audience_rating) audience_rating, MAX(plex_view_offset_ms) offset_ms,
+      MIN(${FILE_ADDED}) added, MAX(plex_last_viewed) last_viewed, MAX(height) height, MAX(bitrate_kbps) bitrate, MAX(plex_audience_rating) audience_rating, MAX(plex_view_offset_ms) offset_ms, MAX(plex_content_rating) content_rating, MIN(plex_released) released,
       ${AUDIO_COUNTS}
     FROM files WHERE library_type='movie' AND missing=0 AND ignored=0${AF()} GROUP BY group_key ORDER BY title COLLATE NOCASE, year`).map(r => ({ ...r, my_rating: mine.get(r.group_key) || null, genres: onlineTags({ genres: r.plex_genres }), audio_type: titleAudioType({ files: r.probed_audio, jpn: r.jpn_files, eng: r.eng_files, dual: r.dual_files }), tags: movieTags.get(r.group_key) || [] })); });
   h('data:movieFiles', (groupKey) => db.all(`SELECT * FROM files WHERE library_type='movie' AND group_key=?${AF()} ORDER BY missing, file_name`, groupKey));
@@ -711,6 +711,11 @@ function createService({ userData, log, send, host }) {
   h('data:snapshots', (days) => db.snapshots(Number(days) || 365));
   h('data:watched', (opts) => watched.report(db, { ...(opts || {}), adultFilter: AF() }));
   h('data:reclaim', (opts) => watched.reclaim(db, { ...(opts || {}), adultFilter: AF() }));
+  // Continue watching: what Plex says is part-way through. Plex clears the offset once something is finished.
+  h('data:continue', (limit) => db.all(`SELECT library_type, show_name, season, episode, episode_title, movie_title, movie_year, group_key, duration_s, plex_view_offset_ms offset_ms, plex_last_viewed last_viewed
+    FROM files WHERE missing=0 AND ignored=0 AND plex_view_offset_ms > 60000 AND duration_s > 0${AF()} ORDER BY plex_last_viewed DESC LIMIT ?`, Math.min(50, Math.max(1, Number(limit) || 12)))
+    .filter((r, i, all) => all.findIndex(x => x.library_type === r.library_type && (r.library_type === 'movie' ? x.group_key === r.group_key : x.show_name === r.show_name && x.season === r.season && x.episode === r.episode)) === i) // one row per title, the newest
+    .map(r => ({ ...r, progress: Math.min(99, Math.round(r.offset_ms / 1000 / r.duration_s * 100)), left_s: Math.max(0, Math.round(r.duration_s - r.offset_ms / 1000)) })));
   h('data:nextUp', (opts) => watched.nextUp(db, { ...(opts || {}), adultFilter: AF() }));
   h('data:snapshotNow', () => takeSnapshot());
   const snapshotTick = () => { const today = new Date().toISOString().slice(0, 10); const now = new Date(); const [sh, sm] = String((settings.get().snapshot || {}).time || '03:05').split(':').map(Number); if (now.getHours() * 60 + now.getMinutes() < sh * 60 + sm) return; if (scanner.running) return; if (db.get('SELECT 1 FROM snapshots WHERE day=?', today)) return; try { takeSnapshot(); } catch (e) { log('snapshot failed: ' + e.message); } };

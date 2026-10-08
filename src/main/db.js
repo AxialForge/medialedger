@@ -359,6 +359,14 @@ const MIGRATIONS = [
       );
     `,
   },
+  {
+    version: 13, name: 'plex content rating and release date',
+    sql: `
+      ALTER TABLE plex_shows ADD COLUMN released TEXT;          -- YYYY-MM-DD the series first aired, from Plex
+      ALTER TABLE files ADD COLUMN plex_content_rating TEXT;    -- movies: PG-13, R, TV-MA …
+      ALTER TABLE files ADD COLUMN plex_released TEXT;          -- movies: YYYY-MM-DD release date
+    `,
+  },
 ];
 
 class Db {

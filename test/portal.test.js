@@ -97,7 +97,7 @@ const call = (method, p, { cookie, body, headers } = {}) => new Promise((resolve
   // what comes back
   const me = await call('GET', '/p/me', { cookie }); assert.strictEqual(me.json.result.name, 'Mom');
   const movies = await call('GET', '/p/library?type=movie', { cookie });
-  assert.deepStrictEqual(Object.keys(movies.json.result[0]).sort(), ['best', 'editions', 'genres', 'hdr', 'key', 'minutes', 'my_rating', 'online_rating', 'tags', 'title', 'type', 'versions', 'year']);
+  assert.deepStrictEqual(Object.keys(movies.json.result[0]).sort(), ['added', 'audience_rating', 'best', 'editions', 'genres', 'hdr', 'key', 'minutes', 'my_rating', 'online_rating', 'rated', 'released', 'tags', 'title', 'type', 'versions', 'year']);
   assert.strictEqual(movies.json.result[0].best, '4K');
   const series = await call('GET', '/p/library?type=anime', { cookie }); assert.strictEqual(series.json.result[0].missing, 2);
   const ep = await call('GET', '/p/title?type=tv&key=Andor', { cookie });

@@ -51,12 +51,12 @@ const bestRes = (v) => { const have = csv(v); return RES_ORDER.find(r => have.in
 const projectSeries = (type, showRatings) => (s) => ({
   type, key: String(s.show_name), title: String(s.show_name), episodes: num(s.episodes), seasons: num(s.seasons),
   best: bestRes(s.resolutions), audio_type: s.audio_type || null, genres: arr(s.genres), tags: arr(s.tags),
-  expected: num(s.expected) || null, missing: s.expected ? num(s.missing_count) : null, status: s.meta_status || null,
+  expected: num(s.expected) || null, missing: s.expected ? num(s.missing_count) : null, status: s.meta_status || null, year: num(s.year), released: s.released ? String(s.released).slice(0, 10) : null, rated: s.content_rating ? String(s.content_rating) : null, added: s.added ? String(s.added).slice(0, 10) : null, last_added: s.last_added ? String(s.last_added).slice(0, 10) : null, unwatched: s.plex_linked ? num(s.episodes - s.watched) : null,
   online_rating: num(s.online_rating), my_rating: showRatings ? num(s.my_rating) : null, minutes: s.episodes && s.seconds ? Math.round(s.seconds / s.episodes / 60) : null,
 });
 const projectMovie = (showRatings) => (m) => ({
   type: 'movie', key: String(m.group_key), title: String(m.title || ''), year: num(m.year), versions: num(m.files),
-  best: bestRes(m.resolutions), hdr: m.hdr && m.hdr !== 'SDR' ? String(m.hdr) : null, editions: csv(m.editions),
+  best: bestRes(m.resolutions), hdr: m.hdr && m.hdr !== 'SDR' ? String(m.hdr) : null, editions: csv(m.editions), released: m.released ? String(m.released).slice(0, 10) : null, rated: m.content_rating ? String(m.content_rating) : null, added: m.added ? String(m.added).slice(0, 10) : null, audience_rating: num(m.audience_rating),
   genres: arr(m.genres && m.genres.length ? m.genres : m.plex_genres), tags: arr(m.tags), minutes: m.seconds && m.files ? Math.round(m.seconds / m.files / 60) : null,
   online_rating: num(m.online_rating), my_rating: showRatings ? num(m.my_rating) : null,
 });

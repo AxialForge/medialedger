@@ -449,3 +449,7 @@ td.ptitle .pname { display: inline-block; vertical-align: middle; white-space: n
 /* The buttons at the end of a table row: the column is as wide as its buttons and sits against the right edge,
    instead of taking a share of the table's spare width and leaving a gap beside them. */
 td.rowacts { width: 1%; text-align: right; white-space: nowrap; }
+
+/* A small progress bar inside a table cell (Continue watching) */
+.meter-sm { display: inline-block; width: 70px; height: 6px; border-radius: 3px; background: var(--panel3); vertical-align: middle; overflow: hidden; }
+.meter-sm > span { display: block; height: 100%; background: var(--accent); }
