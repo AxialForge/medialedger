@@ -101,21 +101,21 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 | `docs/RASPBERRY-PI.md` | The Pi guide; also becomes the README inside the server package |
 | `src/main/paths.js` | `absOf(rootPath, rel)`: stored `rel_path` uses `\` on every OS; join with the local separator only when touching disk |
 | `server/install.sh` | Pi installer: Node 22, ffmpeg, CIFS fstab mount at `/mnt/media`, `medialedger` system user, systemd unit, `medialedger` / `medialedger-update` commands |
-| `src/renderer/` | `index.html`, `styles.css`, `app.js` (hash router, sortable tables, fix modal) |
+| `src/renderer/` | `index.html`, `styles.css`, and the renderer in six plain scripts loaded in order (they share the page scope): `app-core.js` (bridge, helpers, tables, modals, posters), `views-library.js`, `views-review.js`, `views-maintenance.js`, `views-app.js` (settings, security, shares, welcome), `app-router.js` (router and start-up) |
 | `test/` | Parser + updater tests, scan harness |
 | `tools/make-icon.js` | Icon generator |
 | `electron-builder.yml` | NSIS one-click, per-user, `publish: github` (feeds the updater) |
 
 ### Extension points
 
-- **New library type**: add a `type` to the roots select in `app.js`, a parser in
+- **New library type**: add a `type` to the roots select in `views-app.js`, a parser in
   `parse.js`, a branch in `scanner.js`/`scanWorker.js` where the parser is
   chosen, and an export function in `exportCsv.js`.
 - **New probed field**: append a migration in `db.js`, populate it in
   `ffprobe.js normalise()`, add it to `TECH_COLS`/`techFields` in
-  `exportCsv.js` and the table columns in `app.js`.
+  `exportCsv.js` and the table columns in `views-library.js`.
 - **New fixable field**: override column (migration) + `applyOverride` list +
-  the fix modal in `app.js` (`openFixModal`).
+  the fix modal in `app-core.js` (`openFixModal`).
 - **Plex**: `plex.syncLibrary` is the only Plex code path. Episodes are paged
   500 at a time (`X-Plex-Container-Start/Size`). Plex paths are the NAS's own
   (`/media/...`); never assume the UNC form. userRating is 0–10 in Plex; the
@@ -220,6 +220,10 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   never creates a web session. Cookies ignore ports, so reusing `ml_session` would have made a portal sign-in on
   `medialedger.home:8090` a full web-app session on `:8080`. Job notes pass through `noPaths()`: the backup job's
   note names the backup file with its full path. Add a route there only if it cannot change settings or files.
+- **Renderer files.** The renderer is six classic scripts, not modules: a top-level `const` in one is visible to the
+  others, so names must stay unique across them, and anything run at load time may only use what an earlier script
+  defined (`app-router.js` is last for that reason). Split by page group so a feature lands in one file; helpers used
+  by more than one page go in `app-core.js`.
 - **Settings is grouped after it is drawn.** `groupSettings()` moves each `<h2>` and what follows it into a
   `.ssec` inside a `.sgroup`, so a new section is just a new `<h2>` in the template plus its title in
   `SETTINGS_GROUPS` (unlisted titles land in "Other"). Do not split the template into per-tab renders: Save reads
@@ -254,8 +258,8 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   nothing adult exists on disk to serve.
 - **`dash.js` is vendored from the Bracket kit** with four marked `[ML]` changes (the `after` hook and the editor
   level). MediaLedger has no kit `ui.js`; `ui-shim.js` provides `window.UI` and forwards to `window.__ml`, which
-  `app.js` fills in. Script order matters: `ui-shim.js`, `dash.js`, `app.js`. To add a dashboard card, add an entry to
-  `DASH_CARDS` in `app.js`; cards that need an extra call use `c.lazy(key, fn)` so it is fetched once per render.
+  `app-core.js` fills in. Script order matters: `ui-shim.js`, `dash.js`, then the six renderer scripts. To add a dashboard card, add an entry to
+  `DASH_CARDS` in `views-library.js`; cards that need an extra call use `c.lazy(key, fn)` so it is fetched once per render.
 - **"Added" for a title is not `first_seen`.** `first_seen` is when MediaLedger first saw the file, so on a young
   ledger every title looks new. `watched.reclaim()` uses the earlier of `first_seen` and the newest file's mtime.
 - **Webhook history keys need more than a timestamp.** Several scrobbles can land in one millisecond; the key is

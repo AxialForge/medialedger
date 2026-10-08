@@ -8,6 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [2.5.0] - 2026-10-08
+
+### Changed
+
+- **The renderer is six files instead of one.** `app.js` (2,261 lines) is
+  now `app-core.js`, `views-library.js`, `views-review.js`,
+  `views-maintenance.js`, `views-app.js` and `app-router.js`, loaded in that
+  order. Nothing looks or behaves differently; every page was checked on the
+  desktop and the web build. Each feature from here on lands in one file.
+
 ## [2.4.2] - 2026-10-04
 
 ### Fixed

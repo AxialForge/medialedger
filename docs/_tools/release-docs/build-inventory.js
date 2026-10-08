@@ -21,11 +21,11 @@ function where(src, label) {
   return { file, line: i + 1, verified: true };
 }
 // Where one control is defined: its id or class, searched in the renderer sources.
-const SOURCES = ['src/renderer/app.js', 'src/renderer/dash.js', 'src/renderer/index.html', 'src/renderer/webbridge.js', 'src/renderer/cards.js', 'src/renderer/request.html', 'src/renderer/request.js', 'src/portal/portal.js', 'src/portal/index.html'];
+const SOURCES = ['src/renderer/app-core.js', 'src/renderer/views-library.js', 'src/renderer/views-review.js', 'src/renderer/views-maintenance.js', 'src/renderer/views-app.js', 'src/renderer/app-router.js', 'src/renderer/dash.js', 'src/renderer/index.html', 'src/renderer/webbridge.js', 'src/renderer/cards.js', 'src/renderer/request.html', 'src/renderer/request.js', 'src/portal/portal.js', 'src/portal/index.html'];
 // Controls drawn by a shared helper have no id of their own; they are defined where the helper is.
 const HELPERS = [
-  [/thead th|tbody tr|td:first-child/, 'src/renderer/app.js', 'function makeTable('],
-  [/\.pbig|td\.ptitle|\.pthumb/, 'src/renderer/app.js', 'const posterTag ='],
+  [/thead th|tbody tr|td:first-child/, 'src/renderer/app-core.js', 'function makeTable('],
+  [/\.pbig|td\.ptitle|\.pthumb/, 'src/renderer/app-core.js', 'const posterTag ='],
   [/\.webauth/, 'src/renderer/webbridge.js', 'webauth'],
 ];
 const PORTAL_HELPERS = [[/\.pbig|\.pthumb/, 'src/portal/portal.js', 'const poster = (r, cls'], [/main h1|main p a/, 'src/portal/portal.js', 'async function title(type, key)']];
