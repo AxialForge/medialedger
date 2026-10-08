@@ -1,0 +1,8 @@
+{
+  "name": "medialedger-release-docs-tools",
+  "private": true,
+  "description": "Throwaway tools that build the release documentation package. Not part of the application.",
+  "dependencies": {
+    "mermaid": "11.4.1"
+  }
+}

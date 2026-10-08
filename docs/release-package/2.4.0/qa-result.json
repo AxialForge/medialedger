@@ -1,0 +1,62 @@
+{
+  "inventory": {
+    "items": 72,
+    "controls": 515,
+    "gaps": [],
+    "unverified_sources": []
+  },
+  "callouts": {
+    "screens": 61,
+    "callouts": 460,
+    "mismatches": [],
+    "items_without_screenshot": [
+      "sidebar",
+      "d01_confirm_identity",
+      "d02_one_at_a_time",
+      "d03_dry_run_result",
+      "d04_batch_items",
+      "d05_undo_batch",
+      "d06_rename_movies_live",
+      "d07_movie_batch_result",
+      "d08_set_source",
+      "d09_ignore_collisions",
+      "d10_card_settings_legacy"
+    ]
+  },
+  "documents": {
+    "USER_MANUAL": {
+      "problems": [],
+      "pages": 123,
+      "pdf_bytes": 6591938,
+      "pictures": 67,
+      "pictures_in_docx": 67,
+      "contents_lines": 97,
+      "contents_wrong": [],
+      "headings_level_1_and_2": 98,
+      "unverified_mentions": 2
+    },
+    "PI_INSTALL_GUIDE": {
+      "problems": [],
+      "pages": 16,
+      "pdf_bytes": 673630,
+      "pictures": 4,
+      "pictures_in_docx": 4,
+      "contents_lines": 27,
+      "contents_wrong": [],
+      "headings_level_1_and_2": 28,
+      "unverified_mentions": 2
+    },
+    "RELEASE_HISTORY": {
+      "problems": [],
+      "pages": 25,
+      "pdf_bytes": 559242,
+      "pictures": 0,
+      "pictures_in_docx": 0,
+      "contents_lines": 49,
+      "contents_wrong": [],
+      "headings_level_1_and_2": 50,
+      "unverified_mentions": 0
+    }
+  },
+  "pass": true
+}

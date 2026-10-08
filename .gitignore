@@ -52,3 +52,11 @@ desktop.ini
 .devprofile/
 .webprofile/
 .shotprofile/
+
+# Release report tooling: scripts are tracked, their working files are not
+docs/_tools/release-docs/demo-data/
+docs/_tools/release-docs/out/
+docs/_tools/release-docs/node_modules/
+docs/_tools/release-docs/*.log
+# Reconstruction archives are too large for GitHub
+docs/release-package/**/*.zip

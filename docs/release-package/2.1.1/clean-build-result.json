@@ -1,0 +1,7 @@
+{
+  "tag": "v2.1.1", "commit": "57c4e4fd47afdbb8b9b6ea08bdeb5c1ed603cc7c", "when": "2026-09-29T23:38:01Z",
+  "node": "v24.18.0", "npm": "11.16.0", "os": "MINGW64_NT-10.0-26200 3.6.6-1cdd4371.x86_64",
+  "pass": true, "suites_passed": 19, "installer_built": true,
+  "artifacts": "latest.yml medialedger-2.1.1-setup.exe medialedger-2.1.1-setup.exe.blockmap medialedger-server-2.1.1.tar.gz medialedger-server.tar.gz medialedger-server.tar.gz.sha256 ",
+  "steps": [{"step":"install","command":"npm ci --no-audit --no-fund","exit":0,"seconds":8},{"step":"test","command":"npm test","exit":0,"seconds":49},{"step":"server-package","command":"node tools/pack-server.js","exit":0,"seconds":1},{"step":"installer","command":"npm run build:win -- --publish never","exit":0,"seconds":49}]
+}

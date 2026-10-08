@@ -1,0 +1,33 @@
+flowchart TB
+  U1["You, at your desk"] --> E
+  U2["You and account holders<br/>on the home network"] --> CADDY["Caddy reverse proxy<br/>(optional)"] --> W
+  U3["Invited family, anywhere"] --> TS["Tailscale Funnel<br/>(optional)"] --> P
+
+  subgraph SHELLS["Shells"]
+    E["Desktop application<br/>Electron 38<br/>src/main/main.js, src/preload.js"]
+    W["Web server<br/>Node, no dependencies<br/>src/server/server.js, security.js"]
+    P["Family portal<br/>its own listener and routes<br/>src/server/portal.js"]
+  end
+
+  E -- "bridge (IPC)" --> R
+  W -- "HTTP /api/*" --> R
+  P -- "HTTP /p/*" --> PS
+  R["Renderer: one set of pages for both shells<br/>src/renderer/ (app.js, dash.js, cards.js)"]
+  PS["Portal site: read-only, phone first<br/>src/portal/"]
+
+  E --> CORE
+  W --> CORE
+  P -- "fixed list of read operations,<br/>replies built field by field" --> CORE
+
+  CORE["Core: src/main/service.js<br/>one handler per operation, shared by every shell<br/><br/>scanner.js, parse.js, ffprobe.js: find and read files<br/>metadata.js: expected episodes<br/>plex.js, watched.js: Plex sync and play history<br/>posters.js: posters<br/>renamer.js, movieRename.js: rename batches<br/>upgrades.js, notify.js, restore.js, scheduler.js,<br/>exportCsv.js, sysmon.js, rootcheck.js, watcher.js"]
+
+  CORE --> DATA
+  W --> DATA
+  P --> DATA
+  DATA[("Data folder<br/>medialedger.db (SQLite, schema 12)<br/>settings.json, web.json, portal.json<br/>medialedger.log, security.log<br/>posters, exports, backups")]
+
+  CORE -- "read; rename only on request" --> NAS[("Media share")]
+  CORE -- "local network" --> PLEX["Plex Media Server"]
+  CORE -- "series names only" --> ONLINE["TVmaze and AniList"]
+  CORE -- "events" --> HOOK["Webhook or mail server"]
+  E -- "update check" --> GH["GitHub Releases"]

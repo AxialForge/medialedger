@@ -1,0 +1,61 @@
+{
+  "inventory": {
+    "items": 65,
+    "controls": 453,
+    "gaps": [],
+    "unverified_sources": []
+  },
+  "callouts": {
+    "screens": 54,
+    "callouts": 398,
+    "mismatches": [],
+    "items_without_screenshot": [
+      "sidebar",
+      "d01_confirm_identity",
+      "d02_one_at_a_time",
+      "d03_dry_run_result",
+      "d04_batch_items",
+      "d05_undo_batch",
+      "d06_rename_movies_live",
+      "d07_movie_batch_result",
+      "d08_set_source",
+      "d09_ignore_collisions",
+      "d10_card_settings_legacy"
+    ]
+  },
+  "documents": {
+    "USER_MANUAL": {
+      "problems": [],
+      "pages": 110,
+      "pdf_bytes": 5946427,
+      "pictures": 60,
+      "pictures_in_docx": 60,
+      "contents_lines": 90,
+      "contents_wrong": [],
+      "headings_level_1_and_2": 91,
+      "unverified_mentions": 2
+    },
+    "RELEASE_OVERVIEW": {
+      "problems": [],
+      "pages": 14,
+      "pdf_bytes": 641869,
+      "pictures": 1,
+      "pictures_in_docx": 1,
+      "contents_lines": 24,
+      "contents_wrong": [],
+      "headings_level_1_and_2": 25,
+      "unverified_mentions": 1
+    },
+    "DEVELOPER_GUIDE": {
+      "problems": [],
+      "pages": 28,
+      "pdf_bytes": 403338,
+      "pictures": 0,
+      "contents_lines": 30,
+      "contents_wrong": [],
+      "note": "The contents of this PDF are links without page numbers.",
+      "unverified_mentions": 1
+    }
+  },
+  "pass": true
+}

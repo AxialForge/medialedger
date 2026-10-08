@@ -1,0 +1,66 @@
+{
+  "archive": "MediaLedger_v2.1.1_20260929.zip",
+  "bytes": 134273277,
+  "tag": "v2.1.1",
+  "commit": "57c4e4fd47afdbb8b9b6ea08bdeb5c1ed603cc7c",
+  "files": 506,
+  "sections": {
+    "source": 136,
+    "bin": 6
+  },
+  "manifest_checked": 506,
+  "manifest_mismatches": [],
+  "files_not_in_manifest": [],
+  "forbidden_paths": [],
+  "hashes_match": true,
+  "secret_scan": {
+    "files_scanned": 142,
+    "matches": 1,
+    "need_review": 0,
+    "review": []
+  },
+  "extracted_to": "C:\\Users\\JOSEPH~1\\AppData\\Local\\Temp\\claude\\C--Users-Joseph-Costarella\\27b2038a-3a9c-4171-a8a8-a9d16bc8f1b1\\scratchpad\\archive-work\\verify\\MediaLedger_v2.1.1_20260929",
+  "build_from_archive": {
+    "when": "2026-09-29T23:50:05Z",
+    "manifest_files": 506,
+    "manifest_mismatches": 0,
+    "source_path_length": 123,
+    "steps": [
+      {
+        "step": "npm ci",
+        "command": "npm ci --no-audit --no-fund",
+        "exit": 0,
+        "seconds": 7
+      },
+      {
+        "step": "npm test",
+        "command": "npm test",
+        "exit": 0,
+        "seconds": 48,
+        "suites_passed": 19
+      },
+      {
+        "step": "server package",
+        "command": "node tools/pack-server.js",
+        "exit": 0,
+        "seconds": 1
+      },
+      {
+        "step": "installer",
+        "command": "npm run build:win -- --publish never",
+        "exit": 0,
+        "seconds": 45
+      }
+    ],
+    "produced": [
+      "builder-debug.yml",
+      "latest.yml",
+      "medialedger-2.1.1-setup.exe",
+      "medialedger-2.1.1-setup.exe.blockmap",
+      "medialedger-server-2.1.1.tar.gz",
+      "medialedger-server.tar.gz",
+      "medialedger-server.tar.gz.sha256"
+    ],
+    "pass": true
+  }
+}

@@ -1,0 +1,5175 @@
+{
+  "project": "MediaLedger",
+  "version": "2.1.1",
+  "generated": "2026-09-29T23:25:58.825Z",
+  "generated_by": "docs/_tools/release-docs/build-inventory.js",
+  "counts": {
+    "items": 65,
+    "windows": 1,
+    "pages": 32,
+    "sections": 7,
+    "modes": 5,
+    "dialogs": 19,
+    "controls": 453
+  },
+  "shells": [
+    {
+      "id": "desktop",
+      "name": "Desktop application (Electron)",
+      "entry": "src/main/main.js"
+    },
+    {
+      "id": "web",
+      "name": "Web server",
+      "entry": "src/server/server.js"
+    },
+    {
+      "id": "portal",
+      "name": "Family portal",
+      "entry": "src/server/portal.js"
+    }
+  ],
+  "items": [
+    {
+      "id": "00_sign_in",
+      "name": "Sign-in dialog (web server)",
+      "kind": "dialog",
+      "parent": "main_window",
+      "defined_at": "src/renderer/webbridge.js:23",
+      "verified": true,
+      "reached_by": "#dashboard",
+      "screenshot": {
+        "clean": "screenshots/00_sign_in_clean.png",
+        "annotated": "screenshots/00_sign_in_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "00_sign_in.1",
+          "callout": 1,
+          "name": "User name",
+          "type": "Text field",
+          "selector": ".webauth input[name=username]",
+          "defined_at": "src/renderer/webbridge.js:23",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "00_sign_in.2",
+          "callout": 2,
+          "name": "Password",
+          "type": "Password field",
+          "selector": ".webauth input[name=password]",
+          "defined_at": "src/renderer/webbridge.js:23",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "00_sign_in.3",
+          "callout": 3,
+          "name": "Authenticator code",
+          "type": "Text field",
+          "selector": ".webauth input[name=code]",
+          "defined_at": "src/renderer/webbridge.js:23",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "00_sign_in.4",
+          "callout": 4,
+          "name": "Sign in",
+          "type": "Button",
+          "selector": ".webauth button[type=submit]",
+          "defined_at": "src/renderer/webbridge.js:23",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "01_main_window",
+      "name": "Main window",
+      "kind": "window",
+      "parent": null,
+      "defined_at": "src/renderer/index.html:20",
+      "verified": true,
+      "reached_by": "#dashboard",
+      "screenshot": {
+        "clean": "screenshots/01_main_window_clean.png",
+        "annotated": "screenshots/01_main_window_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "01_main_window.1",
+          "callout": 1,
+          "name": "Application name",
+          "type": "Label",
+          "selector": ".sidebar .brand, .sidebar h1, aside .logo",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "01_main_window.2",
+          "callout": 2,
+          "name": "Library group",
+          "type": "Navigation",
+          "selector": ".sidebar a[data-view=dashboard]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "01_main_window.3",
+          "callout": 3,
+          "name": "Review group",
+          "type": "Navigation",
+          "selector": ".sidebar a[data-view=missing]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "01_main_window.4",
+          "callout": 4,
+          "name": "Count pill",
+          "type": "Indicator",
+          "selector": "#missingCount",
+          "defined_at": "src/renderer/index.html:30",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "01_main_window.5",
+          "callout": 5,
+          "name": "Maintenance group",
+          "type": "Navigation",
+          "selector": ".sidebar a[data-view=changes]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "01_main_window.6",
+          "callout": 6,
+          "name": "App group",
+          "type": "Navigation",
+          "selector": ".sidebar a[data-view=system]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "01_main_window.7",
+          "callout": 7,
+          "name": "Scan now",
+          "type": "Button",
+          "selector": "#topScan, .scanbox button",
+          "defined_at": "src/renderer/index.html:18",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "01_main_window.8",
+          "callout": 8,
+          "name": "Page title",
+          "type": "Heading",
+          "selector": "#view h1",
+          "defined_at": "src/renderer/index.html:70",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "02_dashboard",
+      "name": "Dashboard",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:516",
+      "verified": true,
+      "reached_by": "#dashboard",
+      "screenshot": {
+        "clean": "screenshots/02_dashboard_clean.png",
+        "annotated": "screenshots/02_dashboard_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "02_dashboard.1",
+          "callout": 1,
+          "name": "Trend period",
+          "type": "Drop-down list",
+          "selector": "#rangeSel",
+          "defined_at": "src/renderer/dash.js:90",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "02_dashboard.2",
+          "callout": 2,
+          "name": "Edit dashboard",
+          "type": "Button",
+          "selector": "#dashEdit",
+          "defined_at": "src/renderer/dash.js:82",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "02_dashboard.3",
+          "callout": 3,
+          "name": "Library tile",
+          "type": "Tile",
+          "selector": ".dcard .tile",
+          "defined_at": "src/renderer/dash.js:78",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "02_dashboard.4",
+          "callout": 4,
+          "name": "Linked tile",
+          "type": "Tile (link)",
+          "selector": ".dcard a.tilelink",
+          "defined_at": "src/renderer/dash.js:78",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "02_dashboard.5",
+          "callout": 5,
+          "name": "Coloured tile",
+          "type": "Tile with a colour rule",
+          "selector": ".dcard .tile.okt, .dcard .tile.warnt, .dcard .tile.badt",
+          "defined_at": "src/renderer/dash.js:78",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "02_dashboard.6",
+          "callout": 6,
+          "name": "Bar chart card",
+          "type": "Chart",
+          "selector": ".dcard .card.chart",
+          "defined_at": "src/renderer/dash.js:78",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "02_dashboard.7",
+          "callout": 7,
+          "name": "Donut card",
+          "type": "Chart",
+          "selector": ".dcard .donutcard",
+          "defined_at": "src/renderer/dash.js:78",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "02_dashboard.8",
+          "callout": 8,
+          "name": "Trend card",
+          "type": "Chart",
+          "selector": ".dcard .trend",
+          "defined_at": "src/renderer/dash.js:78",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "03_dashboard_edit",
+      "name": "Dashboard, edit mode",
+      "kind": "mode",
+      "parent": "02_dashboard",
+      "defined_at": "src/renderer/dash.js:89",
+      "verified": true,
+      "reached_by": "#dashboard",
+      "screenshot": {
+        "clean": "screenshots/03_dashboard_edit_clean.png",
+        "annotated": "screenshots/03_dashboard_edit_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "03_dashboard_edit.1",
+          "callout": 1,
+          "name": "Add card",
+          "type": "Button",
+          "selector": "#dashAdd",
+          "defined_at": "src/renderer/dash.js:81",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "03_dashboard_edit.2",
+          "callout": 2,
+          "name": "Reset to default",
+          "type": "Button",
+          "selector": "#dashReset",
+          "defined_at": "src/renderer/dash.js:81",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "03_dashboard_edit.3",
+          "callout": 3,
+          "name": "Done",
+          "type": "Button",
+          "selector": "#dashDone",
+          "defined_at": "src/renderer/dash.js:81",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "03_dashboard_edit.4",
+          "callout": 4,
+          "name": "Drag handle",
+          "type": "Handle",
+          "selector": ".dhandle .grip",
+          "defined_at": "src/renderer/dash.js:60",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "03_dashboard_edit.5",
+          "callout": 5,
+          "name": "Size buttons",
+          "type": "Button group",
+          "selector": ".dhandle [data-act=size]",
+          "defined_at": "src/renderer/dash.js:60",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "03_dashboard_edit.6",
+          "callout": 6,
+          "name": "Move up",
+          "type": "Button",
+          "selector": ".dhandle [data-act=up]",
+          "defined_at": "src/renderer/dash.js:60",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "03_dashboard_edit.7",
+          "callout": 7,
+          "name": "Move down",
+          "type": "Button",
+          "selector": ".dhandle [data-act=down]",
+          "defined_at": "src/renderer/dash.js:60",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "03_dashboard_edit.8",
+          "callout": 8,
+          "name": "Card options",
+          "type": "Button",
+          "selector": ".dhandle [data-act=opts]",
+          "defined_at": "src/renderer/dash.js:60",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "03_dashboard_edit.9",
+          "callout": 9,
+          "name": "Remove",
+          "type": "Button",
+          "selector": ".dhandle [data-act=remove]",
+          "defined_at": "src/renderer/dash.js:60",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "04_dashboard_add_card",
+      "name": "Add a card dialog",
+      "kind": "dialog",
+      "parent": "03_dashboard_edit",
+      "defined_at": "src/renderer/dash.js:151",
+      "verified": true,
+      "reached_by": "#dashboard",
+      "screenshot": {
+        "clean": "screenshots/04_dashboard_add_card_clean.png",
+        "annotated": "screenshots/04_dashboard_add_card_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "04_dashboard_add_card.1",
+          "callout": 1,
+          "name": "Group heading",
+          "type": "Heading",
+          "selector": ".catalog h3",
+          "defined_at": "src/renderer/dash.js:154",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "04_dashboard_add_card.2",
+          "callout": 2,
+          "name": "Catalog card",
+          "type": "Entry",
+          "selector": ".catcard",
+          "defined_at": "src/renderer/dash.js:154",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "04_dashboard_add_card.3",
+          "callout": 3,
+          "name": "Add",
+          "type": "Button",
+          "selector": ".catcard button",
+          "defined_at": "src/renderer/dash.js:154",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "04_dashboard_add_card.4",
+          "callout": 4,
+          "name": "Close",
+          "type": "Button",
+          "selector": "#caClose",
+          "defined_at": "src/renderer/dash.js:154",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "05_dashboard_card_options",
+      "name": "Card options dialog",
+      "kind": "dialog",
+      "parent": "03_dashboard_edit",
+      "defined_at": "src/renderer/dash.js:125",
+      "verified": true,
+      "reached_by": "#dashboard",
+      "screenshot": {
+        "clean": "screenshots/05_dashboard_card_options_clean.png",
+        "annotated": "screenshots/05_dashboard_card_options_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "05_dashboard_card_options.1",
+          "callout": 1,
+          "name": "Title",
+          "type": "Text field",
+          "selector": "#coTitle",
+          "defined_at": "src/renderer/dash.js:129",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "05_dashboard_card_options.2",
+          "callout": 2,
+          "name": "Size",
+          "type": "Drop-down list",
+          "selector": "#coSize",
+          "defined_at": "src/renderer/dash.js:130",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "05_dashboard_card_options.3",
+          "callout": 3,
+          "name": "Amber threshold",
+          "type": "Number field",
+          "selector": "#coWarn",
+          "defined_at": "src/renderer/dash.js:132",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "05_dashboard_card_options.4",
+          "callout": 4,
+          "name": "Red threshold",
+          "type": "Number field",
+          "selector": "#coBad",
+          "defined_at": "src/renderer/dash.js:132",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "05_dashboard_card_options.5",
+          "callout": 5,
+          "name": "Options shown",
+          "type": "Drop-down list",
+          "selector": "#coLevel",
+          "defined_at": "src/renderer/dash.js:135",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "05_dashboard_card_options.6",
+          "callout": 6,
+          "name": "Cancel",
+          "type": "Button",
+          "selector": "#coCancel",
+          "defined_at": "src/renderer/dash.js:136",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "05_dashboard_card_options.7",
+          "callout": 7,
+          "name": "Save",
+          "type": "Button",
+          "selector": "#coSave",
+          "defined_at": "src/renderer/dash.js:136",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "06_tv_shows",
+      "name": "TV Shows",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:526",
+      "verified": true,
+      "reached_by": "#tv",
+      "screenshot": {
+        "clean": "screenshots/06_tv_shows_clean.png",
+        "annotated": "screenshots/06_tv_shows_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "06_tv_shows.1",
+          "callout": 1,
+          "name": "Summary tiles",
+          "type": "Tiles",
+          "selector": ".tiles .tile",
+          "defined_at": "src/renderer/app.js:554",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "06_tv_shows.2",
+          "callout": 2,
+          "name": "Filter",
+          "type": "Search field",
+          "selector": ".toolbar input[type=search]",
+          "defined_at": "src/renderer/app.js:80",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "06_tv_shows.3",
+          "callout": 3,
+          "name": "Posters / Table",
+          "type": "Button",
+          "selector": "#wallBtn",
+          "defined_at": "src/renderer/app.js:421",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "06_tv_shows.4",
+          "callout": 4,
+          "name": "Genre",
+          "type": "Drop-down list",
+          "selector": "#fGenre",
+          "defined_at": "src/renderer/app.js:94",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "06_tv_shows.5",
+          "callout": 5,
+          "name": "Sub or dub",
+          "type": "Drop-down list",
+          "selector": "#fAudio",
+          "defined_at": "src/renderer/app.js:94",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "06_tv_shows.6",
+          "callout": 6,
+          "name": "Tag",
+          "type": "Drop-down list",
+          "selector": "#fTag",
+          "defined_at": "src/renderer/app.js:94",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "06_tv_shows.7",
+          "callout": 7,
+          "name": "Watched",
+          "type": "Drop-down list",
+          "selector": "#fWatched",
+          "defined_at": "src/renderer/app.js:94",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "06_tv_shows.8",
+          "callout": 8,
+          "name": "Column heading",
+          "type": "Sortable heading",
+          "selector": "thead th",
+          "defined_at": "src/renderer/app.js:58",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "06_tv_shows.9",
+          "callout": 9,
+          "name": "Series",
+          "type": "Cell",
+          "selector": "td.ptitle",
+          "defined_at": "src/renderer/app.js:413",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "06_tv_shows.10",
+          "callout": 10,
+          "name": "Tags",
+          "type": "Cell",
+          "selector": "td.tagcell",
+          "defined_at": "src/renderer/app.js:800",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "07_poster_wall",
+      "name": "Poster wall view",
+      "kind": "mode",
+      "parent": "06_tv_shows",
+      "defined_at": "src/renderer/app.js:420",
+      "verified": true,
+      "reached_by": "#anime",
+      "screenshot": {
+        "clean": "screenshots/07_poster_wall_clean.png",
+        "annotated": "screenshots/07_poster_wall_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "07_poster_wall.1",
+          "callout": 1,
+          "name": "Table",
+          "type": "Button",
+          "selector": "#wallBtn",
+          "defined_at": "src/renderer/app.js:421",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "07_poster_wall.2",
+          "callout": 2,
+          "name": "Poster tile",
+          "type": "Tile",
+          "selector": ".table-wrap.wall tr td.ptitle",
+          "defined_at": "src/renderer/app.js:413",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "07_poster_wall.3",
+          "callout": 3,
+          "name": "Title without a poster",
+          "type": "Tile",
+          "selector": ".table-wrap.wall .pthumb.none",
+          "defined_at": "src/renderer/app.js:413",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "08_series_page",
+      "name": "Series page (episodes)",
+      "kind": "page",
+      "parent": "06_tv_shows",
+      "defined_at": "src/renderer/app.js:829",
+      "verified": true,
+      "reached_by": "#tv/Hollow%20Circuit%20Street",
+      "screenshot": {
+        "clean": "screenshots/08_series_page_clean.png",
+        "annotated": "screenshots/08_series_page_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "08_series_page.1",
+          "callout": 1,
+          "name": "Poster",
+          "type": "Image",
+          "selector": ".pbig",
+          "defined_at": "src/renderer/app.js:413",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "08_series_page.2",
+          "callout": 2,
+          "name": "Back link",
+          "type": "Link",
+          "selector": "#back",
+          "defined_at": "src/renderer/app.js:851",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "08_series_page.3",
+          "callout": 3,
+          "name": "Match",
+          "type": "Button",
+          "selector": ".detail-head .matchbtn",
+          "defined_at": "src/renderer/app.js:851",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "08_series_page.4",
+          "callout": 4,
+          "name": "Add a tag",
+          "type": "Text field",
+          "selector": ".tag-add",
+          "defined_at": "src/renderer/app.js:370",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "08_series_page.5",
+          "callout": 5,
+          "name": "Expected episodes",
+          "type": "Card",
+          "selector": ".card h3",
+          "defined_at": "src/renderer/app.js:398",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "08_series_page.6",
+          "callout": 6,
+          "name": "Filter",
+          "type": "Search field",
+          "selector": ".toolbar input[type=search]",
+          "defined_at": "src/renderer/app.js:80",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "08_series_page.7",
+          "callout": 7,
+          "name": "Column heading",
+          "type": "Sortable heading",
+          "selector": "thead th",
+          "defined_at": "src/renderer/app.js:58",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "08_series_page.8",
+          "callout": 8,
+          "name": "Fix",
+          "type": "Button",
+          "selector": ".fixbtn",
+          "defined_at": "src/renderer/app.js:341",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "09_movies",
+      "name": "Movies",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:858",
+      "verified": true,
+      "reached_by": "#movies",
+      "screenshot": {
+        "clean": "screenshots/09_movies_clean.png",
+        "annotated": "screenshots/09_movies_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "09_movies.1",
+          "callout": 1,
+          "name": "Summary tiles",
+          "type": "Tiles",
+          "selector": ".tiles .tile",
+          "defined_at": "src/renderer/app.js:554",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "09_movies.2",
+          "callout": 2,
+          "name": "Filter",
+          "type": "Search field",
+          "selector": ".toolbar input[type=search]",
+          "defined_at": "src/renderer/app.js:80",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "09_movies.3",
+          "callout": 3,
+          "name": "Posters / Table",
+          "type": "Button",
+          "selector": "#wallBtn",
+          "defined_at": "src/renderer/app.js:421",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "09_movies.4",
+          "callout": 4,
+          "name": "Only titles with multiple files",
+          "type": "Check box",
+          "selector": "#multi",
+          "defined_at": "src/renderer/app.js:887",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "09_movies.5",
+          "callout": 5,
+          "name": "Genre",
+          "type": "Drop-down list",
+          "selector": "#fGenre",
+          "defined_at": "src/renderer/app.js:94",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "09_movies.6",
+          "callout": 6,
+          "name": "Watched",
+          "type": "Drop-down list",
+          "selector": "#fWatched",
+          "defined_at": "src/renderer/app.js:94",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "09_movies.7",
+          "callout": 7,
+          "name": "Title",
+          "type": "Cell",
+          "selector": "td.ptitle",
+          "defined_at": "src/renderer/app.js:413",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "10_movie_page",
+      "name": "Movie page (versions)",
+      "kind": "page",
+      "parent": "09_movies",
+      "defined_at": "src/renderer/app.js:894",
+      "verified": true,
+      "reached_by": "#movies/amberobservatoryparttwo%7C2006",
+      "screenshot": {
+        "clean": "screenshots/10_movie_page_clean.png",
+        "annotated": "screenshots/10_movie_page_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "10_movie_page.1",
+          "callout": 1,
+          "name": "Poster",
+          "type": "Image",
+          "selector": ".pbig",
+          "defined_at": "src/renderer/app.js:413",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "10_movie_page.2",
+          "callout": 2,
+          "name": "Back link",
+          "type": "Link",
+          "selector": "#back",
+          "defined_at": "src/renderer/app.js:851",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "10_movie_page.3",
+          "callout": 3,
+          "name": "Add a tag",
+          "type": "Text field",
+          "selector": ".tag-add",
+          "defined_at": "src/renderer/app.js:370",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "10_movie_page.4",
+          "callout": 4,
+          "name": "File row",
+          "type": "Row",
+          "selector": "tbody tr",
+          "defined_at": "src/renderer/app.js:58",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "10_movie_page.5",
+          "callout": 5,
+          "name": "Fix",
+          "type": "Button",
+          "selector": ".fixbtn",
+          "defined_at": "src/renderer/app.js:341",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "11_web_videos",
+      "name": "Web videos",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:1389",
+      "verified": true,
+      "reached_by": "#web",
+      "screenshot": {
+        "clean": "screenshots/11_web_videos_clean.png",
+        "annotated": "screenshots/11_web_videos_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "11_web_videos.1",
+          "callout": 1,
+          "name": "Summary tiles",
+          "type": "Tiles",
+          "selector": ".tiles .tile",
+          "defined_at": "src/renderer/app.js:554",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "11_web_videos.2",
+          "callout": 2,
+          "name": "Filter",
+          "type": "Search field",
+          "selector": ".toolbar input[type=search]",
+          "defined_at": "src/renderer/app.js:80",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "11_web_videos.3",
+          "callout": 3,
+          "name": "Channel row",
+          "type": "Row",
+          "selector": "tbody tr",
+          "defined_at": "src/renderer/app.js:58",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "12_adult",
+      "name": "Adult library",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:1422",
+      "verified": true,
+      "reached_by": "#adult",
+      "screenshot": {
+        "clean": "screenshots/12_adult_clean.png",
+        "annotated": "screenshots/12_adult_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "12_adult.1",
+          "callout": 1,
+          "name": "Page title",
+          "type": "Heading",
+          "selector": "#view h1",
+          "defined_at": "src/renderer/app.js:5",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "13_missing",
+      "name": "Missing episodes",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:1033",
+      "verified": true,
+      "reached_by": "#missing",
+      "screenshot": {
+        "clean": "screenshots/13_missing_clean.png",
+        "annotated": "screenshots/13_missing_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "13_missing.1",
+          "callout": 1,
+          "name": "Summary tiles",
+          "type": "Tiles",
+          "selector": ".tiles .tile",
+          "defined_at": "src/renderer/app.js:554",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "13_missing.2",
+          "callout": 2,
+          "name": "Airing next",
+          "type": "Card",
+          "selector": ".grid2 .card",
+          "defined_at": "src/renderer/app.js:726",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "13_missing.3",
+          "callout": 3,
+          "name": "Look up new series",
+          "type": "Button",
+          "selector": "#refreshNew",
+          "defined_at": "src/renderer/app.js:1045",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "13_missing.4",
+          "callout": 4,
+          "name": "Re-check all unlocked series",
+          "type": "Button",
+          "selector": "#refreshAll",
+          "defined_at": "src/renderer/app.js:1045",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "13_missing.5",
+          "callout": 5,
+          "name": "Filter",
+          "type": "Search field",
+          "selector": ".toolbar input[type=search]",
+          "defined_at": "src/renderer/app.js:80",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "13_missing.6",
+          "callout": 6,
+          "name": "Column heading",
+          "type": "Sortable heading",
+          "selector": "thead th",
+          "defined_at": "src/renderer/app.js:58",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "13_missing.7",
+          "callout": 7,
+          "name": "Policy badge",
+          "type": "Badge",
+          "selector": "td .badge",
+          "defined_at": "src/renderer/app.js:17",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "13_missing.8",
+          "callout": 8,
+          "name": "Match",
+          "type": "Button",
+          "selector": ".matchbtn",
+          "defined_at": "src/renderer/app.js:294",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "13_missing.9",
+          "callout": 9,
+          "name": "Collect",
+          "type": "Button",
+          "selector": ".collectbtn",
+          "defined_at": "src/renderer/app.js:1055",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "14_match_dialog",
+      "name": "Match dialog",
+      "kind": "dialog",
+      "parent": "13_missing",
+      "defined_at": "src/renderer/app.js:234",
+      "verified": true,
+      "reached_by": "#missing",
+      "screenshot": {
+        "clean": "screenshots/14_match_dialog_clean.png",
+        "annotated": "screenshots/14_match_dialog_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "14_match_dialog.1",
+          "callout": 1,
+          "name": "Open",
+          "type": "Link",
+          "selector": "#mUrl",
+          "defined_at": "src/renderer/app.js:239",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "14_match_dialog.2",
+          "callout": 2,
+          "name": "Search words",
+          "type": "Text field",
+          "selector": "#mq",
+          "defined_at": "src/renderer/app.js:241",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "14_match_dialog.3",
+          "callout": 3,
+          "name": "Service",
+          "type": "Drop-down list",
+          "selector": "#mSrc",
+          "defined_at": "src/renderer/app.js:241",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "14_match_dialog.4",
+          "callout": 4,
+          "name": "Search",
+          "type": "Button",
+          "selector": "#mSearch",
+          "defined_at": "src/renderer/app.js:241",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "14_match_dialog.5",
+          "callout": 5,
+          "name": "Episodes per season",
+          "type": "Number fields",
+          "selector": ".modal-card input[type=number]",
+          "defined_at": "src/renderer/index.html:73",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "14_match_dialog.6",
+          "callout": 6,
+          "name": "Add a season",
+          "type": "Number fields",
+          "selector": "#mMoreS",
+          "defined_at": "src/renderer/app.js:245",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "14_match_dialog.7",
+          "callout": 7,
+          "name": "No expected counts for this series",
+          "type": "Button",
+          "selector": "#mNone",
+          "defined_at": "src/renderer/app.js:247",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "14_match_dialog.8",
+          "callout": 8,
+          "name": "Cancel",
+          "type": "Button",
+          "selector": "#mCancel",
+          "defined_at": "src/renderer/app.js:250",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "14_match_dialog.9",
+          "callout": 9,
+          "name": "Save counts",
+          "type": "Button",
+          "selector": "#mSaveManual",
+          "defined_at": "src/renderer/app.js:250",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "15_collect_dialog",
+      "name": "Collect dialog",
+      "kind": "dialog",
+      "parent": "13_missing",
+      "defined_at": "src/renderer/app.js:275",
+      "verified": true,
+      "reached_by": "#missing",
+      "screenshot": {
+        "clean": "screenshots/15_collect_dialog_clean.png",
+        "annotated": "screenshots/15_collect_dialog_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "15_collect_dialog.1",
+          "callout": 1,
+          "name": "Everything",
+          "type": "Option",
+          "selector": "input[name=cm][value=all]",
+          "defined_at": "src/renderer/app.js:280",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "15_collect_dialog.2",
+          "callout": 2,
+          "name": "From a season and episode onward",
+          "type": "Option",
+          "selector": "input[name=cm][value=from]",
+          "defined_at": "src/renderer/app.js:280",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "15_collect_dialog.3",
+          "callout": 3,
+          "name": "Season",
+          "type": "Number field",
+          "selector": "#cmS",
+          "defined_at": "src/renderer/app.js:281",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "15_collect_dialog.4",
+          "callout": 4,
+          "name": "Episode",
+          "type": "Number field",
+          "selector": "#cmE",
+          "defined_at": "src/renderer/app.js:281",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "15_collect_dialog.5",
+          "callout": 5,
+          "name": "Mute this series",
+          "type": "Option",
+          "selector": "input[name=cm][value=mute]",
+          "defined_at": "src/renderer/app.js:280",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "15_collect_dialog.6",
+          "callout": 6,
+          "name": "Note",
+          "type": "Text field",
+          "selector": "#cmNote",
+          "defined_at": "src/renderer/app.js:283",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "15_collect_dialog.7",
+          "callout": 7,
+          "name": "Cancel",
+          "type": "Button",
+          "selector": "#cmCancel",
+          "defined_at": "src/renderer/app.js:284",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "15_collect_dialog.8",
+          "callout": 8,
+          "name": "Save",
+          "type": "Button",
+          "selector": "#cmSave",
+          "defined_at": "src/renderer/app.js:284",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "16_issues_problems",
+      "name": "Issues: Problems",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:961",
+      "verified": true,
+      "reached_by": "#issues/problems",
+      "screenshot": {
+        "clean": "screenshots/16_issues_problems_clean.png",
+        "annotated": "screenshots/16_issues_problems_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "16_issues_problems.1",
+          "callout": 1,
+          "name": "Problems tab",
+          "type": "Tab",
+          "selector": "#issTabP",
+          "defined_at": "src/renderer/app.js:1756",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "16_issues_problems.2",
+          "callout": 2,
+          "name": "Duplicates tab",
+          "type": "Tab",
+          "selector": "#issTabD",
+          "defined_at": "src/renderer/app.js:1756",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "16_issues_problems.3",
+          "callout": 3,
+          "name": "Summary tiles",
+          "type": "Tiles",
+          "selector": ".tiles .tile",
+          "defined_at": "src/renderer/app.js:554",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "16_issues_problems.4",
+          "callout": 4,
+          "name": "Section heading",
+          "type": "Heading",
+          "selector": ".section-head h2",
+          "defined_at": "src/renderer/app.js:975",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "16_issues_problems.5",
+          "callout": 5,
+          "name": "Fix",
+          "type": "Button",
+          "selector": ".fixbtn",
+          "defined_at": "src/renderer/app.js:341",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "16_issues_problems.6",
+          "callout": 6,
+          "name": "Forget missing files",
+          "type": "Button",
+          "selector": "#purge",
+          "defined_at": "src/renderer/app.js:981",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "17_fix_dialog",
+      "name": "Fix dialog",
+      "kind": "dialog",
+      "parent": "16_issues_problems",
+      "defined_at": "src/renderer/app.js:298",
+      "verified": true,
+      "reached_by": "#issues/problems",
+      "screenshot": {
+        "clean": "screenshots/17_fix_dialog_clean.png",
+        "annotated": "screenshots/17_fix_dialog_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "17_fix_dialog.1",
+          "callout": 1,
+          "name": "Series",
+          "type": "Text field",
+          "selector": "#ovShow",
+          "defined_at": "src/renderer/app.js:314",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "17_fix_dialog.2",
+          "callout": 2,
+          "name": "Season",
+          "type": "Number field",
+          "selector": "#ovSeason",
+          "defined_at": "src/renderer/app.js:315",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "17_fix_dialog.3",
+          "callout": 3,
+          "name": "Episode",
+          "type": "Number field",
+          "selector": "#ovEp",
+          "defined_at": "src/renderer/app.js:316",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "17_fix_dialog.4",
+          "callout": 4,
+          "name": "Last episode",
+          "type": "Number field",
+          "selector": "#ovEpEnd",
+          "defined_at": "src/renderer/app.js:316",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "17_fix_dialog.5",
+          "callout": 5,
+          "name": "Episode title",
+          "type": "Text field",
+          "selector": "#ovEpTitle",
+          "defined_at": "src/renderer/app.js:317",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "17_fix_dialog.6",
+          "callout": 6,
+          "name": "Ignore this file",
+          "type": "Check box",
+          "selector": "#ovIgnore",
+          "defined_at": "src/renderer/app.js:319",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "17_fix_dialog.7",
+          "callout": 7,
+          "name": "Note",
+          "type": "Text field",
+          "selector": "#ovNote",
+          "defined_at": "src/renderer/app.js:320",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "17_fix_dialog.8",
+          "callout": 8,
+          "name": "Cancel",
+          "type": "Button",
+          "selector": "#ovCancel",
+          "defined_at": "src/renderer/app.js:325",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "17_fix_dialog.9",
+          "callout": 9,
+          "name": "Save fix",
+          "type": "Button",
+          "selector": "#ovSave",
+          "defined_at": "src/renderer/app.js:325",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "18_issues_duplicates",
+      "name": "Issues: Duplicates",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:1070",
+      "verified": true,
+      "reached_by": "#issues/duplicates",
+      "screenshot": {
+        "clean": "screenshots/18_issues_duplicates_clean.png",
+        "annotated": "screenshots/18_issues_duplicates_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "18_issues_duplicates.1",
+          "callout": 1,
+          "name": "Duplicates tab",
+          "type": "Tab",
+          "selector": "#issTabD",
+          "defined_at": "src/renderer/app.js:1756",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "18_issues_duplicates.2",
+          "callout": 2,
+          "name": "Summary tiles",
+          "type": "Tiles",
+          "selector": ".tiles .tile",
+          "defined_at": "src/renderer/app.js:554",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "18_issues_duplicates.3",
+          "callout": 3,
+          "name": "Filter by series",
+          "type": "Search field",
+          "selector": "#dupq",
+          "defined_at": "src/renderer/app.js:1082",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "18_issues_duplicates.4",
+          "callout": 4,
+          "name": "Hide decided",
+          "type": "Check box",
+          "selector": "#hideDecided",
+          "defined_at": "src/renderer/app.js:1082",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "18_issues_duplicates.5",
+          "callout": 5,
+          "name": "Keep this",
+          "type": "Button",
+          "selector": ".dupkeep",
+          "defined_at": "src/renderer/app.js:1094",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "18_issues_duplicates.6",
+          "callout": 6,
+          "name": "Reveal",
+          "type": "Button",
+          "selector": ".reveal",
+          "defined_at": "src/renderer/app.js:1094",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "18_issues_duplicates.7",
+          "callout": 7,
+          "name": "Fix",
+          "type": "Button",
+          "selector": ".fixbtn",
+          "defined_at": "src/renderer/app.js:341",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "19_quality",
+      "name": "Quality",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:1106",
+      "verified": true,
+      "reached_by": "#quality",
+      "screenshot": {
+        "clean": "screenshots/19_quality_clean.png",
+        "annotated": "screenshots/19_quality_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "19_quality.1",
+          "callout": 1,
+          "name": "Summary tiles",
+          "type": "Tiles",
+          "selector": ".tiles .tile",
+          "defined_at": "src/renderer/app.js:554",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "19_quality.2",
+          "callout": 2,
+          "name": "Section heading",
+          "type": "Heading",
+          "selector": ".section-head h2",
+          "defined_at": "src/renderer/app.js:975",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "19_quality.3",
+          "callout": 3,
+          "name": "Column heading",
+          "type": "Sortable heading",
+          "selector": "thead th",
+          "defined_at": "src/renderer/app.js:58",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "19_quality.4",
+          "callout": 4,
+          "name": "Fix",
+          "type": "Button",
+          "selector": ".fixbtn",
+          "defined_at": "src/renderer/app.js:341",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "20_upgrades",
+      "name": "Upgrade candidates",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:568",
+      "verified": true,
+      "reached_by": "#upgrades",
+      "screenshot": {
+        "clean": "screenshots/20_upgrades_clean.png",
+        "annotated": "screenshots/20_upgrades_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "20_upgrades.1",
+          "callout": 1,
+          "name": "Summary tiles",
+          "type": "Tiles",
+          "selector": ".tiles .tile",
+          "defined_at": "src/renderer/app.js:554",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "20_upgrades.2",
+          "callout": 2,
+          "name": "Filter",
+          "type": "Search field",
+          "selector": ".toolbar input[type=search]",
+          "defined_at": "src/renderer/app.js:80",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "20_upgrades.3",
+          "callout": 3,
+          "name": "Column heading",
+          "type": "Sortable heading",
+          "selector": "thead th",
+          "defined_at": "src/renderer/app.js:58",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "20_upgrades.4",
+          "callout": 4,
+          "name": "Title",
+          "type": "Cell",
+          "selector": "td.ptitle, tbody td:first-child",
+          "defined_at": "src/renderer/app.js:58",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "21_reclaim",
+      "name": "Reclaim space",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:669",
+      "verified": true,
+      "reached_by": "#reclaim",
+      "screenshot": {
+        "clean": "screenshots/21_reclaim_clean.png",
+        "annotated": "screenshots/21_reclaim_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "21_reclaim.1",
+          "callout": 1,
+          "name": "Not played for",
+          "type": "Drop-down list",
+          "selector": "#rcMonths",
+          "defined_at": "src/renderer/app.js:677",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "21_reclaim.2",
+          "callout": 2,
+          "name": "At least",
+          "type": "Number field",
+          "selector": "#rcGb",
+          "defined_at": "src/renderer/app.js:677",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "21_reclaim.3",
+          "callout": 3,
+          "name": "Summary tiles",
+          "type": "Tiles",
+          "selector": ".tiles .tile",
+          "defined_at": "src/renderer/app.js:554",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "21_reclaim.4",
+          "callout": 4,
+          "name": "Column heading",
+          "type": "Sortable heading",
+          "selector": "thead th",
+          "defined_at": "src/renderer/app.js:58",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "22_ratings",
+      "name": "Ratings",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:1440",
+      "verified": true,
+      "reached_by": "#ratings",
+      "screenshot": {
+        "clean": "screenshots/22_ratings_clean.png",
+        "annotated": "screenshots/22_ratings_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "22_ratings.1",
+          "callout": 1,
+          "name": "Summary tiles",
+          "type": "Tiles",
+          "selector": ".tiles .tile",
+          "defined_at": "src/renderer/app.js:554",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "22_ratings.2",
+          "callout": 2,
+          "name": "Library",
+          "type": "Drop-down list",
+          "selector": "#rType",
+          "defined_at": "src/renderer/app.js:1445",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "22_ratings.3",
+          "callout": 3,
+          "name": "Rated by me",
+          "type": "Check box",
+          "selector": "#rMine",
+          "defined_at": "src/renderer/app.js:1445",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "22_ratings.4",
+          "callout": 4,
+          "name": "With my Plex rating",
+          "type": "Check box",
+          "selector": "#rPlex",
+          "defined_at": "src/renderer/app.js:1445",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "22_ratings.5",
+          "callout": 5,
+          "name": "Not rated yet",
+          "type": "Check box",
+          "selector": "#rUnrated",
+          "defined_at": "src/renderer/app.js:1445",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "22_ratings.6",
+          "callout": 6,
+          "name": "Filter",
+          "type": "Search field",
+          "selector": ".toolbar input[type=search]",
+          "defined_at": "src/renderer/app.js:80",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "22_ratings.7",
+          "callout": 7,
+          "name": "Stars",
+          "type": "Rating control",
+          "selector": ".stars, td .star",
+          "defined_at": "src/renderer/app.js:346",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "22_ratings.8",
+          "callout": 8,
+          "name": "Note",
+          "type": "Text field",
+          "selector": ".ratingnote",
+          "defined_at": "src/renderer/app.js:1454",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "23_watch_tonight",
+      "name": "Watch tonight",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:759",
+      "verified": true,
+      "reached_by": "#tonight",
+      "screenshot": {
+        "clean": "screenshots/23_watch_tonight_clean.png",
+        "annotated": "screenshots/23_watch_tonight_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "23_watch_tonight.1",
+          "callout": 1,
+          "name": "Kind",
+          "type": "Drop-down list",
+          "selector": "#tKind",
+          "defined_at": "src/renderer/app.js:765",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "23_watch_tonight.2",
+          "callout": 2,
+          "name": "Unwatched only",
+          "type": "Check box",
+          "selector": "#tUnwatched",
+          "defined_at": "src/renderer/app.js:766",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "23_watch_tonight.3",
+          "callout": 3,
+          "name": "Complete series only",
+          "type": "Check box",
+          "selector": "#tComplete",
+          "defined_at": "src/renderer/app.js:767",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "23_watch_tonight.4",
+          "callout": 4,
+          "name": "Up to … minutes",
+          "type": "Number field",
+          "selector": "#tMinutes",
+          "defined_at": "src/renderer/app.js:768",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "23_watch_tonight.5",
+          "callout": 5,
+          "name": "My rating at least",
+          "type": "Drop-down list",
+          "selector": "#tStars",
+          "defined_at": "src/renderer/app.js:769",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "23_watch_tonight.6",
+          "callout": 6,
+          "name": "Pick for me",
+          "type": "Button",
+          "selector": "#tPick",
+          "defined_at": "src/renderer/app.js:770",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "23_watch_tonight.7",
+          "callout": 7,
+          "name": "Genre",
+          "type": "Drop-down list",
+          "selector": "#fGenre",
+          "defined_at": "src/renderer/app.js:94",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "23_watch_tonight.8",
+          "callout": 8,
+          "name": "Tonight",
+          "type": "Card",
+          "selector": "#tPickBox .card",
+          "defined_at": "src/renderer/app.js:772",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "23_watch_tonight.9",
+          "callout": 9,
+          "name": "Open",
+          "type": "Button",
+          "selector": "#tOpen",
+          "defined_at": "src/renderer/app.js:800",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "23_watch_tonight.10",
+          "callout": 10,
+          "name": "Pick another",
+          "type": "Button",
+          "selector": "#tAgain",
+          "defined_at": "src/renderer/app.js:800",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "24_watched",
+      "name": "Watched",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:699",
+      "verified": true,
+      "reached_by": "#watched",
+      "screenshot": {
+        "clean": "screenshots/24_watched_clean.png",
+        "annotated": "screenshots/24_watched_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "24_watched.1",
+          "callout": 1,
+          "name": "Period",
+          "type": "Drop-down list",
+          "selector": "#wDays",
+          "defined_at": "src/renderer/app.js:714",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "24_watched.2",
+          "callout": 2,
+          "name": "Person",
+          "type": "Drop-down list",
+          "selector": "#wWho",
+          "defined_at": "src/renderer/app.js:715",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "24_watched.3",
+          "callout": 3,
+          "name": "Summary tiles",
+          "type": "Tiles",
+          "selector": ".tiles .tile",
+          "defined_at": "src/renderer/app.js:554",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "24_watched.4",
+          "callout": 4,
+          "name": "Charts",
+          "type": "Charts",
+          "selector": ".grid2 .card.chart",
+          "defined_at": "src/renderer/app.js:726",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "24_watched.5",
+          "callout": 5,
+          "name": "Recent plays",
+          "type": "Table",
+          "selector": "#wTable",
+          "defined_at": "src/renderer/app.js:740",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "25_requests",
+      "name": "Requests",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:1764",
+      "verified": true,
+      "reached_by": "#requests",
+      "screenshot": {
+        "clean": "screenshots/25_requests_clean.png",
+        "annotated": "screenshots/25_requests_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "25_requests.1",
+          "callout": 1,
+          "name": "Summary tiles",
+          "type": "Tiles",
+          "selector": ".tiles .tile",
+          "defined_at": "src/renderer/app.js:554",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "25_requests.2",
+          "callout": 2,
+          "name": "Title",
+          "type": "Text field",
+          "selector": "#rqTitle",
+          "defined_at": "src/renderer/app.js:1775",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "25_requests.3",
+          "callout": 3,
+          "name": "Year",
+          "type": "Number field",
+          "selector": "#rqYear",
+          "defined_at": "src/renderer/app.js:1775",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "25_requests.4",
+          "callout": 4,
+          "name": "Kind",
+          "type": "Drop-down list",
+          "selector": "#rqKind",
+          "defined_at": "src/renderer/app.js:1775",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "25_requests.5",
+          "callout": 5,
+          "name": "Note",
+          "type": "Text field",
+          "selector": "#rqNote",
+          "defined_at": "src/renderer/app.js:1776",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "25_requests.6",
+          "callout": 6,
+          "name": "Request",
+          "type": "Button",
+          "selector": "#rqAdd",
+          "defined_at": "src/renderer/app.js:1776",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "25_requests.7",
+          "callout": 7,
+          "name": "Status",
+          "type": "Drop-down list",
+          "selector": ".rqStatus",
+          "defined_at": "src/renderer/app.js:1779",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "25_requests.8",
+          "callout": 8,
+          "name": "Note to the requester",
+          "type": "Button",
+          "selector": ".rqNote",
+          "defined_at": "src/renderer/app.js:1779",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "25_requests.9",
+          "callout": 9,
+          "name": "Delete",
+          "type": "Button",
+          "selector": ".rqDel",
+          "defined_at": "src/renderer/app.js:1779",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "26_request_phone_page",
+      "name": "Request page for phones",
+      "kind": "page",
+      "parent": null,
+      "defined_at": "src/renderer/request.html:32",
+      "verified": true,
+      "reached_by": "/request",
+      "screenshot": {
+        "clean": "screenshots/26_request_phone_page_clean.png",
+        "annotated": "screenshots/26_request_phone_page_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "26_request_phone_page.1",
+          "callout": 1,
+          "name": "Title",
+          "type": "Text field",
+          "selector": "#title",
+          "defined_at": "src/renderer/request.html:33",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "26_request_phone_page.2",
+          "callout": 2,
+          "name": "Kind",
+          "type": "Drop-down list",
+          "selector": "#kind",
+          "defined_at": "src/renderer/request.html:34",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "26_request_phone_page.3",
+          "callout": 3,
+          "name": "Year",
+          "type": "Number field",
+          "selector": "#year",
+          "defined_at": "src/renderer/request.html:35",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "26_request_phone_page.4",
+          "callout": 4,
+          "name": "Note",
+          "type": "Text area",
+          "selector": "#note",
+          "defined_at": "src/renderer/request.html:36",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "26_request_phone_page.5",
+          "callout": 5,
+          "name": "Send request",
+          "type": "Button",
+          "selector": "#go",
+          "defined_at": "src/renderer/request.html:38",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "27_change_log",
+      "name": "Change log",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:922",
+      "verified": true,
+      "reached_by": "#changes",
+      "screenshot": {
+        "clean": "screenshots/27_change_log_clean.png",
+        "annotated": "screenshots/27_change_log_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "27_change_log.1",
+          "callout": 1,
+          "name": "Summary tiles",
+          "type": "Tiles",
+          "selector": ".tiles .tile",
+          "defined_at": "src/renderer/app.js:554",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "27_change_log.2",
+          "callout": 2,
+          "name": "30-day chart",
+          "type": "Chart",
+          "selector": ".card h3",
+          "defined_at": "src/renderer/app.js:398",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "27_change_log.3",
+          "callout": 3,
+          "name": "Scan",
+          "type": "Drop-down list",
+          "selector": "#scanSel",
+          "defined_at": "src/renderer/app.js:938",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "27_change_log.4",
+          "callout": 4,
+          "name": "Kind",
+          "type": "Drop-down list",
+          "selector": "#kindSel",
+          "defined_at": "src/renderer/app.js:938",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "27_change_log.5",
+          "callout": 5,
+          "name": "Filter",
+          "type": "Search field",
+          "selector": ".toolbar input[type=search]",
+          "defined_at": "src/renderer/app.js:80",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "28_movie_names",
+      "name": "Movie names",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:1206",
+      "verified": true,
+      "reached_by": "#movienames",
+      "screenshot": {
+        "clean": "screenshots/28_movie_names_clean.png",
+        "annotated": "screenshots/28_movie_names_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "28_movie_names.1",
+          "callout": 1,
+          "name": "Summary tiles",
+          "type": "Tiles",
+          "selector": ".tiles .tile",
+          "defined_at": "src/renderer/app.js:554",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "28_movie_names.2",
+          "callout": 2,
+          "name": "Layout",
+          "type": "Drop-down list",
+          "selector": "#mrLayout",
+          "defined_at": "src/renderer/app.js:1228",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "28_movie_names.3",
+          "callout": 3,
+          "name": "Batch limit",
+          "type": "Number field",
+          "selector": "#mrLimit",
+          "defined_at": "src/renderer/app.js:1229",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "28_movie_names.4",
+          "callout": 4,
+          "name": "Source of the title",
+          "type": "Drop-down list",
+          "selector": "#mrTruth",
+          "defined_at": "src/renderer/app.js:1230",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "28_movie_names.5",
+          "callout": 5,
+          "name": "Live renaming allowed",
+          "type": "Check box",
+          "selector": "#mrEnabled",
+          "defined_at": "src/renderer/app.js:1231",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "28_movie_names.6",
+          "callout": 6,
+          "name": "Save",
+          "type": "Button",
+          "selector": "#mrSave",
+          "defined_at": "src/renderer/app.js:1232",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "28_movie_names.7",
+          "callout": 7,
+          "name": "Name parts",
+          "type": "Chips",
+          "selector": ".chip",
+          "defined_at": "src/renderer/app.js:1142",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "28_movie_names.8",
+          "callout": 8,
+          "name": "Filter",
+          "type": "Search field",
+          "selector": "#mq",
+          "defined_at": "src/renderer/app.js:241",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "28_movie_names.9",
+          "callout": 9,
+          "name": "Status",
+          "type": "Drop-down list",
+          "selector": "#mstatus",
+          "defined_at": "src/renderer/app.js:1244",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "28_movie_names.10",
+          "callout": 10,
+          "name": "Select next",
+          "type": "Button",
+          "selector": "#mSelNext",
+          "defined_at": "src/renderer/app.js:1247",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "28_movie_names.11",
+          "callout": 11,
+          "name": "How many",
+          "type": "Number field",
+          "selector": "#mSelN",
+          "defined_at": "src/renderer/app.js:1247",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "28_movie_names.12",
+          "callout": 12,
+          "name": "Select shown",
+          "type": "Button",
+          "selector": "#mSelAll",
+          "defined_at": "src/renderer/app.js:1247",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "28_movie_names.13",
+          "callout": 13,
+          "name": "Clear",
+          "type": "Button",
+          "selector": "#mSelNone",
+          "defined_at": "src/renderer/app.js:1247",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "28_movie_names.14",
+          "callout": 14,
+          "name": "Set source for selected",
+          "type": "Drop-down list",
+          "selector": "#mBulkSrc",
+          "defined_at": "src/renderer/app.js:1248",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "28_movie_names.15",
+          "callout": 15,
+          "name": "Dry run",
+          "type": "Button",
+          "selector": "#mDry",
+          "defined_at": "src/renderer/app.js:1249",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "28_movie_names.16",
+          "callout": 16,
+          "name": "Rename live",
+          "type": "Button",
+          "selector": "#mLive",
+          "defined_at": "src/renderer/app.js:1250",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "28_movie_names.17",
+          "callout": 17,
+          "name": "One at a time",
+          "type": "Button",
+          "selector": "#mStep",
+          "defined_at": "src/renderer/app.js:1251",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "29_rename_tv_anime",
+      "name": "Rename TV / anime",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:1130",
+      "verified": true,
+      "reached_by": "#rename",
+      "screenshot": {
+        "clean": "screenshots/29_rename_tv_anime_clean.png",
+        "annotated": "screenshots/29_rename_tv_anime_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "29_rename_tv_anime.1",
+          "callout": 1,
+          "name": "Name parts",
+          "type": "Chips",
+          "selector": "#rParts .chip",
+          "defined_at": "src/renderer/app.js:1142",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "29_rename_tv_anime.2",
+          "callout": 2,
+          "name": "Preview",
+          "type": "Label",
+          "selector": "#rPreview",
+          "defined_at": "src/renderer/app.js:1142",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "29_rename_tv_anime.3",
+          "callout": 3,
+          "name": "Summary tiles",
+          "type": "Tiles",
+          "selector": ".tiles .tile",
+          "defined_at": "src/renderer/app.js:554",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "29_rename_tv_anime.4",
+          "callout": 4,
+          "name": "Filter",
+          "type": "Search field",
+          "selector": "#rq",
+          "defined_at": "src/renderer/app.js:1144",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "29_rename_tv_anime.5",
+          "callout": 5,
+          "name": "Library",
+          "type": "Drop-down list",
+          "selector": "#rtype",
+          "defined_at": "src/renderer/app.js:1144",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "29_rename_tv_anime.6",
+          "callout": 6,
+          "name": "Only files with manual fixes",
+          "type": "Check box",
+          "selector": "#rfixed",
+          "defined_at": "src/renderer/app.js:1144",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "29_rename_tv_anime.7",
+          "callout": 7,
+          "name": "Select next",
+          "type": "Button",
+          "selector": "#selNext",
+          "defined_at": "src/renderer/app.js:1144",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "29_rename_tv_anime.8",
+          "callout": 8,
+          "name": "How many",
+          "type": "Number field",
+          "selector": "#selN",
+          "defined_at": "src/renderer/app.js:1144",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "29_rename_tv_anime.9",
+          "callout": 9,
+          "name": "Select shown",
+          "type": "Button",
+          "selector": "#selAll",
+          "defined_at": "src/renderer/app.js:1144",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "29_rename_tv_anime.10",
+          "callout": 10,
+          "name": "Clear",
+          "type": "Button",
+          "selector": "#selNone",
+          "defined_at": "src/renderer/app.js:1144",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "29_rename_tv_anime.11",
+          "callout": 11,
+          "name": "Dry run",
+          "type": "Button",
+          "selector": "#rDry",
+          "defined_at": "src/renderer/app.js:1144",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "29_rename_tv_anime.12",
+          "callout": 12,
+          "name": "Rename",
+          "type": "Button",
+          "selector": "#apply",
+          "defined_at": "src/renderer/app.js:1144",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "29_rename_tv_anime.13",
+          "callout": 13,
+          "name": "One at a time",
+          "type": "Button",
+          "selector": "#stepApply",
+          "defined_at": "src/renderer/app.js:1144",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "29_rename_tv_anime.14",
+          "callout": 14,
+          "name": "Tick box",
+          "type": "Check box",
+          "selector": ".rsel",
+          "defined_at": "src/renderer/app.js:1164",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "29_rename_tv_anime.15",
+          "callout": 15,
+          "name": "Rename this file",
+          "type": "Button",
+          "selector": ".rOne",
+          "defined_at": "src/renderer/app.js:1164",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "29_rename_tv_anime.16",
+          "callout": 16,
+          "name": "Undo",
+          "type": "Button",
+          "selector": ".rbUndo",
+          "defined_at": "src/renderer/app.js:1195",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "30_rename_confirm",
+      "name": "Rename confirmation dialog",
+      "kind": "dialog",
+      "parent": "29_rename_tv_anime",
+      "defined_at": "src/renderer/app.js:1180",
+      "verified": true,
+      "reached_by": "#rename",
+      "screenshot": {
+        "clean": "screenshots/30_rename_confirm_clean.png",
+        "annotated": "screenshots/30_rename_confirm_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "30_rename_confirm.1",
+          "callout": 1,
+          "name": "What will be renamed",
+          "type": "List",
+          "selector": ".modal-card .preview",
+          "defined_at": "src/renderer/index.html:73",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "30_rename_confirm.2",
+          "callout": 2,
+          "name": "Cancel",
+          "type": "Button",
+          "selector": "#rc",
+          "defined_at": "src/renderer/app.js:1182",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "30_rename_confirm.3",
+          "callout": 3,
+          "name": "Rename now",
+          "type": "Button",
+          "selector": "#rgo",
+          "defined_at": "src/renderer/app.js:1182",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "31_csv_export",
+      "name": "CSV export",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:987",
+      "verified": true,
+      "reached_by": "#export",
+      "screenshot": {
+        "clean": "screenshots/31_csv_export_clean.png",
+        "annotated": "screenshots/31_csv_export_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "31_csv_export.1",
+          "callout": 1,
+          "name": "Sets to export",
+          "type": "Check boxes",
+          "selector": ".expSet",
+          "defined_at": "src/renderer/app.js:995",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "31_csv_export.2",
+          "callout": 2,
+          "name": "Zip the files",
+          "type": "Check box",
+          "selector": "#expZip",
+          "defined_at": "src/renderer/app.js:996",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "31_csv_export.3",
+          "callout": 3,
+          "name": "Zip when more than",
+          "type": "Number field",
+          "selector": "#expZipMin",
+          "defined_at": "src/renderer/app.js:996",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "31_csv_export.4",
+          "callout": 4,
+          "name": "Remember as default",
+          "type": "Button",
+          "selector": "#expSave",
+          "defined_at": "src/renderer/app.js:996",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "31_csv_export.5",
+          "callout": 5,
+          "name": "Summary tiles",
+          "type": "Tiles",
+          "selector": ".tiles .tile",
+          "defined_at": "src/renderer/app.js:554",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "31_csv_export.6",
+          "callout": 6,
+          "name": "Export now",
+          "type": "Button",
+          "selector": "#runExport",
+          "defined_at": "src/renderer/app.js:1004",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "31_csv_export.7",
+          "callout": 7,
+          "name": "Open latest folder",
+          "type": "Button",
+          "selector": "#openLatest",
+          "defined_at": "src/renderer/app.js:1004",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "31_csv_export.8",
+          "callout": 8,
+          "name": "Open exports folder",
+          "type": "Button",
+          "selector": "#openRoot",
+          "defined_at": "src/renderer/app.js:1004",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "31_csv_export.9",
+          "callout": 9,
+          "name": "History",
+          "type": "Table",
+          "selector": "#exportHist",
+          "defined_at": "src/renderer/app.js:1017",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "32_system",
+      "name": "System",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:1721",
+      "verified": true,
+      "reached_by": "#system",
+      "screenshot": {
+        "clean": "screenshots/32_system_clean.png",
+        "annotated": "screenshots/32_system_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "32_system.1",
+          "callout": 1,
+          "name": "Summary tiles",
+          "type": "Tiles",
+          "selector": ".tiles .tile",
+          "defined_at": "src/renderer/app.js:554",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "32_system.2",
+          "callout": 2,
+          "name": "Charts",
+          "type": "Charts",
+          "selector": ".card h3",
+          "defined_at": "src/renderer/app.js:398",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "32_system.3",
+          "callout": 3,
+          "name": "Storage",
+          "type": "Table",
+          "selector": "table.kv",
+          "defined_at": "src/renderer/app.js:1008",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "33_family_portal_admin",
+      "name": "Family portal (administration)",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:597",
+      "verified": true,
+      "reached_by": "#family",
+      "screenshot": {
+        "clean": "screenshots/33_family_portal_admin_clean.png",
+        "annotated": "screenshots/33_family_portal_admin_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "33_family_portal_admin.1",
+          "callout": 1,
+          "name": "Portal",
+          "type": "Tile",
+          "selector": ".tiles .tile",
+          "defined_at": "src/renderer/app.js:554",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "33_family_portal_admin.2",
+          "callout": 2,
+          "name": "Public address",
+          "type": "Tile",
+          "selector": ".tiles .tile",
+          "defined_at": "src/renderer/app.js:554",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "33_family_portal_admin.3",
+          "callout": 3,
+          "name": "Check the addresses now",
+          "type": "Button",
+          "selector": "#fvCheck",
+          "defined_at": "src/renderer/app.js:607",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "33_family_portal_admin.4",
+          "callout": 4,
+          "name": "Name",
+          "type": "Text field",
+          "selector": "#fvName",
+          "defined_at": "src/renderer/app.js:609",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "33_family_portal_admin.5",
+          "callout": 5,
+          "name": "Expires",
+          "type": "Drop-down list",
+          "selector": "#fvDays",
+          "defined_at": "src/renderer/app.js:609",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "33_family_portal_admin.6",
+          "callout": 6,
+          "name": "May browse, use tonight, request",
+          "type": "Check boxes",
+          "selector": "#fvBrowse",
+          "defined_at": "src/renderer/app.js:609",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "33_family_portal_admin.7",
+          "callout": 7,
+          "name": "Create invite",
+          "type": "Button",
+          "selector": "#fvAdd",
+          "defined_at": "src/renderer/app.js:609",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "33_family_portal_admin.8",
+          "callout": 8,
+          "name": "New link",
+          "type": "Button",
+          "selector": ".fvRenew",
+          "defined_at": "src/renderer/app.js:627",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "33_family_portal_admin.9",
+          "callout": 9,
+          "name": "Revoke",
+          "type": "Button",
+          "selector": ".fvRevoke",
+          "defined_at": "src/renderer/app.js:627",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "33_family_portal_admin.10",
+          "callout": 10,
+          "name": "Public address",
+          "type": "Text field",
+          "selector": "#fvPublic",
+          "defined_at": "src/renderer/app.js:612",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "33_family_portal_admin.11",
+          "callout": 11,
+          "name": "Home address",
+          "type": "Text field",
+          "selector": "#fvHome",
+          "defined_at": "src/renderer/app.js:613",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "33_family_portal_admin.12",
+          "callout": 12,
+          "name": "Portal on",
+          "type": "Check box",
+          "selector": "#fvOn",
+          "defined_at": "src/renderer/app.js:615",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "33_family_portal_admin.13",
+          "callout": 13,
+          "name": "Port",
+          "type": "Number field",
+          "selector": "#fvPort",
+          "defined_at": "src/renderer/app.js:615",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "33_family_portal_admin.14",
+          "callout": 14,
+          "name": "Reachable from",
+          "type": "Drop-down list",
+          "selector": "#fvBind",
+          "defined_at": "src/renderer/app.js:615",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "33_family_portal_admin.15",
+          "callout": 15,
+          "name": "Check the addresses every",
+          "type": "Number field",
+          "selector": "#fvEvery",
+          "defined_at": "src/renderer/app.js:616",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "33_family_portal_admin.16",
+          "callout": 16,
+          "name": "Show my star ratings",
+          "type": "Check box",
+          "selector": "#fvRatings",
+          "defined_at": "src/renderer/app.js:617",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "33_family_portal_admin.17",
+          "callout": 17,
+          "name": "Save",
+          "type": "Button",
+          "selector": "#fvSave",
+          "defined_at": "src/renderer/app.js:618",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "34_family_invite_created",
+      "name": "Invite created, with its QR code",
+      "kind": "mode",
+      "parent": "33_family_portal_admin",
+      "defined_at": "src/renderer/app.js:619",
+      "verified": true,
+      "reached_by": "#family",
+      "screenshot": {
+        "clean": "screenshots/34_family_invite_created_clean.png",
+        "annotated": "screenshots/34_family_invite_created_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "34_family_invite_created.1",
+          "callout": 1,
+          "name": "Notice",
+          "type": "Notice",
+          "selector": "#fvNew .warnbox",
+          "defined_at": "src/renderer/app.js:609",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "34_family_invite_created.2",
+          "callout": 2,
+          "name": "QR code",
+          "type": "Image",
+          "selector": "#fvNew .qrbox",
+          "defined_at": "src/renderer/app.js:609",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "34_family_invite_created.3",
+          "callout": 3,
+          "name": "Link",
+          "type": "Text field",
+          "selector": "#fvNew input",
+          "defined_at": "src/renderer/app.js:609",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "34_family_invite_created.4",
+          "callout": 4,
+          "name": "Copy",
+          "type": "Button",
+          "selector": ".copyLink",
+          "defined_at": "src/renderer/app.js:603",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "34_family_invite_created.5",
+          "callout": 5,
+          "name": "Invites",
+          "type": "Table",
+          "selector": "#fvTable",
+          "defined_at": "src/renderer/app.js:610",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "35_log",
+      "name": "Log",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:645",
+      "verified": true,
+      "reached_by": "#log",
+      "screenshot": {
+        "clean": "screenshots/35_log_clean.png",
+        "annotated": "screenshots/35_log_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "35_log.1",
+          "callout": 1,
+          "name": "Filter",
+          "type": "Search field",
+          "selector": "#lgQ",
+          "defined_at": "src/renderer/app.js:648",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "35_log.2",
+          "callout": 2,
+          "name": "Level",
+          "type": "Drop-down list",
+          "selector": "#lgLevel",
+          "defined_at": "src/renderer/app.js:648",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "35_log.3",
+          "callout": 3,
+          "name": "Lines",
+          "type": "Drop-down list",
+          "selector": "#lgN",
+          "defined_at": "src/renderer/app.js:648",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "35_log.4",
+          "callout": 4,
+          "name": "Refresh every 5 s",
+          "type": "Check box",
+          "selector": "#lgAuto",
+          "defined_at": "src/renderer/app.js:648",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "35_log.5",
+          "callout": 5,
+          "name": "Copy",
+          "type": "Button",
+          "selector": "#lgCopy",
+          "defined_at": "src/renderer/app.js:648",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "35_log.6",
+          "callout": 6,
+          "name": "Log lines",
+          "type": "Text",
+          "selector": "#lgBox",
+          "defined_at": "src/renderer/app.js:649",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "36_security",
+      "name": "Security",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:1790",
+      "verified": true,
+      "reached_by": "#security",
+      "screenshot": {
+        "clean": "screenshots/36_security_clean.png",
+        "annotated": "screenshots/36_security_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "36_security.1",
+          "callout": 1,
+          "name": "Checklist",
+          "type": "Card",
+          "selector": ".checks, .posture, #view .card",
+          "defined_at": "src/renderer/app.js:1806",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "36_security.2",
+          "callout": 2,
+          "name": "Current password",
+          "type": "Password field",
+          "selector": "#pwCur",
+          "defined_at": "src/renderer/app.js:1791",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "36_security.3",
+          "callout": 3,
+          "name": "New password",
+          "type": "Password field",
+          "selector": "#pwNew",
+          "defined_at": "src/renderer/app.js:1791",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "36_security.4",
+          "callout": 4,
+          "name": "Change password",
+          "type": "Button",
+          "selector": "#pwChange",
+          "defined_at": "src/renderer/app.js:1791",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "36_security.5",
+          "callout": 5,
+          "name": "LAN only",
+          "type": "Check box",
+          "selector": "#optLan",
+          "defined_at": "src/renderer/app.js:1814",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "36_security.6",
+          "callout": 6,
+          "name": "Sign out when idle",
+          "type": "Number field",
+          "selector": "#optIdle",
+          "defined_at": "src/renderer/app.js:1815",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "36_security.7",
+          "callout": 7,
+          "name": "Guest access",
+          "type": "Check box",
+          "selector": "#optGuest",
+          "defined_at": "src/renderer/app.js:1816",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "36_security.8",
+          "callout": 8,
+          "name": "Save options",
+          "type": "Button",
+          "selector": "#optSave",
+          "defined_at": "src/renderer/app.js:1818",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "36_security.9",
+          "callout": 9,
+          "name": "Role",
+          "type": "Drop-down list",
+          "selector": ".uRole",
+          "defined_at": "src/renderer/app.js:1820",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "36_security.10",
+          "callout": 10,
+          "name": "Reset password",
+          "type": "Button",
+          "selector": ".uReset",
+          "defined_at": "src/renderer/app.js:1820",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "36_security.11",
+          "callout": 11,
+          "name": "New user",
+          "type": "Text field",
+          "selector": "#nuName",
+          "defined_at": "src/renderer/app.js:1821",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "36_security.12",
+          "callout": 12,
+          "name": "Add user",
+          "type": "Button",
+          "selector": "#nuAdd",
+          "defined_at": "src/renderer/app.js:1821",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "36_security.13",
+          "callout": 13,
+          "name": "Set up 2FA",
+          "type": "Button",
+          "selector": "#totpStart",
+          "defined_at": "src/renderer/app.js:1827",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "36_security.14",
+          "callout": 14,
+          "name": "Turn on HTTPS",
+          "type": "Button",
+          "selector": "#tlsOn",
+          "defined_at": "src/renderer/app.js:1831",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "36_security.15",
+          "callout": 15,
+          "name": "Sign out other sessions",
+          "type": "Button",
+          "selector": "#revokeOthers",
+          "defined_at": "src/renderer/app.js:1840",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "36_security.16",
+          "callout": 16,
+          "name": "Sign out here",
+          "type": "Button",
+          "selector": "#logoutBtn",
+          "defined_at": "src/renderer/app.js:1840",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "37_two_factor_setup",
+      "name": "Two-factor setup",
+      "kind": "mode",
+      "parent": "36_security",
+      "defined_at": "src/renderer/app.js:1871",
+      "verified": true,
+      "reached_by": "#security",
+      "screenshot": {
+        "clean": "screenshots/37_two_factor_setup_clean.png",
+        "annotated": "screenshots/37_two_factor_setup_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "37_two_factor_setup.1",
+          "callout": 1,
+          "name": "QR code",
+          "type": "Image",
+          "selector": "#totpBox .qrbox",
+          "defined_at": "src/renderer/app.js:1827",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "37_two_factor_setup.2",
+          "callout": 2,
+          "name": "Setup key",
+          "type": "Text",
+          "selector": "#totpBox .mono, #totpBox code",
+          "defined_at": "src/renderer/app.js:1827",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "37_two_factor_setup.3",
+          "callout": 3,
+          "name": "Code",
+          "type": "Text field",
+          "selector": "#totpBox input",
+          "defined_at": "src/renderer/app.js:1827",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "37_two_factor_setup.4",
+          "callout": 4,
+          "name": "Turn on 2FA",
+          "type": "Button",
+          "selector": "#totpBox button",
+          "defined_at": "src/renderer/app.js:1827",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "38_settings_appearance_roots",
+      "name": "Settings: Appearance and Library roots",
+      "kind": "section",
+      "parent": "settings_page",
+      "defined_at": "src/renderer/app.js:1470",
+      "verified": true,
+      "reached_by": "#settings",
+      "screenshot": {
+        "clean": "screenshots/38_settings_appearance_roots_clean.png",
+        "annotated": "screenshots/38_settings_appearance_roots_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "38_settings_appearance_roots.1",
+          "callout": 1,
+          "name": "Colour theme",
+          "type": "Drop-down list",
+          "selector": "#themeSel",
+          "defined_at": "src/renderer/app.js:1471",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "38_settings_appearance_roots.2",
+          "callout": 2,
+          "name": "Check reachability",
+          "type": "Button",
+          "selector": "#checkRoots",
+          "defined_at": "src/renderer/app.js:1473",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "38_settings_appearance_roots.3",
+          "callout": 3,
+          "name": "On",
+          "type": "Check box",
+          "selector": ".r-on",
+          "defined_at": "src/renderer/app.js:1557",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "38_settings_appearance_roots.4",
+          "callout": 4,
+          "name": "Label",
+          "type": "Text field",
+          "selector": ".r-label",
+          "defined_at": "src/renderer/app.js:1557",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "38_settings_appearance_roots.5",
+          "callout": 5,
+          "name": "Path",
+          "type": "Text field",
+          "selector": ".r-path",
+          "defined_at": "src/renderer/app.js:1557",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "38_settings_appearance_roots.6",
+          "callout": 6,
+          "name": "Browse",
+          "type": "Button",
+          "selector": ".r-pick",
+          "defined_at": "src/renderer/app.js:1557",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "38_settings_appearance_roots.7",
+          "callout": 7,
+          "name": "Type",
+          "type": "Drop-down list",
+          "selector": ".r-type",
+          "defined_at": "src/renderer/app.js:1557",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "38_settings_appearance_roots.8",
+          "callout": 8,
+          "name": "Remove root",
+          "type": "Button",
+          "selector": ".r-del",
+          "defined_at": "src/renderer/app.js:1557",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "38_settings_appearance_roots.9",
+          "callout": 9,
+          "name": "Add root",
+          "type": "Button",
+          "selector": "#addRoot",
+          "defined_at": "src/renderer/app.js:1476",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "39_settings_scanning",
+      "name": "Settings: Scanning, ffprobe, lookups and folder watch",
+      "kind": "section",
+      "parent": "settings_page",
+      "defined_at": "src/renderer/app.js:1478",
+      "verified": true,
+      "reached_by": "#settings",
+      "screenshot": {
+        "clean": "screenshots/39_settings_scanning_clean.png",
+        "annotated": "screenshots/39_settings_scanning_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "39_settings_scanning.1",
+          "callout": 1,
+          "name": "Multi-threaded scan",
+          "type": "Check box",
+          "selector": "#mt",
+          "defined_at": "src/renderer/app.js:1479",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "39_settings_scanning.2",
+          "callout": 2,
+          "name": "Threads",
+          "type": "Number field",
+          "selector": "#threads",
+          "defined_at": "src/renderer/app.js:1479",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "39_settings_scanning.3",
+          "callout": 3,
+          "name": "Parallel probes",
+          "type": "Number field",
+          "selector": "#conc",
+          "defined_at": "src/renderer/app.js:1480",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "39_settings_scanning.4",
+          "callout": 4,
+          "name": "Probe unchanged files again",
+          "type": "Check box",
+          "selector": "#reprobe",
+          "defined_at": "src/renderer/app.js:1481",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "39_settings_scanning.5",
+          "callout": 5,
+          "name": "Video extensions",
+          "type": "Text field",
+          "selector": "#vext",
+          "defined_at": "src/renderer/app.js:1482",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "39_settings_scanning.6",
+          "callout": 6,
+          "name": "Subtitle extensions",
+          "type": "Text field",
+          "selector": "#sext",
+          "defined_at": "src/renderer/app.js:1483",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "39_settings_scanning.7",
+          "callout": 7,
+          "name": "Ignore patterns",
+          "type": "Text field",
+          "selector": "#ignore",
+          "defined_at": "src/renderer/app.js:1484",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "39_settings_scanning.8",
+          "callout": 8,
+          "name": "ffprobe path",
+          "type": "Text field",
+          "selector": "#ffprobePath",
+          "defined_at": "src/renderer/app.js:1488",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "39_settings_scanning.9",
+          "callout": 9,
+          "name": "Download ffmpeg",
+          "type": "Button",
+          "selector": "#dlFf",
+          "defined_at": "src/renderer/app.js:1489",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "39_settings_scanning.10",
+          "callout": 10,
+          "name": "Look up expected episodes",
+          "type": "Check box",
+          "selector": "#metaOn",
+          "defined_at": "src/renderer/app.js:1493",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "39_settings_scanning.11",
+          "callout": 11,
+          "name": "Check running series again after",
+          "type": "Number field",
+          "selector": "#metaDays",
+          "defined_at": "src/renderer/app.js:1493",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "39_settings_scanning.12",
+          "callout": 12,
+          "name": "Check the roots every",
+          "type": "Number field",
+          "selector": "#rootCheckMin",
+          "defined_at": "src/renderer/app.js:1496",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "39_settings_scanning.13",
+          "callout": 13,
+          "name": "Watch the folders",
+          "type": "Check box",
+          "selector": "#watchOn",
+          "defined_at": "src/renderer/app.js:1497",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "39_settings_scanning.14",
+          "callout": 14,
+          "name": "Wait for changes to settle",
+          "type": "Number field",
+          "selector": "#watchSettle",
+          "defined_at": "src/renderer/app.js:1497",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "40_settings_schedules",
+      "name": "Settings: Schedules",
+      "kind": "section",
+      "parent": "settings_page",
+      "defined_at": "src/renderer/app.js:1513",
+      "verified": true,
+      "reached_by": "#settings",
+      "screenshot": {
+        "clean": "screenshots/40_settings_schedules_clean.png",
+        "annotated": "screenshots/40_settings_schedules_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "40_settings_schedules.1",
+          "callout": 1,
+          "name": "Jobs table",
+          "type": "Table",
+          "selector": "#jobsBox table",
+          "defined_at": "src/renderer/app.js:1514",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "40_settings_schedules.2",
+          "callout": 2,
+          "name": "Run now",
+          "type": "Button",
+          "selector": ".job-run",
+          "defined_at": "src/renderer/app.js:1650",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "40_settings_schedules.3",
+          "callout": 3,
+          "name": "Plex sync every",
+          "type": "Number field",
+          "selector": "#plexEvery",
+          "defined_at": "src/renderer/app.js:1515",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "40_settings_schedules.4",
+          "callout": 4,
+          "name": "Backup at",
+          "type": "Time field",
+          "selector": "#bkTime",
+          "defined_at": "src/renderer/app.js:1516",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "40_settings_schedules.5",
+          "callout": 5,
+          "name": "Keep",
+          "type": "Number field",
+          "selector": "#bkKeep",
+          "defined_at": "src/renderer/app.js:1516",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "40_settings_schedules.6",
+          "callout": 6,
+          "name": "Daily snapshot at",
+          "type": "Time field",
+          "selector": "#snapTime",
+          "defined_at": "src/renderer/app.js:1517",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "40_settings_schedules.7",
+          "callout": 7,
+          "name": "Daily summary at",
+          "type": "Time field",
+          "selector": "#nfTime",
+          "defined_at": "src/renderer/app.js:1518",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "40_settings_schedules.8",
+          "callout": 8,
+          "name": "In-app scan timer",
+          "type": "Check box",
+          "selector": "#inApp",
+          "defined_at": "src/renderer/app.js:1519",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "40_settings_schedules.9",
+          "callout": 9,
+          "name": "Every",
+          "type": "Number field",
+          "selector": "#inAppHours",
+          "defined_at": "src/renderer/app.js:1519",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "40_settings_schedules.10",
+          "callout": 10,
+          "name": "Windows scheduled task at",
+          "type": "Time field",
+          "selector": "#taskTime",
+          "defined_at": "src/renderer/app.js:1520",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "40_settings_schedules.11",
+          "callout": 11,
+          "name": "Install or update task",
+          "type": "Button",
+          "selector": "#installTask",
+          "defined_at": "src/renderer/app.js:1520",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "41_settings_data_posters",
+      "name": "Settings: Data, backups and posters",
+      "kind": "section",
+      "parent": "settings_page",
+      "defined_at": "src/renderer/app.js:1523",
+      "verified": true,
+      "reached_by": "#settings",
+      "screenshot": {
+        "clean": "screenshots/41_settings_data_posters_clean.png",
+        "annotated": "screenshots/41_settings_data_posters_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "41_settings_data_posters.1",
+          "callout": 1,
+          "name": "Back up database now",
+          "type": "Button",
+          "selector": "#backupNow",
+          "defined_at": "src/renderer/app.js:1525",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "41_settings_data_posters.2",
+          "callout": 2,
+          "name": "Open backups folder",
+          "type": "Button",
+          "selector": "#openBackups",
+          "defined_at": "src/renderer/app.js:1525",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "41_settings_data_posters.3",
+          "callout": 3,
+          "name": "Open log",
+          "type": "Button",
+          "selector": "#openLog",
+          "defined_at": "src/renderer/app.js:1525",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "41_settings_data_posters.4",
+          "callout": 4,
+          "name": "Daily backup to a folder",
+          "type": "Check box",
+          "selector": "#bkOn",
+          "defined_at": "src/renderer/app.js:1526",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "41_settings_data_posters.5",
+          "callout": 5,
+          "name": "Backup folder",
+          "type": "Text field",
+          "selector": "#bkDir",
+          "defined_at": "src/renderer/app.js:1526",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "41_settings_data_posters.6",
+          "callout": 6,
+          "name": "Back up there now",
+          "type": "Button",
+          "selector": "#bkNow",
+          "defined_at": "src/renderer/app.js:1526",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "41_settings_data_posters.7",
+          "callout": 7,
+          "name": "Restore",
+          "type": "Button",
+          "selector": "#bkRestore",
+          "defined_at": "src/renderer/app.js:1526",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "41_settings_data_posters.8",
+          "callout": 8,
+          "name": "Fetch posters",
+          "type": "Check box",
+          "selector": "#poOn",
+          "defined_at": "src/renderer/app.js:1529",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "41_settings_data_posters.9",
+          "callout": 9,
+          "name": "Also from AniList and TVmaze",
+          "type": "Check box",
+          "selector": "#poOnline",
+          "defined_at": "src/renderer/app.js:1529",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "41_settings_data_posters.10",
+          "callout": 10,
+          "name": "Width",
+          "type": "Drop-down list",
+          "selector": "#poWidth",
+          "defined_at": "src/renderer/app.js:1529",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "41_settings_data_posters.11",
+          "callout": 11,
+          "name": "Posters folder",
+          "type": "Text field",
+          "selector": "#poDir",
+          "defined_at": "src/renderer/app.js:1530",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "41_settings_data_posters.12",
+          "callout": 12,
+          "name": "Fetch missing posters",
+          "type": "Button",
+          "selector": "#poRun",
+          "defined_at": "src/renderer/app.js:1531",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "41_settings_data_posters.13",
+          "callout": 13,
+          "name": "Fetch all again",
+          "type": "Button",
+          "selector": "#poAll",
+          "defined_at": "src/renderer/app.js:1531",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "41_settings_data_posters.14",
+          "callout": 14,
+          "name": "Delete all posters",
+          "type": "Button",
+          "selector": "#poClear",
+          "defined_at": "src/renderer/app.js:1531",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "42_settings_updates_notifications",
+      "name": "Settings: Updates and notifications",
+      "kind": "section",
+      "parent": "settings_page",
+      "defined_at": "src/renderer/app.js:1533",
+      "verified": true,
+      "reached_by": "#settings",
+      "screenshot": {
+        "clean": "screenshots/42_settings_updates_notifications_clean.png",
+        "annotated": "screenshots/42_settings_updates_notifications_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "42_settings_updates_notifications.1",
+          "callout": 1,
+          "name": "Automatic updates",
+          "type": "Check box",
+          "selector": "#updOn",
+          "defined_at": "src/renderer/app.js:1534",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "42_settings_updates_notifications.2",
+          "callout": 2,
+          "name": "GitHub token",
+          "type": "Password field",
+          "selector": "#ghToken",
+          "defined_at": "src/renderer/app.js:1535",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "42_settings_updates_notifications.3",
+          "callout": 3,
+          "name": "Webhook address",
+          "type": "Text field",
+          "selector": "#nfHook",
+          "defined_at": "src/renderer/app.js:1538",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "42_settings_updates_notifications.4",
+          "callout": 4,
+          "name": "E-mail on",
+          "type": "Check box",
+          "selector": "#nfMailOn",
+          "defined_at": "src/renderer/app.js:1539",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "42_settings_updates_notifications.5",
+          "callout": 5,
+          "name": "Mail server",
+          "type": "Text field",
+          "selector": "#nfHost",
+          "defined_at": "src/renderer/app.js:1539",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "42_settings_updates_notifications.6",
+          "callout": 6,
+          "name": "Port",
+          "type": "Number field",
+          "selector": "#nfPort",
+          "defined_at": "src/renderer/app.js:1539",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "42_settings_updates_notifications.7",
+          "callout": 7,
+          "name": "Account",
+          "type": "Text field",
+          "selector": "#nfUser",
+          "defined_at": "src/renderer/app.js:1539",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "42_settings_updates_notifications.8",
+          "callout": 8,
+          "name": "Password",
+          "type": "Password field",
+          "selector": "#nfPass",
+          "defined_at": "src/renderer/app.js:1539",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "42_settings_updates_notifications.9",
+          "callout": 9,
+          "name": "Recipient",
+          "type": "Text field",
+          "selector": "#nfTo",
+          "defined_at": "src/renderer/app.js:1539",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "42_settings_updates_notifications.10",
+          "callout": 10,
+          "name": "Events",
+          "type": "Check boxes",
+          "selector": ".nfEv",
+          "defined_at": "src/renderer/app.js:1540",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "42_settings_updates_notifications.11",
+          "callout": 11,
+          "name": "Send a test",
+          "type": "Button",
+          "selector": "#nfTest",
+          "defined_at": "src/renderer/app.js:1540",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "42_settings_updates_notifications.12",
+          "callout": 12,
+          "name": "New key",
+          "type": "Button",
+          "selector": "#stRotate",
+          "defined_at": "src/renderer/app.js:1592",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "43_settings_plex",
+      "name": "Settings: Plex",
+      "kind": "section",
+      "parent": "settings_page",
+      "defined_at": "src/renderer/app.js:1543",
+      "verified": true,
+      "reached_by": "#settings",
+      "screenshot": {
+        "clean": "screenshots/43_settings_plex_clean.png",
+        "annotated": "screenshots/43_settings_plex_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "43_settings_plex.1",
+          "callout": 1,
+          "name": "Plex address",
+          "type": "Text field",
+          "selector": "#plexUrl",
+          "defined_at": "src/renderer/app.js:1544",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "43_settings_plex.2",
+          "callout": 2,
+          "name": "Plex token",
+          "type": "Password field",
+          "selector": "#plexToken",
+          "defined_at": "src/renderer/app.js:1545",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "43_settings_plex.3",
+          "callout": 3,
+          "name": "Test",
+          "type": "Button",
+          "selector": "#plexTest",
+          "defined_at": "src/renderer/app.js:1545",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "43_settings_plex.4",
+          "callout": 4,
+          "name": "Paste the XML address",
+          "type": "Text field",
+          "selector": "#plexXmlUrl",
+          "defined_at": "src/renderer/app.js:1546",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "43_settings_plex.5",
+          "callout": 5,
+          "name": "Sync after each scan",
+          "type": "Check box",
+          "selector": "#plexOn",
+          "defined_at": "src/renderer/app.js:1547",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "43_settings_plex.6",
+          "callout": 6,
+          "name": "Path mapping",
+          "type": "Text fields",
+          "selector": ".pm-plex",
+          "defined_at": "src/renderer/app.js:1665",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "43_settings_plex.7",
+          "callout": 7,
+          "name": "Add mapping",
+          "type": "Button",
+          "selector": "#pmAdd",
+          "defined_at": "src/renderer/app.js:1668",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "43_settings_plex.8",
+          "callout": 8,
+          "name": "Sync now",
+          "type": "Button",
+          "selector": "#plexSync",
+          "defined_at": "src/renderer/app.js:1549",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "43_settings_plex.9",
+          "callout": 9,
+          "name": "Last sync",
+          "type": "Status",
+          "selector": "#plexStatus",
+          "defined_at": "src/renderer/app.js:1550",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "43_settings_plex.10",
+          "callout": 10,
+          "name": "Webhook enabled",
+          "type": "Check box",
+          "selector": "#hookOn",
+          "defined_at": "src/renderer/app.js:1674",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "43_settings_plex.11",
+          "callout": 11,
+          "name": "Save settings",
+          "type": "Button",
+          "selector": "#save",
+          "defined_at": "src/renderer/app.js:1553",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "44_settings",
+      "name": "Settings: Renaming, adult content, quality thresholds and CSV export",
+      "kind": "section",
+      "parent": "settings_page",
+      "defined_at": "src/renderer/app.js:1499",
+      "verified": true,
+      "reached_by": "#settings",
+      "screenshot": {
+        "clean": "screenshots/44_settings_clean.png",
+        "annotated": "screenshots/44_settings_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "44_settings.1",
+          "callout": 1,
+          "name": "Renaming",
+          "type": "Check box",
+          "selector": "#renOn",
+          "defined_at": "src/renderer/app.js:1500",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "44_settings.2",
+          "callout": 2,
+          "name": "Adult titles in CSV files",
+          "type": "Check box",
+          "selector": "#adultCsv",
+          "defined_at": "src/renderer/app.js:1503",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "44_settings.3",
+          "callout": 3,
+          "name": "Read adult files as",
+          "type": "Drop-down list",
+          "selector": "#adultDefault",
+          "defined_at": "src/renderer/app.js:1504",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "44_settings.4",
+          "callout": 4,
+          "name": "Minimum bitrate",
+          "type": "Number fields",
+          "selector": "#thr input",
+          "defined_at": "src/renderer/app.js:1507",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "44_settings.5",
+          "callout": 5,
+          "name": "CSV folder",
+          "type": "Text field",
+          "selector": "#csvDir",
+          "defined_at": "src/renderer/app.js:1510",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "44_settings.6",
+          "callout": 6,
+          "name": "Export after each scan",
+          "type": "Check box",
+          "selector": "#autoExport",
+          "defined_at": "src/renderer/app.js:1511",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "45_restore_dialog",
+      "name": "Restore from a backup dialog",
+      "kind": "dialog",
+      "parent": "41_settings_data_posters",
+      "defined_at": "src/renderer/app.js:1595",
+      "verified": true,
+      "reached_by": "#settings",
+      "screenshot": {
+        "clean": "screenshots/45_restore_dialog_clean.png",
+        "annotated": "screenshots/45_restore_dialog_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "45_restore_dialog.1",
+          "callout": 1,
+          "name": "Backup",
+          "type": "Drop-down list",
+          "selector": "#rsSet",
+          "defined_at": "src/renderer/app.js:1600",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "45_restore_dialog.2",
+          "callout": 2,
+          "name": "Also restore settings",
+          "type": "Check box",
+          "selector": "#rsSettings",
+          "defined_at": "src/renderer/app.js:1601",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "45_restore_dialog.3",
+          "callout": 3,
+          "name": "Also restore web accounts and 2FA",
+          "type": "Check box",
+          "selector": "#rsWeb",
+          "defined_at": "src/renderer/app.js:1601",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "45_restore_dialog.4",
+          "callout": 4,
+          "name": "Cancel",
+          "type": "Button",
+          "selector": "#rsCancel",
+          "defined_at": "src/renderer/app.js:1602",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "45_restore_dialog.5",
+          "callout": 5,
+          "name": "Restore and restart",
+          "type": "Button",
+          "selector": "#rsGo",
+          "defined_at": "src/renderer/app.js:1602",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "46_folder_browser",
+      "name": "Folder browser dialog (web server)",
+      "kind": "dialog",
+      "parent": "41_settings_data_posters",
+      "defined_at": "src/renderer/app.js:1883",
+      "verified": true,
+      "reached_by": "#settings",
+      "screenshot": {
+        "clean": "screenshots/46_folder_browser_clean.png",
+        "annotated": "screenshots/46_folder_browser_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "46_folder_browser.1",
+          "callout": 1,
+          "name": "Up",
+          "type": "Button",
+          "selector": "#fbUp",
+          "defined_at": "src/renderer/app.js:1883",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "46_folder_browser.2",
+          "callout": 2,
+          "name": "Path",
+          "type": "Text field",
+          "selector": "#fbPath",
+          "defined_at": "src/renderer/app.js:1883",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "46_folder_browser.3",
+          "callout": 3,
+          "name": "Go",
+          "type": "Button",
+          "selector": "#fbGo",
+          "defined_at": "src/renderer/app.js:1883",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "46_folder_browser.4",
+          "callout": 4,
+          "name": "Cancel",
+          "type": "Button",
+          "selector": "#fbCancel",
+          "defined_at": "src/renderer/app.js:1883",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "46_folder_browser.5",
+          "callout": 5,
+          "name": "Use this folder",
+          "type": "Button",
+          "selector": "#fbUse",
+          "defined_at": "src/renderer/app.js:1883",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "47_about",
+      "name": "About",
+      "kind": "page",
+      "parent": "main_window",
+      "defined_at": "src/renderer/app.js:1901",
+      "verified": true,
+      "reached_by": "#about",
+      "screenshot": {
+        "clean": "screenshots/47_about_clean.png",
+        "annotated": "screenshots/47_about_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "47_about.1",
+          "callout": 1,
+          "name": "Repository",
+          "type": "Link",
+          "selector": "#repoLink",
+          "defined_at": "src/renderer/app.js:1913",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "47_about.2",
+          "callout": 2,
+          "name": "Report a problem",
+          "type": "Link",
+          "selector": "#issueLink",
+          "defined_at": "src/renderer/app.js:1914",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "47_about.3",
+          "callout": 3,
+          "name": "Check for updates",
+          "type": "Button",
+          "selector": "#chkUpd",
+          "defined_at": "src/renderer/app.js:1920",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "47_about.4",
+          "callout": 4,
+          "name": "Open releases page",
+          "type": "Button",
+          "selector": "#relLink",
+          "defined_at": "src/renderer/app.js:1920",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "47_about.5",
+          "callout": 5,
+          "name": "Data folder",
+          "type": "Link",
+          "selector": "#dataLink",
+          "defined_at": "src/renderer/app.js:1929",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "48_theme_example",
+      "name": "A colour theme (Gunmetal)",
+      "kind": "mode",
+      "parent": "38_settings_appearance_roots",
+      "defined_at": "src/renderer/theme.js:5",
+      "verified": true,
+      "reached_by": "#movies",
+      "screenshot": {
+        "clean": "screenshots/48_theme_example_clean.png",
+        "annotated": "screenshots/48_theme_example_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "48_theme_example.1",
+          "callout": 1,
+          "name": "Poster wall in the Gunmetal theme",
+          "type": "View",
+          "selector": ".table-wrap.wall",
+          "defined_at": "src/renderer/app.js:60",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "50_portal_library",
+      "name": "Family portal: Library",
+      "kind": "page",
+      "parent": "portal",
+      "defined_at": "src/portal/portal.js:39",
+      "verified": true,
+      "reached_by": "family portal #library",
+      "screenshot": {
+        "clean": "screenshots/50_portal_library_clean.png",
+        "annotated": "screenshots/50_portal_library_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "50_portal_library.1",
+          "callout": 1,
+          "name": "Your name",
+          "type": "Label",
+          "selector": "#who",
+          "defined_at": "src/portal/portal.js:25",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "50_portal_library.2",
+          "callout": 2,
+          "name": "Settings",
+          "type": "Button",
+          "selector": "#menu",
+          "defined_at": "src/portal/portal.js:173",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "50_portal_library.3",
+          "callout": 3,
+          "name": "Library",
+          "type": "Tabs",
+          "selector": "#libSeg",
+          "defined_at": "src/portal/portal.js:41",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "50_portal_library.4",
+          "callout": 4,
+          "name": "Search",
+          "type": "Search field",
+          "selector": "#q",
+          "defined_at": "src/portal/portal.js:42",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "50_portal_library.5",
+          "callout": 5,
+          "name": "Genre",
+          "type": "Drop-down list",
+          "selector": "#fGenre",
+          "defined_at": "src/portal/portal.js:42",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "50_portal_library.6",
+          "callout": 6,
+          "name": "Quality",
+          "type": "Drop-down list",
+          "selector": "#fBest",
+          "defined_at": "src/portal/portal.js:42",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "50_portal_library.7",
+          "callout": 7,
+          "name": "Sort",
+          "type": "Drop-down list",
+          "selector": "#sort",
+          "defined_at": "src/portal/portal.js:42",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "50_portal_library.8",
+          "callout": 8,
+          "name": "Title",
+          "type": "Row",
+          "selector": "#list .row",
+          "defined_at": "src/portal/portal.js:43",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "50_portal_library.9",
+          "callout": 9,
+          "name": "Tabs",
+          "type": "Navigation",
+          "selector": "#tabs",
+          "defined_at": "src/portal/portal.js:25",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "51_portal_title",
+      "name": "Family portal: a series",
+      "kind": "page",
+      "parent": "50_portal_library",
+      "defined_at": "src/portal/portal.js:69",
+      "verified": true,
+      "reached_by": "family portal #title/tv/Hollow%20Circuit%20Street",
+      "screenshot": {
+        "clean": "screenshots/51_portal_title_clean.png",
+        "annotated": "screenshots/51_portal_title_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "51_portal_title.1",
+          "callout": 1,
+          "name": "Poster",
+          "type": "Image",
+          "selector": ".pbig",
+          "defined_at": "src/portal/portal.js:35",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "51_portal_title.2",
+          "callout": 2,
+          "name": "Title",
+          "type": "Heading",
+          "selector": "main h1",
+          "defined_at": "src/portal/portal.js:69",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "51_portal_title.3",
+          "callout": 3,
+          "name": "Season",
+          "type": "Expandable row",
+          "selector": ".season summary",
+          "defined_at": "src/portal/portal.js:88",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "51_portal_title.4",
+          "callout": 4,
+          "name": "Back",
+          "type": "Link",
+          "selector": "main p a",
+          "defined_at": "src/portal/portal.js:69",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "52_portal_tonight",
+      "name": "Family portal: Tonight",
+      "kind": "page",
+      "parent": "portal",
+      "defined_at": "src/portal/portal.js:93",
+      "verified": true,
+      "reached_by": "family portal #tonight",
+      "screenshot": {
+        "clean": "screenshots/52_portal_tonight_clean.png",
+        "annotated": "screenshots/52_portal_tonight_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "52_portal_tonight.1",
+          "callout": 1,
+          "name": "Kind",
+          "type": "Drop-down list",
+          "selector": "#tKind",
+          "defined_at": "src/portal/portal.js:96",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "52_portal_tonight.2",
+          "callout": 2,
+          "name": "Genre",
+          "type": "Drop-down list",
+          "selector": "#tGenre",
+          "defined_at": "src/portal/portal.js:96",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "52_portal_tonight.3",
+          "callout": 3,
+          "name": "Length",
+          "type": "Drop-down list",
+          "selector": "#tMin",
+          "defined_at": "src/portal/portal.js:96",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "52_portal_tonight.4",
+          "callout": 4,
+          "name": "Not watched yet",
+          "type": "Check box",
+          "selector": "#tUnw",
+          "defined_at": "src/portal/portal.js:97",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "52_portal_tonight.5",
+          "callout": 5,
+          "name": "Complete series only",
+          "type": "Check box",
+          "selector": "#tComp",
+          "defined_at": "src/portal/portal.js:97",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "52_portal_tonight.6",
+          "callout": 6,
+          "name": "Pick for me",
+          "type": "Button",
+          "selector": "#tPick",
+          "defined_at": "src/portal/portal.js:98",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "52_portal_tonight.7",
+          "callout": 7,
+          "name": "Tonight",
+          "type": "Card",
+          "selector": "#tBox .card",
+          "defined_at": "src/portal/portal.js:98",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "53_portal_requests",
+      "name": "Family portal: Requests",
+      "kind": "page",
+      "parent": "portal",
+      "defined_at": "src/portal/portal.js:121",
+      "verified": true,
+      "reached_by": "family portal #requests",
+      "screenshot": {
+        "clean": "screenshots/53_portal_requests_clean.png",
+        "annotated": "screenshots/53_portal_requests_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "53_portal_requests.1",
+          "callout": 1,
+          "name": "Title",
+          "type": "Text field",
+          "selector": "#rTitle",
+          "defined_at": "src/portal/portal.js:124",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "53_portal_requests.2",
+          "callout": 2,
+          "name": "Kind",
+          "type": "Drop-down list",
+          "selector": "#rKind",
+          "defined_at": "src/portal/portal.js:125",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "53_portal_requests.3",
+          "callout": 3,
+          "name": "Year",
+          "type": "Number field",
+          "selector": "#rYear",
+          "defined_at": "src/portal/portal.js:125",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "53_portal_requests.4",
+          "callout": 4,
+          "name": "Note",
+          "type": "Text area",
+          "selector": "#rNote",
+          "defined_at": "src/portal/portal.js:126",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "53_portal_requests.5",
+          "callout": 5,
+          "name": "Already in the library",
+          "type": "Notice",
+          "selector": "#rExists .note",
+          "defined_at": "src/portal/portal.js:127",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "53_portal_requests.6",
+          "callout": 6,
+          "name": "Ask anyway",
+          "type": "Button",
+          "selector": "#rForce",
+          "defined_at": "src/portal/portal.js:139",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "53_portal_requests.7",
+          "callout": 7,
+          "name": "Send request",
+          "type": "Button",
+          "selector": "#rSend",
+          "defined_at": "src/portal/portal.js:127",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "53_portal_requests.8",
+          "callout": 8,
+          "name": "Your requests",
+          "type": "List",
+          "selector": "#rList",
+          "defined_at": "src/portal/portal.js:128",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "54_portal_settings",
+      "name": "Family portal: Settings",
+      "kind": "page",
+      "parent": "portal",
+      "defined_at": "src/portal/portal.js:149",
+      "verified": true,
+      "reached_by": "family portal #menu",
+      "screenshot": {
+        "clean": "screenshots/54_portal_settings_clean.png",
+        "annotated": "screenshots/54_portal_settings_annotated.png"
+      },
+      "reachable": true,
+      "controls": [
+        {
+          "id": "54_portal_settings.1",
+          "callout": 1,
+          "name": "Colour theme",
+          "type": "Drop-down list",
+          "selector": "#mTheme",
+          "defined_at": "src/portal/portal.js:151",
+          "located_in_screenshot": true
+        },
+        {
+          "id": "54_portal_settings.2",
+          "callout": 2,
+          "name": "Forget this device",
+          "type": "Button",
+          "selector": "#mLeave",
+          "defined_at": "src/portal/portal.js:152",
+          "located_in_screenshot": true
+        }
+      ]
+    },
+    {
+      "id": "sidebar",
+      "name": "Sidebar",
+      "kind": "navigation",
+      "parent": "main_window",
+      "defined_at": "src/renderer/index.html:20",
+      "verified": true,
+      "reached_by": null,
+      "screenshot": null,
+      "reachable": true,
+      "controls": [
+        {
+          "id": "sidebar.1",
+          "callout": null,
+          "name": "Menu button",
+          "type": "Button",
+          "selector": "#navToggle",
+          "defined_at": "src/renderer/index.html:18",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.2",
+          "callout": null,
+          "name": "Dashboard",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=dashboard]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.3",
+          "callout": null,
+          "name": "TV Shows",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=tv]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.4",
+          "callout": null,
+          "name": "Anime",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=anime]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.5",
+          "callout": null,
+          "name": "Movies",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=movies]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.6",
+          "callout": null,
+          "name": "Web videos",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=web]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.7",
+          "callout": null,
+          "name": "Adult",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=adult]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.8",
+          "callout": null,
+          "name": "Missing",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=missing]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.9",
+          "callout": null,
+          "name": "Issues",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=issues]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.10",
+          "callout": null,
+          "name": "Quality",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=quality]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.11",
+          "callout": null,
+          "name": "Upgrades",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=upgrades]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.12",
+          "callout": null,
+          "name": "Reclaim space",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=reclaim]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.13",
+          "callout": null,
+          "name": "Ratings",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=ratings]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.14",
+          "callout": null,
+          "name": "Watch tonight",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=tonight]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.15",
+          "callout": null,
+          "name": "Watched",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=watched]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.16",
+          "callout": null,
+          "name": "Requests",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=requests]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.17",
+          "callout": null,
+          "name": "Change log",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=changes]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.18",
+          "callout": null,
+          "name": "Movie names",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=movienames]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.19",
+          "callout": null,
+          "name": "Rename TV/anime",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=rename]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.20",
+          "callout": null,
+          "name": "CSV export",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=export]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.21",
+          "callout": null,
+          "name": "System",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=system]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.22",
+          "callout": null,
+          "name": "Family portal",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=family]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.23",
+          "callout": null,
+          "name": "Log",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=log]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.24",
+          "callout": null,
+          "name": "Security",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=security]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.25",
+          "callout": null,
+          "name": "Settings",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=settings]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.26",
+          "callout": null,
+          "name": "About",
+          "type": "Navigation link",
+          "selector": ".sidebar a[data-view=about]",
+          "defined_at": "src/renderer/index.html:20",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.27",
+          "callout": null,
+          "name": "Account line",
+          "type": "Label with link",
+          "selector": "#accountLine",
+          "defined_at": "src/renderer/index.html:52",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.28",
+          "callout": null,
+          "name": "Show adult content",
+          "type": "Check box",
+          "selector": "#showAdult",
+          "defined_at": "src/renderer/index.html:53",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.29",
+          "callout": null,
+          "name": "Scan now",
+          "type": "Button",
+          "selector": "#btnScan",
+          "defined_at": "src/renderer/index.html:55",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.30",
+          "callout": null,
+          "name": "Cancel scan",
+          "type": "Button",
+          "selector": "#btnCancel",
+          "defined_at": "src/renderer/index.html:56",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.31",
+          "callout": null,
+          "name": "Scan progress",
+          "type": "Progress bar",
+          "selector": "#scanProgress",
+          "defined_at": "src/renderer/index.html:57",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.32",
+          "callout": null,
+          "name": "Lookup progress",
+          "type": "Progress bar",
+          "selector": "#metaProgress",
+          "defined_at": "src/renderer/index.html:62",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.33",
+          "callout": null,
+          "name": "Folder watch line",
+          "type": "Label",
+          "selector": "#watchLine",
+          "defined_at": "src/renderer/index.html:66",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.34",
+          "callout": null,
+          "name": "Update pill",
+          "type": "Indicator",
+          "selector": "#updatePill",
+          "defined_at": "src/renderer/index.html:50",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.35",
+          "callout": null,
+          "name": "Version",
+          "type": "Label",
+          "selector": "#versionLine",
+          "defined_at": "src/renderer/index.html:68",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "sidebar.36",
+          "callout": null,
+          "name": "Message",
+          "type": "Notice",
+          "selector": "#toast",
+          "defined_at": "src/renderer/index.html:72",
+          "located_in_screenshot": null
+        }
+      ]
+    },
+    {
+      "id": "d01_confirm_identity",
+      "name": "Confirm it is you (password again)",
+      "kind": "dialog",
+      "parent": "main_window",
+      "defined_at": "src/renderer/webbridge.js:63",
+      "verified": true,
+      "reached_by": null,
+      "screenshot": null,
+      "reachable": true,
+      "controls": [
+        {
+          "id": "d01_confirm_identity.1",
+          "callout": null,
+          "name": "Password",
+          "type": "Password field",
+          "selector": ".webauth input[name=password]",
+          "defined_at": "src/renderer/webbridge.js:23",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "d01_confirm_identity.2",
+          "callout": null,
+          "name": "Confirm",
+          "type": "Button",
+          "selector": ".webauth button[type=submit]",
+          "defined_at": "src/renderer/webbridge.js:23",
+          "located_in_screenshot": null
+        }
+      ]
+    },
+    {
+      "id": "d02_one_at_a_time",
+      "name": "One at a time",
+      "kind": "dialog",
+      "parent": "29_rename_tv_anime",
+      "defined_at": "src/renderer/app.js:33",
+      "verified": true,
+      "reached_by": null,
+      "screenshot": null,
+      "reachable": true,
+      "controls": [
+        {
+          "id": "d02_one_at_a_time.1",
+          "callout": null,
+          "name": "Rename this file",
+          "type": "Button",
+          "selector": "#stGo",
+          "defined_at": "src/renderer/app.js:42",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "d02_one_at_a_time.2",
+          "callout": null,
+          "name": "Skip",
+          "type": "Button",
+          "selector": "#stSkip",
+          "defined_at": "src/renderer/app.js:42",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "d02_one_at_a_time.3",
+          "callout": null,
+          "name": "Stop",
+          "type": "Button",
+          "selector": "#stStop",
+          "defined_at": "src/renderer/app.js:42",
+          "located_in_screenshot": null
+        }
+      ]
+    },
+    {
+      "id": "d03_dry_run_result",
+      "name": "Dry run result",
+      "kind": "dialog",
+      "parent": "29_rename_tv_anime",
+      "defined_at": "src/renderer/app.js:1170",
+      "verified": true,
+      "reached_by": null,
+      "screenshot": null,
+      "reachable": true,
+      "controls": [
+        {
+          "id": "d03_dry_run_result.1",
+          "callout": null,
+          "name": "Close",
+          "type": "Button",
+          "selector": "#dC",
+          "defined_at": "src/renderer/app.js:1170",
+          "located_in_screenshot": null
+        }
+      ]
+    },
+    {
+      "id": "d04_batch_items",
+      "name": "Batch items",
+      "kind": "dialog",
+      "parent": "29_rename_tv_anime",
+      "defined_at": "src/renderer/app.js:1200",
+      "verified": true,
+      "reached_by": null,
+      "screenshot": null,
+      "reachable": true,
+      "controls": [
+        {
+          "id": "d04_batch_items.1",
+          "callout": null,
+          "name": "Close",
+          "type": "Button",
+          "selector": "#iC",
+          "defined_at": "src/renderer/app.js:1200",
+          "located_in_screenshot": null
+        }
+      ]
+    },
+    {
+      "id": "d05_undo_batch",
+      "name": "Undo batch",
+      "kind": "dialog",
+      "parent": "28_movie_names",
+      "defined_at": "src/renderer/app.js:1376",
+      "verified": true,
+      "reached_by": null,
+      "screenshot": null,
+      "reachable": true,
+      "controls": [
+        {
+          "id": "d05_undo_batch.1",
+          "callout": null,
+          "name": "Cancel",
+          "type": "Button",
+          "selector": "#uC",
+          "defined_at": "src/renderer/app.js:1376",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "d05_undo_batch.2",
+          "callout": null,
+          "name": "Undo now",
+          "type": "Button",
+          "selector": "#uGo",
+          "defined_at": "src/renderer/app.js:1376",
+          "located_in_screenshot": null
+        }
+      ]
+    },
+    {
+      "id": "d06_rename_movies_live",
+      "name": "Rename movie files, live",
+      "kind": "dialog",
+      "parent": "28_movie_names",
+      "defined_at": "src/renderer/app.js:1332",
+      "verified": true,
+      "reached_by": null,
+      "screenshot": null,
+      "reachable": true,
+      "controls": [
+        {
+          "id": "d06_rename_movies_live.1",
+          "callout": null,
+          "name": "Type RENAME to confirm",
+          "type": "Text field",
+          "selector": "#mrConfirm",
+          "defined_at": "src/renderer/app.js:1335",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "d06_rename_movies_live.2",
+          "callout": null,
+          "name": "Cancel",
+          "type": "Button",
+          "selector": "#mrCancel",
+          "defined_at": "src/renderer/app.js:1336",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "d06_rename_movies_live.3",
+          "callout": null,
+          "name": "Rename now",
+          "type": "Button",
+          "selector": "#mrGo",
+          "defined_at": "src/renderer/app.js:1336",
+          "located_in_screenshot": null
+        }
+      ]
+    },
+    {
+      "id": "d07_movie_batch_result",
+      "name": "Movie batch result",
+      "kind": "dialog",
+      "parent": "28_movie_names",
+      "defined_at": "src/renderer/app.js:1326",
+      "verified": true,
+      "reached_by": null,
+      "screenshot": null,
+      "reachable": true,
+      "controls": [
+        {
+          "id": "d07_movie_batch_result.1",
+          "callout": null,
+          "name": "Close",
+          "type": "Button",
+          "selector": "#mrClose",
+          "defined_at": "src/renderer/app.js:1326",
+          "located_in_screenshot": null
+        }
+      ]
+    },
+    {
+      "id": "d08_set_source",
+      "name": "Set source for selected",
+      "kind": "dialog",
+      "parent": "28_movie_names",
+      "defined_at": "src/renderer/app.js:1294",
+      "verified": true,
+      "reached_by": null,
+      "screenshot": null,
+      "reachable": true,
+      "controls": [
+        {
+          "id": "d08_set_source.1",
+          "callout": null,
+          "name": "Cancel",
+          "type": "Button",
+          "selector": "#bsC",
+          "defined_at": "src/renderer/app.js:1294",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "d08_set_source.2",
+          "callout": null,
+          "name": "Apply",
+          "type": "Button",
+          "selector": "#bsGo",
+          "defined_at": "src/renderer/app.js:1294",
+          "located_in_screenshot": null
+        }
+      ]
+    },
+    {
+      "id": "d09_ignore_collisions",
+      "name": "Ignore the other files",
+      "kind": "dialog",
+      "parent": "28_movie_names",
+      "defined_at": "src/renderer/app.js:1355",
+      "verified": true,
+      "reached_by": null,
+      "screenshot": null,
+      "reachable": true,
+      "controls": [
+        {
+          "id": "d09_ignore_collisions.1",
+          "callout": null,
+          "name": "Cancel",
+          "type": "Button",
+          "selector": "#ckC",
+          "defined_at": "src/renderer/app.js:1355",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "d09_ignore_collisions.2",
+          "callout": null,
+          "name": "Ignore them",
+          "type": "Button",
+          "selector": "#ckGo",
+          "defined_at": "src/renderer/app.js:1355",
+          "located_in_screenshot": null
+        }
+      ]
+    },
+    {
+      "id": "d10_card_settings_legacy",
+      "name": "Card settings (before version 2.0)",
+      "kind": "dialog",
+      "parent": "02_dashboard",
+      "defined_at": "src/renderer/app.js:111",
+      "verified": true,
+      "reached_by": null,
+      "screenshot": null,
+      "reachable": false,
+      "controls": [
+        {
+          "id": "d10_card_settings_legacy.1",
+          "callout": null,
+          "name": "Editor level",
+          "type": "Drop-down list",
+          "selector": "#csLevel",
+          "defined_at": "src/renderer/app.js:112",
+          "located_in_screenshot": null
+        },
+        {
+          "id": "d10_card_settings_legacy.2",
+          "callout": null,
+          "name": "Colour rule",
+          "type": "Group",
+          "selector": "#csRule",
+          "defined_at": "src/renderer/app.js:113",
+          "located_in_screenshot": null
+        }
+      ]
+    }
+  ],
+  "keyboard_shortcuts": [
+    {
+      "keys": "Escape",
+      "where": "Any dialog",
+      "does": "Closes the dialog without saving.",
+      "defined_at": "src/renderer/app.js:55"
+    },
+    {
+      "keys": "Enter",
+      "where": "Tag field on a series or movie page",
+      "does": "Adds the typed tag.",
+      "defined_at": "src/renderer/app.js:380"
+    },
+    {
+      "keys": "Enter",
+      "where": "Search words in the Match dialog",
+      "does": "Starts the search.",
+      "defined_at": "src/renderer/app.js:263"
+    },
+    {
+      "keys": "Enter",
+      "where": "Path in the folder browser",
+      "does": "Opens the typed path.",
+      "defined_at": "src/renderer/app.js:1894"
+    },
+    {
+      "keys": "Enter",
+      "where": "Sign-in and confirmation dialogs",
+      "does": "Submits the dialog.",
+      "defined_at": "src/renderer/webbridge.js:23"
+    },
+    {
+      "keys": "Alt",
+      "where": "Desktop application",
+      "does": "Shows the standard Electron menu bar, which is hidden by default. MediaLedger defines no menu of its own and no application-wide shortcuts.",
+      "defined_at": "src/main/main.js:61"
+    }
+  ],
+  "not_present": [
+    {
+      "what": "Context menus",
+      "note": "None. No right-click menu is defined anywhere in the renderer."
+    },
+    {
+      "what": "Toolbars",
+      "note": "No application toolbar. Pages carry their own filter row, listed with each page."
+    },
+    {
+      "what": "Application menu",
+      "note": "None defined. The desktop window hides the default Electron menu bar."
+    },
+    {
+      "what": "Light theme",
+      "note": "None. All eight colour themes are dark."
+    }
+  ],
+  "unverified": []
+}
