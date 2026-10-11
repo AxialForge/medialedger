@@ -8,6 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [2.6.1] - 2026-10-11
+
+### Changed
+
+- **A proper icon.** The new MediaLedger logo replaces the square glyph
+  everywhere: the Windows installer and window, the browser tab and phone
+  home screen for the web app, the sidebar, the About page, the request page
+  and the family portal. The icon files are now part of the repository, so
+  release builds carry it too.
+
 ## [2.6.0] - 2026-10-08
 
 ### Added

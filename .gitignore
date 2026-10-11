@@ -1,6 +1,6 @@
 # Build output
 dist/
-build/
+build/*
 out/
 release/
 *.exe
@@ -60,3 +60,7 @@ docs/_tools/release-docs/node_modules/
 docs/_tools/release-docs/*.log
 # Reconstruction archives are too large for GitHub
 docs/release-package/**/*.zip
+
+# The application icon is source, not build output
+!build/icon.ico
+!build/icon.png

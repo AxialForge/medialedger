@@ -670,7 +670,7 @@ views.about = async () => {
   view.innerHTML = `<h1>About</h1>
     <div class="grid2">
       <div class="card">
-        <div class="inline"><span class="about-logo">▣</span><div><div style="font-size:20px;font-weight:700">MediaLedger <span class="muted">v${esc(info.version)}</span></div><div class="muted">Local media-share ledger for Plex libraries</div></div></div>
+        <div class="inline"><img class="about-logo" src="icon-192.png" alt="" width="56" height="56"><div><div style="font-size:20px;font-weight:700">MediaLedger <span class="muted">v${esc(info.version)}</span></div><div class="muted">Local media-share ledger for Plex libraries</div></div></div>
         <p class="muted" style="margin:12px 0 0">Inventories TV, anime and movie files on your NAS with ffprobe, tracks what changed between scans, exports CSVs, and keeps your manual fixes. Everything runs on this PC; nothing is sent anywhere except the update check.</p>
         <table class="kv" style="margin-top:12px">
           <tr><td>Author</td><td>AxialForge (Joseph Costarella)</td></tr>
