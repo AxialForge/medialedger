@@ -20,7 +20,7 @@ async function dashLoad() {
   }
   return { d, t, tot, health, snaps, lazy, notices, last: d.lastScans[0], lowRes: d.lowRes.reduce((a, r) => a + r.n, 0), capPct: r => r && r.probed ? pct(r.captioned, r.files) + '% captioned' : 'not probed yet' };
 }
-const canSee = (role) => !L.isWeb || me.role === 'admin' || (role === 'standard' && me.role === 'standard');
+const canSee = (role) => !L.isWeb || me.role === 'admin' || (role === 'standard' && (me.role === 'standard' || me.role === 'kids'));
 const nc = (c, id, label, num, value, sub, opts = {}) => ncard(id, label, num, value, sub, { ...opts, rule: c.rule, gear: false });
 const langKey = k => k.replace(/;/g, '+');
 const SZ_TILE = ['s', 'm', 'l'], SZ_CHART = ['m', 'l', 'xl'], SZ_TABLE = ['m', 'l', 'xl'];

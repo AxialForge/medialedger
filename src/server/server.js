@@ -71,11 +71,29 @@ const portal = createPortal({ svc, dataDir, log, audit: (...a) => sec.audit(...a
 // What a guest (no account) may call: read-only library statistics, plus filing a media request.
 const GUEST = new Set(['collections:list', 'collections:get', 'posters:index', 'app:info', 'security:me', 'data:dashboard', 'data:series', 'data:episodes', 'data:movies', 'data:movieFiles', 'data:search', 'web:channels', 'web:videos', 'ratings:list', 'meta:get', 'scan:status', 'scan:list', 'update:status', 'adult:status', 'requests:list', 'requests:add', 'roots:last', 'tags:list', 'tags:all', 'tags:get', 'data:tonight', 'data:storage', 'data:airing', 'prefs:get', 'data:snapshots']);
 // A standard user: everything a guest may, plus the review pages, own ratings, the adult switch for their own session.
-const STANDARD = new Set([...GUEST, 'data:watched', 'data:reclaim', 'data:nextUp', 'data:continue', 'data:subtitles', 'data:problems', 'data:duplicates', 'data:missing', 'data:quality', 'data:changes', 'data:changeStats', 'movie:plan', 'movie:batches', 'movie:batchItems', 'rename:proposals', 'rename:history', 'export:list', 'override:list', 'override:suggest', 'meta:status', 'plex:status', 'watch:status', 'schedule:nextInApp', 'db:stats', 'settings:get', 'adult:toggle', 'ratings:setUser', 'security:changePassword', 'tags:add', 'tags:remove', 'data:upgrades', 'rename:dry', 'prefs:set']);
+const STANDARD = new Set([...GUEST, 'data:watched', 'data:reclaim', 'data:nextUp', 'data:continue', 'data:subtitles', 'data:problems', 'data:duplicates', 'data:missing', 'data:quality', 'data:changes', 'data:changeStats', 'movie:plan', 'movie:batches', 'movie:batchItems', 'rename:proposals', 'rename:history', 'export:list', 'override:list', 'override:suggest', 'meta:status', 'plex:status', 'watch:status', 'schedule:nextInApp', 'db:stats', 'settings:get', 'adult:toggle', 'ratings:setUser', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'tags:add', 'tags:remove', 'data:upgrades', 'rename:dry', 'prefs:set']);
 // Admins: every channel. Actions that write to the share or throw data away also need a fresh password (re-auth).
-const SENSITIVE = new Set(['dup:moveDiscards', 'shares:add', 'shares:remove', 'portal:set', 'portal:invite', 'portal:renew', 'db:restoreStage', 'security:tlsEnable', 'security:tlsDisable', 'status:rotate', 'plex:webhookSet', 'movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']);
+const SENSITIVE = new Set(['dup:moveDiscards', 'shares:add', 'shares:remove', 'portal:set', 'portal:invite', 'portal:renew', 'db:restoreStage', 'security:tlsEnable', 'security:tlsDisable', 'status:rotate', 'plex:webhookSet', 'movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser', 'security:setPerms']);
 const isSensitive = (ch, args) => ch === 'movie:run' ? !!(args[1] && args[1].live) : SENSITIVE.has(ch);
-const allowed = (role, ch) => role === 'admin' || (role === 'standard' ? STANDARD.has(ch) : GUEST.has(ch));
+// Channels a capability opens for a standard account (an admin has them all; kids and guests never).
+const CAP_CHANNELS = {
+  scan: ['scan:start', 'scan:cancel', 'meta:refresh'],
+  requests: ['requests:update', 'requests:delete'],
+  collections: ['collections:save', 'collections:delete', 'collections:addItem', 'collections:removeItem', 'collections:setNote', 'collections:reorder', 'collections:sortByRelease', 'collections:suggest', 'collections:createFromSuggestion', 'collections:search'],
+  fixes: ['override:save', 'override:delete', 'override:suggest', 'override:bulkSource', 'dup:keep', 'dup:clear', 'dup:keepBest', 'dup:plan'],
+  metadata: ['meta:search', 'meta:setMatch', 'meta:setManual', 'meta:setNone', 'meta:unlock', 'collect:get', 'collect:set', 'meta:refresh'],
+  tags: ['tags:add', 'tags:remove'],
+};
+const KIDS = new Set([...GUEST, 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'prefs:set', 'data:continue', 'data:nextUp']);
+const STANDARD_BASE = new Set([...STANDARD].filter(ch => !CAP_CHANNELS.tags.includes(ch)));
+const allowed = (role, ch, perms) => {
+  if (role === 'admin') return true;
+  if (role === 'kids') return KIDS.has(ch);
+  if (role !== 'standard') return GUEST.has(ch);
+  if (STANDARD_BASE.has(ch)) return true;
+  const can = (perms && perms.can) || {};
+  return Object.entries(CAP_CHANNELS).some(([cap, chans]) => can[cap] && chans.includes(ch));
+};
 // Settings hold secrets (Plex token, GitHub token); a standard user sees them blanked.
 const redactSettings = (s) => ({ ...s, plex: { ...(s.plex || {}), token: s.plex && s.plex.token ? '••••' : '' }, githubToken: s.githubToken ? '••••' : '' });
 
@@ -109,7 +127,7 @@ const webHandlers = new Map([
   // per-session state
   ['settings:get', (ctx) => ctx.role === 'admin' ? svc.settings.get() : redactSettings(svc.settings.get())],
   ['adult:status', (ctx) => { const base = svc.handlers.get('adult:status')(); return { ...base, showAdult: ctx.role === 'guest' ? false : !!ctx.session.showAdult, canToggle: ctx.role !== 'guest' }; }],
-  ['adult:toggle', (ctx, on) => { if (ctx.role === 'guest') throw new Error('Sign in to see adult content'); sec.setSessionFlag(ctx.session.id, 'showAdult', !!on); svc.setShowAdult(!!on); return { ...svc.handlers.get('adult:status')(), showAdult: !!on, canToggle: true }; }],
+  ['adult:toggle', (ctx, on) => { if (ctx.role === 'guest') throw new Error('Sign in to see adult content'); if (on && !sec.permsOf(ctx.session.user).adult) throw new Error('This account may not see adult content'); sec.setSessionFlag(ctx.session.id, 'showAdult', !!on); svc.setShowAdult(!!on); return { ...svc.handlers.get('adult:status')(), showAdult: !!on, canToggle: true }; }],
   ['requests:add', (ctx, r) => svc.handlers.get('requests:add')({ ...(r || {}), requested_by: ctx.role === 'guest' ? `guest: ${String((r || {}).requested_by || 'anonymous').slice(0, 40)}` : ctx.session.user })],
   // network shares (admin only). Connecting and removing change what the server can read, so they ask for the password again.
   ['shares:status', () => shares.status()],
@@ -129,7 +147,7 @@ const webHandlers = new Map([
   ['portal:revoke', (ctx, id) => portal.revokeInvite(String(id), ctx.session.user, ctx.ip)],
   ['portal:remove', (ctx, id) => portal.deleteInvite(String(id), ctx.session.user, ctx.ip)],
   // security
-  ['security:me', (ctx) => ({ available: true, guest: ctx.role === 'guest', username: ctx.session ? ctx.session.user : null, role: ctx.role, guestEnabled: sec.guestEnabled(), hasUsers: sec.hasPassword() })],
+  ['security:me', (ctx) => ({ available: true, guest: ctx.role === 'guest', username: ctx.session ? ctx.session.user : null, role: ctx.role, perms: ctx.session ? sec.permsOf(ctx.session.user) : null, totp: ctx.session ? sec.totpEnabledFor(ctx.session.user) : false, guestEnabled: sec.guestEnabled(), hasUsers: sec.hasPassword() })],
   ['security:status', (ctx) => sec.status(ctx.session, { available: true, https: !!tls, port: servePort, tlsPort: port === 80 ? 443 : port, bindHost, dataDir, proxyHttps: behindHttpsProxy(ctx.req), checks: posture(ctx.req), opensslAvailable: hasOpenssl() })],
   // Creates a self-signed certificate for every name this Pi answers to, then exits so systemd restarts the service on HTTPS.
   ['security:tlsDisable', (ctx) => {
@@ -162,7 +180,7 @@ const webHandlers = new Map([
     return { ok: true, san, port: port === 80 ? 443 : port };
   }],
   ['security:changePassword', (ctx, current, next) => { sec.changePassword(ctx.session, current, next, ctx.ip); return true; }],
-  ['security:totpSetup', () => sec.totpSetup(`${os.hostname()} admin`)],
+  ['security:totpSetup', (ctx) => sec.totpSetup(`${os.hostname()} ${ctx.session.user}`, ctx.session.user)],
   ['security:totpEnable', (ctx, code) => sec.totpEnable(code, ctx.ip, ctx.session.user)],
   ['security:totpDisable', (ctx, password) => sec.totpDisable(ctx.session, password, ctx.ip)],
   ['security:setOptions', (ctx, opts) => { sec.setOptions(opts || {}, ctx.ip, ctx.session.user); return true; }],
@@ -170,6 +188,7 @@ const webHandlers = new Map([
   ['security:revokeOthers', (ctx) => sec.revokeOthers(ctx.session, ctx.ip)],
   ['security:users', () => sec.listUsers()],
   ['security:addUser', (ctx, name, password, role) => sec.addUser(name, password, role, ctx.ip, ctx.session.user)],
+  ['security:setPerms', (ctx, name, patch) => sec.setPerms(name, patch, ctx.ip, ctx.session.user)],
   ['security:setRole', (ctx, name, role) => sec.setRole(name, role, ctx.ip, ctx.session.user)],
   ['security:resetPassword', (ctx, name, password) => sec.resetPassword(name, password, ctx.ip, ctx.session.user)],
   ['security:deleteUser', (ctx, name) => sec.deleteUser(name, ctx.ip, ctx.session.user)],
@@ -284,12 +303,14 @@ async function handle(req, res) {
       }
       const fn = handlers.get(ch);
       if (!fn || req.method !== 'POST') return json(res, 404, { ok: false, error: `unknown channel ${ch}` });
-      if (!allowed(role, ch)) { if (!session) return json(res, 401, { ok: false, reason: 'login', error: 'sign in required' }); sec.audit('forbidden', ip, ch, session.user); return json(res, 403, { ok: false, reason: 'forbidden', error: 'Your account is not allowed to do that' }); }
+      const perms = session ? sec.permsOf(session.user) : null;
+      if (!allowed(role, ch, perms)) { if (!session) return json(res, 401, { ok: false, reason: 'login', error: 'sign in required' }); sec.audit('forbidden', ip, ch, session.user); return json(res, 403, { ok: false, reason: 'forbidden', error: 'Your account is not allowed to do that' }); }
       const args = JSON.parse(await readBody(req) || '[]');
       if (!Array.isArray(args)) return json(res, 400, { ok: false, error: 'arguments must be an array' });
       if (isSensitive(ch, args)) { if (sec.needsReauth(session)) return json(res, 401, { ok: false, reason: 'reauth', error: 'Please re-enter your password for this action' }); sec.audit('sensitive_action', ip, ch, session.user); }
-      // Adult visibility is per session: apply this caller's choice to the core before every call.
-      svc.setShowAdult(!!(session && session.showAdult));
+      // What this caller may see: adult only when the account allows it and the session switch is on; the libraries
+      // and rating limit from the account; ratings and tags from the owner's set for admins, the account's own otherwise.
+      svc.setScope(perms ? { adult: !!(perms.adult && session.showAdult), libraries: perms.libraries, maxRating: perms.maxRating, allowUnrated: perms.allowUnrated, user: role === 'admin' ? '' : session.user, plexAccount: perms.plexAccount } : { adult: false, user: '' });
       const ctx = { session, ip, role, req };
       const result = CTX_HANDLERS.has(ch) ? await fn(ctx, ...args) : await fn(...args);
       return json(res, 200, { ok: true, result: result === undefined ? null : result });

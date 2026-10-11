@@ -379,6 +379,56 @@ async function downloadFfmpeg(msgEl, progEl, barEl, after) {
   finally { progEl.hidden = true; if (ffDlUnsub) { ffDlUnsub(); ffDlUnsub = null; } }
 }
 
+// ---- Accounts: what each user may see and do -----------------------------------------------------
+const CAP_LABEL = { scan: 'Run scans', requests: 'Handle requests', collections: 'Edit collections', fixes: 'Fix files', metadata: 'Match series', tags: 'Own tags' };
+const CAP_HELP = { scan: 'Start and cancel scans and metadata refreshes.', requests: 'Approve, decline, reply to and delete media requests.', collections: 'Create and edit collections and use Find sets.', fixes: 'Use Fix… on files, decide duplicates, and set sources.', metadata: 'Match series to TVmaze or AniList, set counts by hand, set the collecting policy.', tags: 'Keep their own tags on titles.' };
+const LIB_LABEL = { tv: 'TV', anime: 'Anime', movie: 'Movies', web: 'Web' };
+function permsDialog(u, st, done) {
+  const p = u.perms, kids = u.role === 'kids';
+  const card = openModal(`<h2>Permissions for ${esc(u.username)} <span class="muted">(${esc(u.role)})</span></h2>
+    <div class="field"><label>Libraries</label><div class="inline" style="flex-wrap:wrap">${st.libraries.map(l => `<label class="inline small"><input type="checkbox" class="pmLib" value="${l}" ${!p.libraries || p.libraries.includes(l) ? 'checked' : ''}> ${LIB_LABEL[l] || l}</label>`).join('')}</div><div class="hint">Untick a library and it disappears from this account's pages, searches, dashboard and portal counts.</div></div>
+    <div class="field"><label>Adult content</label><div><input type="checkbox" id="pmAdult" ${p.adult ? 'checked' : ''} ${kids ? 'disabled' : ''}><div class="hint">${kids ? 'Never for a kids account.' : 'Allowed to switch adult content on for their session.'}</div></div></div>
+    <div class="field"><label>Content rating limit</label><div class="inline"><select id="pmRating"><option value="">none</option>${st.ratings.map(r => `<option value="${r}" ${p.maxRating === r ? 'selected' : ''}>${r}${r === 'G' ? ' / TV-G and under' : r === 'PG' ? ' / TV-PG' : r === 'PG-13' ? ' / TV-14' : ' / TV-MA'}</option>`).join('')}</select><label class="inline small"><input type="checkbox" id="pmUnrated" ${p.allowUnrated ? 'checked' : ''}> show titles Plex has not rated</label></div><div class="hint">Ratings come from Plex, so this applies after a Plex sync. A kids account always has a limit (PG unless raised).</div></div>
+    <div class="field"><label>May also</label><div>${st.caps.map(c => `<label class="inline small" style="display:flex;margin:2px 0" title="${esc(CAP_HELP[c])}"><input type="checkbox" class="pmCap" value="${c}" ${p.can[c] ? 'checked' : ''} ${kids ? 'disabled' : ''}> ${CAP_LABEL[c]} <span class="muted tiny" style="margin-left:6px">${esc(CAP_HELP[c])}</span></label>`).join('')}${kids ? '<div class="hint">A kids account has no extra abilities.</div>' : ''}</div></div>
+    <div class="field"><label>Watched means</label><div class="inline"><select id="pmPlex"><option value="">the server\'s Plex account</option></select></div><div class="hint">Pick the Plex account this person watches with: their lists then show what <i>they</i> have watched, from the play history.</div></div>
+    <div class="actions"><span class="grow"></span><button id="pmCancel">Cancel</button><button class="primary" id="pmSave">Save</button></div>`);
+  L.plex.accounts().then(list => { const sel = $('#pmPlex', card); list.forEach(a => { const o = document.createElement('option'); o.value = a.id; o.textContent = a.name; o.selected = p.plexAccount === a.id; sel.append(o); }); }).catch(() => {});
+  $('#pmCancel', card).onclick = closeModal;
+  $('#pmSave', card).onclick = async () => {
+    const libs = [...card.querySelectorAll('.pmLib:checked')].map(i => i.value);
+    const patch = { libraries: libs.length === st.libraries.length ? null : libs, adult: $('#pmAdult', card).checked, maxRating: $('#pmRating', card).value || null, allowUnrated: $('#pmUnrated', card).checked, can: Object.fromEntries([...card.querySelectorAll('.pmCap')].map(i => [i.value, i.checked])), plexAccount: $('#pmPlex', card).value || null };
+    try { await L.security.setPerms(u.username, patch); closeModal(); toast('Permissions saved'); done(); } catch (e) { toast(e.message, true); }
+  };
+}
+// A standard or kids account's own page: password, two-factor codes, and what the account may do.
+async function ownAccountView() {
+  const m = await L.security.me();
+  const p = m.perms || {};
+  view.innerHTML = `<h1>Your account</h1>
+    <div class="grid2">
+      <div class="card"><h3>Password</h3>
+        <div class="field"><label>Current</label><input type="password" id="pwCur" autocomplete="current-password"></div>
+        <div class="field"><label>New (8+ chars)</label><input type="password" id="pwNew" autocomplete="new-password"></div>
+        <div class="field"><label>Repeat</label><input type="password" id="pwNew2" autocomplete="new-password"></div>
+        <div class="inline"><button class="primary" id="pwChange">Change password</button><span class="muted tiny">Signs out your other sessions.</span></div>
+        <h3 style="margin-top:16px">Two-factor codes ${m.totp ? '<span class="right ok">on</span>' : '<span class="right muted">off</span>'}</h3>
+        ${m.totp ? `<p>Signing in asks for your password and a 6-digit code from your authenticator app.</p><div class="field"><label>Password</label><input type="password" id="totpPw"></div><div class="inline"><button class="danger" id="totpOff">Turn off 2FA</button></div>` : `<p class="muted">Adds a code from Google Authenticator, Aegis, Bitwarden, 1Password or any TOTP app to your sign-in.</p><div id="totpBox"><button class="primary" id="totpStart">Set up 2FA</button></div>`}
+      </div>
+      <div class="card"><h3>What this account can do</h3>
+        <table class="kv"><tr><td>Role</td><td>${esc(m.role)}</td></tr><tr><td>Libraries</td><td>${p.libraries ? p.libraries.map(l => LIB_LABEL[l] || l).join(', ') || 'none' : 'all'}</td></tr><tr><td>Adult content</td><td>${p.adult ? 'may be switched on at the bottom of the sidebar' : 'no'}</td></tr><tr><td>Content rating limit</td><td>${p.maxRating ? `${esc(p.maxRating)}${p.allowUnrated ? '' : ', unrated titles hidden'}` : 'none'}</td></tr>${Object.keys(CAP_LABEL).map(c => `<tr><td>${CAP_LABEL[c]}</td><td>${p.can && p.can[c] ? '<span class="ok">yes</span>' : 'no'}</td></tr>`).join('')}<tr><td>Watched means</td><td>${p.plexAccount != null ? `Plex account #${p.plexAccount}` : 'the server\'s Plex account'}</td></tr></table>
+        <p class="muted tiny">Your ratings and tags are your own; an administrator sets what the account may see and do.</p>
+      </div>
+    </div>`;
+  const act = async (fn, okMsg) => { try { await fn(); if (okMsg) toast(okMsg); ownAccountView(); } catch (e) { toast(e.message, true); } };
+  $('#pwChange').onclick = () => { if ($('#pwNew').value !== $('#pwNew2').value) return toast('New passwords differ', true); act(() => L.security.changePassword($('#pwCur').value, $('#pwNew').value), 'Password changed'); };
+  if ($('#totpStart')) $('#totpStart').onclick = async () => { try {
+    const r = await L.security.totpSetup();
+    $('#totpBox').innerHTML = `<p>1. In your authenticator app tap <b>+</b> → <b>Scan a QR code</b> and point the camera here:</p><div class="qrbox">${qrSvg(r.url, { size: 184, label: 'Two-factor setup code' })}</div><p class="muted tiny" style="margin-top:8px">No camera? Enter this key by hand (time-based, 6 digits):</p><div class="secret">${esc(r.secret.replace(/(.{4})/g, '$1 ').trim())}</div><p>2. Enter the 6-digit code it shows to confirm:</p><div class="inline"><input type="text" id="totpCode" inputmode="numeric" placeholder="000000" style="width:120px"><button class="primary" id="totpConfirm">Turn on 2FA</button></div>`;
+    $('#totpConfirm').onclick = () => act(() => L.security.totpEnable($('#totpCode').value), 'Two-factor codes are on');
+  } catch (e) { toast(e.message, true); } };
+  if ($('#totpOff')) $('#totpOff').onclick = () => act(() => L.security.totpDisable($('#totpPw').value), 'Two-factor codes are off');
+}
+
 // ---- The desktop as a client of a server (connect-to-server mode) ----
 async function paintClient(box) {
   const api = L.client; const c = await api.get();
@@ -446,7 +496,7 @@ views.system = async () => {
 
 // ---- Security: web-server access controls -------------------------------------------
 views.security = async () => {
-  if (me.role !== 'admin' && L.isWeb) { view.innerHTML = '<h1>Security</h1><div class="card"><p>Only admins manage security. You can change your own password here.</p><div class="field"><label>Current</label><input type="password" id="pwCur"></div><div class="field"><label>New (8+ chars)</label><input type="password" id="pwNew"></div><div class="inline"><button class="primary" id="pwChange">Change password</button></div></div>'; $('#pwChange').onclick = async () => { try { await L.security.changePassword($('#pwCur').value, $('#pwNew').value); toast('Password changed'); } catch (e) { toast(e.message, true); } }; return; }
+  if (me.role !== 'admin' && L.isWeb) { await ownAccountView(); return; }
   const st = await L.security.status();
   const pill = $('#secPill');
   if (!st.available) {
@@ -475,9 +525,11 @@ views.security = async () => {
         ${st.guestEnabled ? `<div class="field"><label>Guest link</label><div class="inline" style="align-items:flex-start;gap:14px"><div class="qrbox">${qrSvg(location.origin + '/request', { size: 132, label: 'Guest request link' })}</div><div class="muted tiny">Anyone on your Wi-Fi can scan this to open the request form at <span class="mono">${esc(location.origin)}/request</span> as a guest. Screenshot it or print this page and put it by the TV.</div></div></div>` : ''}
         <div class="inline"><button id="optSave">Save options</button></div>
         <h3 style="margin-top:16px">Users</h3>
-        <table><thead><tr><th>User</th><th>Role</th><th>Last sign-in</th><th>Sessions</th><th></th></tr></thead><tbody>${st.users.map(u => `<tr><td><b>${esc(u.username)}</b>${st.me && u.username === st.me.username ? ' <span class="badge ok">you</span>' : ''}</td><td><select class="small uRole" data-u="${esc(u.username)}"><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option><option value="standard" ${u.role === 'standard' ? 'selected' : ''}>standard</option></select></td><td class="muted">${u.lastLogin ? ago(u.lastLogin) : 'never'}</td><td>${u.sessions}</td><td class="nowrap"><button class="small uReset" data-u="${esc(u.username)}">Reset password</button> <button class="small uDel" data-u="${esc(u.username)}">✕</button></td></tr>`).join('')}</tbody></table>
-        <div class="inline" style="margin-top:8px"><input type="text" id="nuName" placeholder="username" style="width:130px" autocomplete="off"><input type="password" id="nuPw" placeholder="password (8+)" style="width:150px" autocomplete="new-password"><select id="nuRole"><option value="standard">standard</option><option value="admin">admin</option></select><button class="primary" id="nuAdd">Add user</button></div>
-        <p class="muted tiny" style="margin:6px 0 0"><b>admin</b>: everything. <b>standard</b>: sees every library and review page, can rate titles, file requests and show adult content for their own session; no settings, system, security, scans, fixes or renames.</p>
+        <table><thead><tr><th>User</th><th>Role</th><th>Last sign-in</th><th>Sessions</th><th></th></tr></thead><tbody>${st.users.map(u => `<tr><td><b>${esc(u.username)}</b>${st.me && u.username === st.me.username ? ' <span class="badge ok">you</span>' : ''}${u.totp ? ' <span class="badge" title="two-factor codes on">2FA</span>' : ''}</td><td><select class="small uRole" data-u="${esc(u.username)}"><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option><option value="standard" ${u.role === 'standard' ? 'selected' : ''}>standard</option><option value="kids" ${u.role === 'kids' ? 'selected' : ''}>kids</option></select> <button class="small uPerms" data-u="${esc(u.username)}" ${u.role === 'admin' ? 'disabled title="Admins may do everything"' : ''}>Permissions…</button></td><td class="muted">${u.lastLogin ? ago(u.lastLogin) : 'never'}</td><td>${u.sessions}</td><td class="nowrap"><button class="small uReset" data-u="${esc(u.username)}">Reset password</button> <button class="small uDel" data-u="${esc(u.username)}">✕</button></td></tr>`).join('')}</tbody></table>
+        <div class="inline" style="margin-top:8px"><input type="text" id="nuName" placeholder="username" style="width:130px" autocomplete="off"><input type="password" id="nuPw" placeholder="password (8+)" style="width:150px" autocomplete="new-password"><select id="nuRole"><option value="standard">standard</option><option value="kids">kids</option><option value="admin">admin</option></select><button class="primary" id="nuAdd">Add user</button></div>
+        <p class="muted tiny" style="margin:6px 0 0"><b>admin</b>: everything. <b>standard</b>: sees the libraries allowed to it and the review pages, rates and tags titles for itself, files requests; more through Permissions. <b>kids</b>: browse and watch-tonight only, held to a content rating, never adult content. Each account has its own ratings, tags and two-factor codes; admins share the owner's ratings and tags.</p>
+        <h3 style="margin-top:16px">Who can do what</h3>
+        <div class="table-wrap"><table class="whocan"><thead><tr><th>User</th><th>Libraries</th><th>Adult</th><th>Rating limit</th>${st.caps.map(c => `<th title="${esc(CAP_HELP[c] || '')}">${esc(CAP_LABEL[c] || c)}</th>`).join('')}<th>Watched as</th></tr></thead><tbody>${st.users.map(u => `<tr><td><b>${esc(u.username)}</b> <span class="muted tiny">${esc(u.role)}</span></td><td>${u.perms.libraries ? u.perms.libraries.map(l => `<span class="badge ${l}">${esc(LIB_LABEL[l] || l)}</span>`).join(' ') || '<span class="bad">none</span>' : 'all'}</td><td>${u.perms.adult ? '<span class="ok">yes</span>' : 'no'}</td><td>${u.perms.maxRating ? `${esc(u.perms.maxRating)}${u.perms.allowUnrated ? '' : ' <span class="muted tiny">no unrated</span>'}` : '<span class="muted">none</span>'}</td>${st.caps.map(c => `<td class="num">${u.perms.can[c] ? '<span class="ok">✓</span>' : '<span class="muted">–</span>'}</td>`).join('')}<td>${u.perms.plexAccount != null ? `Plex #${u.perms.plexAccount}` : '<span class="muted">the server</span>'}</td></tr>`).join('')}</tbody></table></div>
       </div>
       <div class="card"><h3>Two-factor codes ${st.totpEnabled ? '<span class="right ok">on</span>' : '<span class="right muted">off</span>'}</h3>
         ${st.totpEnabled
@@ -520,6 +572,7 @@ views.security = async () => {
   }); };
   $('#nuAdd').onclick = () => act(() => L.security.addUser($('#nuName').value, $('#nuPw').value, $('#nuRole').value), 'User added');
   document.querySelectorAll('.uRole').forEach(s => { s.onchange = () => act(() => L.security.setRole(s.dataset.u, s.value), 'Role changed'); });
+  document.querySelectorAll('.uPerms').forEach(b => { b.onclick = () => permsDialog(st.users.find(u => u.username === b.dataset.u), st, () => views.security()); });
   document.querySelectorAll('.uReset').forEach(b => { b.onclick = () => { const pw = prompt(`New password for ${b.dataset.u} (8+ characters). They will be signed out everywhere.`); if (pw) act(() => L.security.resetPassword(b.dataset.u, pw), 'Password reset'); }; });
   document.querySelectorAll('.uDel').forEach(b => { b.onclick = () => { if (confirm(`Delete user ${b.dataset.u}?`)) act(() => L.security.deleteUser(b.dataset.u), 'User deleted'); }; });
   $('#revokeOthers').onclick = () => act(() => L.security.revokeOthers(), 'Other sessions signed out');

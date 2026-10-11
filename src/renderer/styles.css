@@ -244,7 +244,14 @@ td .sub { display: block; color: var(--muted); font-size: 11px; line-height: 1.2
 .blockedrow td { opacity: .75; }
 .blockedrow td:first-child { width: 22px; }
 
-.adultswitch { padding: 6px 10px; }
+/* The adult toggle at the foot of the sidebar: a switch, not a bare checkbox */
+.adultswitch { display: flex; align-items: center; gap: 8px; padding: 7px 10px; margin: 2px 0 4px; border-radius: 6px; cursor: pointer; font-size: 12px; color: var(--muted); user-select: none; }
+.adultswitch:hover { background: var(--panel2); }
+.adultswitch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.adultswitch .track { width: 30px; height: 16px; border-radius: 8px; background: var(--panel3); border: 1px solid var(--line); position: relative; flex: none; transition: background .15s; }
+.adultswitch .knob { position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
+.adultswitch.on .track { background: var(--bad); border-color: var(--bad); } .adultswitch.on .knob { transform: translateX(14px); background: #fff; }
+.adultswitch.on .lbl, .adultswitch.on .state { color: var(--text); } .adultswitch .state { margin-left: auto; font-size: 11px; }
 .stars { display: inline-flex; gap: 1px; cursor: pointer; user-select: none; }
 .stars i { font-style: normal; font-size: 15px; color: #3a4150; }
 .stars i.on { color: var(--warn); }
@@ -256,8 +263,8 @@ td .sub { display: block; color: var(--muted); font-size: 11px; line-height: 1.2
 /* ---- Roles (web build). Guests: statistics only. Standard: no settings/system/security, no controls that change files. */
 body.role-guest [data-view="issues"], body.role-guest [data-view="missing"], body.role-guest [data-view="quality"], body.role-guest [data-view="changes"], body.role-guest [data-view="movienames"], body.role-guest [data-view="rename"], body.role-guest [data-view="export"],
 body.role-guest [data-view="reclaim"], body.role-guest [data-view="watched"], body.role-guest [data-view="family"], body.role-guest [data-view="system"], body.role-guest [data-view="log"], body.role-guest [data-view="security"], body.role-guest [data-view="settings"], body.role-guest .scanbox, body.role-guest #topScan, body.role-guest #adultSwitch, body.role-guest .navgroup:nth-of-type(3),
-body.role-standard [data-view="family"], body.role-standard [data-view="system"], body.role-standard [data-view="log"], body.role-standard [data-view="security"], body.role-standard [data-view="settings"], body.role-standard [data-view="export"], body.role-standard .scanbox, body.role-standard #topScan,
-body.role-standard .fixbtn, body.role-standard #purge, body.role-guest .fixbtn, body.role-guest #purge,
+body.role-standard [data-view="family"], body.role-standard [data-view="system"], body.role-standard [data-view="log"], body.role-standard [data-view="settings"], body.role-standard [data-view="export"],
+body.role-standard #purge, body.role-guest .fixbtn, body.role-guest #purge, body.role-guest .scanbox, body.role-guest #topScan,
 body.role-standard .adminonly, body.role-guest .adminonly { display: none !important; }
 body.role-guest .starwidget { pointer-events: none; opacity: .6; }
 
@@ -469,3 +476,9 @@ td.rowacts { width: 1%; text-align: right; white-space: nowrap; }
 .addbox .hits div { padding: 6px 10px; cursor: pointer; } .addbox .hits div:hover { background: var(--panel3); }
 
 .ext.small { font-size: 12px; }
+
+/* Capabilities: controls that a standard account only gets with the matching permission */
+body:not(.cap-fixes) .fixbtn, body:not(.cap-fixes) .dupkeep, body:not(.cap-fixes) #dupBest, body:not(.cap-fixes) .dupclear, body:not(.cap-scan) .scanbox, body:not(.cap-scan) #topScan,
+body:not(.cap-collections) #colNew, body:not(.cap-collections) #sugLocal, body:not(.cap-collections) #sugWeb, body:not(.cap-metadata) .matchbtn, body:not(.cap-metadata) .collectbtn, body:not(.cap-tags) .tag-add { display: none !important; }
+body.role-kids [data-view="missing"], body.role-kids [data-view="issues"], body.role-kids [data-view="quality"], body.role-kids [data-view="upgrades"], body.role-kids [data-view="reclaim"], body.role-kids [data-view="ratings"], body.role-kids [data-view="watched"], body.role-kids [data-view="requests"], body.role-kids [data-view="changes"], body.role-kids [data-view="movienames"], body.role-kids [data-view="rename"], body.role-kids [data-view="export"], body.role-kids [data-view="family"], body.role-kids [data-view="system"], body.role-kids [data-view="log"], body.role-kids [data-view="settings"], body.role-kids .scanbox, body.role-kids #topScan, body.role-kids .adminonly, body.role-kids .starwidget, body.role-kids .tag-add { display: none !important; }
+.whocan th { font-size: 11px; } .whocan td { font-size: 12.5px; }

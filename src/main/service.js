@@ -50,7 +50,7 @@ function createService({ userData, log, send, host }) {
   let dataVersion = 0;
   const READS = /^(data:|app:|collections:(list|get|search|suggest)$|dup:plan$|scan:(status|list)$|jobs:(list|overdue)$|posters:(status|index|get)$|prefs:get$|log:|roots:(last|check|listDirs)$|meta:(get|status|search)$|plex:(status|test)$|tags:(list|all|get)$|ratings:list$|requests:list$|override:(list|suggest)$|movie:(plan|batches|batchItems)$|rename:(proposals|history|dry)$|export:list$|collect:get$|db:(stats|backups|restoreList)$|sys:|schedule:(taskStatus|nextInApp)$|update:|adult:status$|settings:get$|web:|notify:test$)/;
   const h = (ch, fn) => handlers.set(ch, READS.test(ch) ? fn : (...a) => { dataVersion++; return fn(...a); });
-  const remember = (ch, ttlMs, fn) => { const memo = new Map(); h(ch, (...a) => { const key = `${showAdult ? 1 : 0}|${JSON.stringify(a)}`; const hit = memo.get(key); if (hit && hit.v === dataVersion && !scanner.running && Date.now() - hit.t < ttlMs) return hit.r; const r = fn(...a); if (!(r && typeof r.then === 'function')) { if (memo.size > 8) memo.clear(); memo.set(key, { v: dataVersion, t: Date.now(), r }); } return r; }); };
+  const remember = (ch, ttlMs, fn) => { const memo = new Map(); h(ch, (...a) => { const key = `${scopeKey()}|${JSON.stringify(a)}`; const hit = memo.get(key); if (hit && hit.v === dataVersion && !scanner.running && Date.now() - hit.t < ttlMs) return hit.r; const r = fn(...a); if (!(r && typeof r.then === 'function')) { if (memo.size > 8) memo.clear(); memo.set(key, { v: dataVersion, t: Date.now(), r }); } return r; }); };
 
   function exportDir() { return settings.get().csvOutputDir || path.join(userData, 'exports'); }
   function ffprobePath() { return findFfprobe(settings.get().ffprobePath) || ffmpegdl.installedFfprobe(userData); }
@@ -63,8 +63,27 @@ function createService({ userData, log, send, host }) {
   }
 
   // Adult content is hidden from every query unless the sidebar switch is on. Resets each launch.
-  let showAdult = false;
-  const AF = (alias = '') => showAdult ? '' : ` AND ${alias}adult=0`;
+  // What the caller may see, set by the shell before each call (the web server per request, the desktop once):
+  //   adult        adult titles shown
+  //   libraries    null for all, or the library types this account may see
+  //   maxRating    null, or the highest content rating allowed (G, PG, PG-13, R); TV ratings map onto the same levels
+  //   allowUnrated with a rating limit, whether titles Plex has not rated are shown
+  //   user         whose ratings and tags: '' is the owner's set (desktop, admins), otherwise the account name
+  //   plexAccount  null, or the Plex account whose history decides "watched" for this caller
+  let scope = { adult: false, libraries: null, maxRating: null, allowUnrated: true, user: '', plexAccount: null };
+  let showAdult = false; // kept in step with scope.adult; older code reads it
+  const RATING_LEVEL = { G: 1, 'TV-Y': 1, 'TV-Y7': 1, 'TV-Y7-FV': 1, 'TV-G': 1, PG: 2, 'TV-PG': 2, 'PG-13': 3, 'TV-14': 3, R: 4, 'TV-MA': 4, 'NC-17': 5 };
+  const ratingsUpTo = (max) => { const lv = RATING_LEVEL[max]; return lv ? Object.keys(RATING_LEVEL).filter(k => RATING_LEVEL[k] <= lv) : null; };
+  const AF = (alias = '') => {
+    let sql = scope.adult ? '' : ` AND ${alias}adult=0`;
+    if (scope.libraries) sql += ` AND ${alias}library_type IN (${scope.libraries.map(t => `'${String(t).replace(/'/g, '')}'`).join(',') || "''"})`;
+    const allowed = scope.maxRating ? ratingsUpTo(scope.maxRating) : null;
+    if (allowed) { const list = allowed.map(x => `'${x}'`).join(','); const r = `COALESCE(${alias}plex_content_rating, (SELECT ps.content_rating FROM plex_shows ps WHERE ps.rating_key = ${alias}plex_show_key))`; sql += ` AND (${r} IN (${list})${scope.allowUnrated ? ` OR ${r} IS NULL` : ''})`; }
+    return sql;
+  };
+  // "watched" for this caller: the owner's Plex play counts, or one account's history when the account is mapped
+  const WATCHED = (alias = '') => scope.plexAccount ? `${alias}plex_rating_key IN (SELECT rating_key FROM plex_history WHERE account_id = ${Number(scope.plexAccount)})` : `${alias}plex_view_count > 0`;
+  const scopeKey = () => JSON.stringify(scope);
 
   // Exclusive lock held while a live movie-rename batch runs; scans and the watcher back off.
   let renameLock = null; // { rootId, since }
@@ -416,7 +435,7 @@ function createService({ userData, log, send, host }) {
   // ---- adult visibility -------------------------------------------------------------------
   const adultCount = () => db.get('SELECT COUNT(*) n FROM files WHERE adult=1 AND missing=0 AND ignored=0').n;
   h('adult:status', () => ({ showAdult, count: adultCount(), rootConfigured: (settings.get().roots || []).some(r => r.type === 'adult' && r.enabled) }));
-  h('adult:toggle', (on) => { showAdult = !!on; return { showAdult, count: adultCount() }; });
+  h('adult:toggle', (on) => { showAdult = scope.adult = !!on; return { showAdult, count: adultCount() }; });
 
   // ---- media requests (anyone may file one; the web shell fills requested_by from the account) ----
   const KINDS = ['movie', 'tv', 'anime', 'other'];
@@ -447,7 +466,7 @@ function createService({ userData, log, send, host }) {
 
   // ---- ratings ------------------------------------------------------------------------------
   h('ratings:list', () => {
-    const ur = new Map(db.userRatings().map(u => [u.library_type + '|' + u.title_key, u]));
+    const ur = new Map(db.userRatings(null, scope.user).map(u => [u.library_type + '|' + u.title_key, u]));
     const out = [];
     const plexShows = new Map(db.all('SELECT rating_key, user_rating, audience_rating, rating, leaf_count, viewed_leaf_count FROM plex_shows').map(s => [s.rating_key, s]));
     for (const t of ['tv', 'anime']) {
@@ -469,7 +488,7 @@ function createService({ userData, log, send, host }) {
     }
     return out;
   });
-  h('ratings:setUser', (type, key, title, stars, note) => db.setUserRating(type, key, title, stars == null || stars === '' ? null : Number(stars), note || null));
+  h('ratings:setUser', (type, key, title, stars, note) => db.setUserRating(type, key, title, stars == null || stars === '' ? null : Number(stars), note || null, scope.user));
 
   // ---- bulk source for the movie naming engine ----------------------------------------------
   h('override:bulkSource', (ids, source) => {
@@ -561,7 +580,7 @@ function createService({ userData, log, send, host }) {
     return {
       genres: genreRows, genresTitles: gm.size ? [...new Set([...gm.keys()].map(k => k.split('|')[1]))].length : 0,
       anime_audio: audio,
-      tags: db.allTags().slice(0, 12), tagged: db.get('SELECT COUNT(DISTINCT library_type || title_key) n FROM title_tags').n,
+      tags: db.allTags(scope.user).slice(0, 12), tagged: db.get('SELECT COUNT(DISTINCT library_type || title_key) n FROM title_tags WHERE user=?', scope.user).n,
       watched: { linked: watched.linked || 0, watched: watched.watched || 0 },
       pending: db.pendingRequests(), airingWeek: air.thisWeek, nextAiring: air.upcoming[0] || null, finishedIncomplete: air.finished.length,
       upgrades,
@@ -575,22 +594,22 @@ function createService({ userData, log, send, host }) {
       SUM(size) bytes, SUM(duration_s) seconds, SUM(CASE WHEN probe_ok=1 THEN 1 ELSE 0 END) probed,
       SUM(CASE WHEN has_captions=1 THEN 1 ELSE 0 END) captioned, SUM(CASE WHEN parse_ok=0 THEN 1 ELSE 0 END) unparsed,
       GROUP_CONCAT(DISTINCT resolution) resolutions, GROUP_CONCAT(DISTINCT video_codec) codecs, GROUP_CONCAT(DISTINCT audio_langs) audio_langs, GROUP_CONCAT(DISTINCT sub_langs) sub_langs,
-      MAX(last_seen) last_seen, SUM(CASE WHEN plex_view_count>0 THEN 1 ELSE 0 END) watched, MAX(plex_show_key) plex_show_key, SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) plex_linked,
+      MAX(last_seen) last_seen, SUM(CASE WHEN ${WATCHED()} THEN 1 ELSE 0 END) watched, MAX(plex_show_key) plex_show_key, SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) plex_linked,
       MIN(${FILE_ADDED}) added, MAX(${FILE_ADDED}) last_added, MAX(plex_last_viewed) last_viewed, MAX(height) height, CAST(AVG(bitrate_kbps) AS INTEGER) bitrate, SUM(COALESCE(plex_view_count,0)) plays,
       ${AUDIO_COUNTS}
     FROM files WHERE library_type=? AND missing=0 AND ignored=0${AF()} GROUP BY show_name ORDER BY show_name COLLATE NOCASE`, type);
     const plexShows = new Map(db.all('SELECT rating_key, user_rating, genres, year, audience_rating, rating, content_rating, released FROM plex_shows').map(s => [s.rating_key, s]));
-    const tagMap = db.tagsFor(type);
+    const tagMap = db.tagsFor(type, scope.user);
     const miss = new Map(missingSummary(type).map(m => [m.show_name, m]));
     const metas = db.allSeriesMeta(type);
-    const ur = new Map(db.userRatings(type).map(u => [u.title_key, u]));
+    const ur = new Map(db.userRatings(type, scope.user).map(u => [u.title_key, u]));
     return rows.map(r => { const m = miss.get(r.show_name); const sm = metas.get(r.show_name); const u = ur.get(r.show_name); const ps = r.plex_show_key ? plexShows.get(r.plex_show_key) : null; return { ...r, expected: m ? m.expected : 0, missing_count: m ? m.missing_count : 0, meta_source: m ? m.source : null, meta_status: m ? m.status : null, online_rating: sm ? sm.rating : null, my_rating: u ? u.stars : null, plex_user: ps ? ps.user_rating : null, year: ps ? ps.year : null, audience_rating: ps ? ps.audience_rating : null, critic_rating: ps ? ps.rating : null, content_rating: ps ? ps.content_rating || null : null, released: ps ? ps.released || null : null, next_airing: sm ? sm.next_airing || null : null, genres: onlineTags(sm).length ? onlineTags(sm) : onlineTags({ genres: ps && ps.genres }), audio_type: titleAudioType({ files: r.probed_audio, jpn: r.jpn_files, eng: r.eng_files, dual: r.dual_files }, { anime: type === 'anime' }), tags: tagMap.get(r.show_name) || [] }; });
   });
-  h('data:episodes', (type, show) => ({ tags: db.tagsOf(type, show), genres: onlineTags(db.getSeriesMeta(type, show)), files: db.all(`SELECT * FROM files WHERE library_type=? AND show_name=? AND ignored=0${AF()} ORDER BY missing, season, episode, file_name`, type, show), missing: missingSummary(type).find(m => m.show_name === show) || null }));
-  h('data:movies', () => { const movieTags = db.tagsFor('movie'); const mine = new Map(db.userRatings('movie').map(u => [u.title_key, u.stars])); return db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, SUM(size) bytes, MAX(duration_s) seconds,
+  h('data:episodes', (type, show) => ({ tags: db.tagsOf(type, show, scope.user), genres: onlineTags(db.getSeriesMeta(type, show)), files: db.all(`SELECT * FROM files WHERE library_type=? AND show_name=? AND ignored=0${AF()} ORDER BY missing, season, episode, file_name`, type, show), missing: missingSummary(type).find(m => m.show_name === show) || null }));
+  h('data:movies', () => { const movieTags = db.tagsFor('movie', scope.user); const mine = new Map(db.userRatings('movie', scope.user).map(u => [u.title_key, u.stars])); return db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, SUM(size) bytes, MAX(duration_s) seconds,
       GROUP_CONCAT(DISTINCT resolution) resolutions, GROUP_CONCAT(DISTINCT video_codec) codecs, GROUP_CONCAT(DISTINCT audio_langs) audio_langs, GROUP_CONCAT(DISTINCT sub_langs) sub_langs,
       MAX(has_captions) has_captions, SUM(CASE WHEN probe_ok=1 THEN 1 ELSE 0 END) probed, GROUP_CONCAT(edition_tag, ' | ') editions, MAX(plex_genres) plex_genres,
-      MAX(plex_view_count) watched_count, MAX(plex_user_rating) plex_user, SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) plex_linked, MAX(hdr) hdr,
+      MAX(CASE WHEN ${WATCHED()} THEN 1 ELSE 0 END) watched_count, MAX(plex_user_rating) plex_user, SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) plex_linked, MAX(hdr) hdr,
       MIN(${FILE_ADDED}) added, MAX(plex_last_viewed) last_viewed, MAX(height) height, MAX(bitrate_kbps) bitrate, MAX(plex_audience_rating) audience_rating, MAX(plex_view_offset_ms) offset_ms, MAX(plex_content_rating) content_rating, MIN(plex_released) released,
       ${AUDIO_COUNTS}
     FROM files WHERE library_type='movie' AND missing=0 AND ignored=0${AF()} GROUP BY group_key ORDER BY title COLLATE NOCASE, year`).map(r => ({ ...r, my_rating: mine.get(r.group_key) || null, genres: onlineTags({ genres: r.plex_genres }), audio_type: titleAudioType({ files: r.probed_audio, jpn: r.jpn_files, eng: r.eng_files, dual: r.dual_files }), tags: movieTags.get(r.group_key) || [] })); });
@@ -614,16 +633,16 @@ function createService({ userData, log, send, host }) {
   h('data:tonight', () => {
     const out = [];
     for (const type of ['tv', 'anime']) {
-      const tagMap = db.tagsFor(type), metas = db.allSeriesMeta(type), ur = new Map(db.userRatings(type).map(u => [u.title_key, u]));
+      const tagMap = db.tagsFor(type, scope.user), metas = db.allSeriesMeta(type), ur = new Map(db.userRatings(type, scope.user).map(u => [u.title_key, u]));
       const miss = new Map(missingSummary(type).map(m => [m.show_name, m]));
       const plexShows = new Map(db.all('SELECT rating_key, user_rating, genres FROM plex_shows').map(x => [x.rating_key, x]));
-      for (const r of db.all(`SELECT show_name, COUNT(*) episodes, SUM(duration_s) seconds, AVG(duration_s) avg_seconds, MAX(resolution) resolution, SUM(CASE WHEN plex_view_count>0 THEN 1 ELSE 0 END) watched, SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) plex_linked, MAX(plex_show_key) plex_show_key, MAX(first_seen) last_added, ${AUDIO_COUNTS} FROM files WHERE library_type=? AND missing=0 AND ignored=0${AF()} GROUP BY show_name`, type)) {
+      for (const r of db.all(`SELECT show_name, COUNT(*) episodes, SUM(duration_s) seconds, AVG(duration_s) avg_seconds, MAX(resolution) resolution, SUM(CASE WHEN ${WATCHED()} THEN 1 ELSE 0 END) watched, SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) plex_linked, MAX(plex_show_key) plex_show_key, MAX(first_seen) last_added, ${AUDIO_COUNTS} FROM files WHERE library_type=? AND missing=0 AND ignored=0${AF()} GROUP BY show_name`, type)) {
         const sm = metas.get(r.show_name), m = miss.get(r.show_name), u = ur.get(r.show_name), ps = r.plex_show_key ? plexShows.get(r.plex_show_key) : null;
         out.push({ kind: 'series', type, key: r.show_name, title: r.show_name, episodes: r.episodes, minutes: Math.round((r.avg_seconds || 0) / 60), total_minutes: Math.round((r.seconds || 0) / 60), watched: r.watched, unwatched: r.plex_linked ? r.episodes - r.watched : null, complete: m && m.expected ? m.missing_count === 0 : null, genres: onlineTags(sm).length ? onlineTags(sm) : onlineTags({ genres: ps && ps.genres }), audio_type: titleAudioType({ files: r.probed_audio, jpn: r.jpn_files, eng: r.eng_files, dual: r.dual_files }, { anime: type === 'anime' }), tags: tagMap.get(r.show_name) || [], my_rating: u ? u.stars : null, online_rating: sm ? sm.rating : null, plex_user: ps ? ps.user_rating : null, resolution: r.resolution, last_added: r.last_added });
       }
     }
-    const mt = db.tagsFor('movie'), mur = new Map(db.userRatings('movie').map(u => [u.title_key, u]));
-    for (const r of db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, MAX(duration_s) seconds, MAX(resolution) resolution, MAX(plex_view_count) watched_count, MAX(plex_user_rating) plex_user, MAX(plex_audience_rating) plex_audience, SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) plex_linked, MAX(plex_genres) plex_genres, MAX(first_seen) last_added, ${AUDIO_COUNTS} FROM files WHERE library_type='movie' AND missing=0 AND ignored=0${AF()} GROUP BY group_key`)) {
+    const mt = db.tagsFor('movie', scope.user), mur = new Map(db.userRatings('movie', scope.user).map(u => [u.title_key, u]));
+    for (const r of db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, MAX(duration_s) seconds, MAX(resolution) resolution, MAX(CASE WHEN ${WATCHED()} THEN 1 ELSE 0 END) watched_count, MAX(plex_user_rating) plex_user, MAX(plex_audience_rating) plex_audience, SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) plex_linked, MAX(plex_genres) plex_genres, MAX(first_seen) last_added, ${AUDIO_COUNTS} FROM files WHERE library_type='movie' AND missing=0 AND ignored=0${AF()} GROUP BY group_key`)) {
       const u = mur.get(r.group_key);
       out.push({ kind: 'movie', type: 'movie', key: r.group_key, title: r.title, year: r.year, minutes: Math.round((r.seconds || 0) / 60), total_minutes: Math.round((r.seconds || 0) / 60), watched: r.watched_count > 0 ? 1 : 0, unwatched: r.plex_linked ? (r.watched_count > 0 ? 0 : 1) : null, complete: true, genres: onlineTags({ genres: r.plex_genres }), audio_type: titleAudioType({ files: r.probed_audio, jpn: r.jpn_files, eng: r.eng_files, dual: r.dual_files }), tags: mt.get(r.group_key) || [], my_rating: u ? u.stars : null, online_rating: r.plex_audience != null ? r.plex_audience : null, plex_user: r.plex_user, resolution: r.resolution, last_added: r.last_added });
     }
@@ -705,7 +724,7 @@ function createService({ userData, log, send, host }) {
     const lowSql = Object.entries(thr).map(([res, k]) => `(resolution='${res.replace(/'/g, '')}' AND bitrate_kbps IS NOT NULL AND bitrate_kbps < ${Number(k) || 0})`).join(' OR ') || '0';
     const out = [];
     for (const type of ['tv', 'anime']) {
-      const metas = db.allSeriesMeta(type), ur = new Map(db.userRatings(type).map(u => [u.title_key, u]));
+      const metas = db.allSeriesMeta(type), ur = new Map(db.userRatings(type, scope.user).map(u => [u.title_key, u]));
       for (const r of db.all(`SELECT show_name, COUNT(*) files, SUM(size) bytes, GROUP_CONCAT(DISTINCT resolution) resolutions, SUM(COALESCE(plex_view_count,0)) plays, SUM(CASE WHEN plex_view_count>0 THEN 1 ELSE 0 END) watched, SUM(CASE WHEN ${lowSql} THEN 1 ELSE 0 END) low_bitrate, MAX(CASE WHEN hdr LIKE '%HDR%' OR hdr LIKE '%Dolby%' THEN 1 ELSE 0 END) hdr FROM files WHERE library_type=? AND missing=0 AND ignored=0 AND probe_ok=1${AF()} GROUP BY show_name`, type)) {
         const sm = metas.get(r.show_name), u = ur.get(r.show_name);
         const best = (r.resolutions || '').split(',').filter(Boolean).sort((a, b) => (RES_RANK[b] ?? -1) - (RES_RANK[a] ?? -1))[0] || null;
@@ -713,7 +732,7 @@ function createService({ userData, log, send, host }) {
         out.push({ ...t, score: upgradeScore(t), reasons: upgradeReasons(t) });
       }
     }
-    const mur = new Map(db.userRatings('movie').map(u => [u.title_key, u]));
+    const mur = new Map(db.userRatings('movie', scope.user).map(u => [u.title_key, u]));
     for (const r of db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, SUM(size) bytes, GROUP_CONCAT(DISTINCT resolution) resolutions, SUM(COALESCE(plex_view_count,0)) plays, MAX(plex_audience_rating) audience, SUM(CASE WHEN ${lowSql} THEN 1 ELSE 0 END) low_bitrate, MAX(CASE WHEN hdr LIKE '%HDR%' OR hdr LIKE '%Dolby%' THEN 1 ELSE 0 END) hdr FROM files WHERE library_type='movie' AND missing=0 AND ignored=0 AND probe_ok=1${AF()} GROUP BY group_key`)) {
       const u = mur.get(r.group_key);
       const best = (r.resolutions || '').split(',').filter(Boolean).sort((a, b) => (RES_RANK[b] ?? -1) - (RES_RANK[a] ?? -1))[0] || null;
@@ -741,7 +760,7 @@ function createService({ userData, log, send, host }) {
     const dups = db.get(`SELECT COUNT(*) n FROM (SELECT 1 FROM files WHERE missing=0 AND ignored=0 AND adult=0 AND library_type IN ('tv','anime') AND parse_ok=1 GROUP BY library_type, show_name, season, episode HAVING COUNT(*)>1)`).n;
     let lowBitrate = 0; try { lowBitrate = handlers.get('data:quality')().lowTotal; } catch { /* not yet */ }
     const health = q.total ? Math.max(0, 100 - Math.round(((q.unparsed || 0) + (q.probe_errors || 0) + (q.missing_files || 0)) / q.total * 100)) : null;
-    const row = { duplicates: dups, low_bitrate: lowBitrate, unparsed: q.unparsed || 0, probe_errors: q.probe_errors || 0, health, day: new Date().toISOString().slice(0, 10), ts: new Date().toISOString(), files: st.files, bytes: st.bytes, free_bytes: st.free_bytes, series_tv: n('tv'), series_anime: n('anime'), movies: n('movie', 'group_key'), missing_episodes: st.missing_episodes, watched_files: w.watched || 0, linked_files: w.linked || 0, pending_requests: st.pending_requests, tagged: db.get('SELECT COUNT(DISTINCT library_type || title_key) n FROM title_tags').n, captioned: w.captioned || 0 };
+    const row = { duplicates: dups, low_bitrate: lowBitrate, unparsed: q.unparsed || 0, probe_errors: q.probe_errors || 0, health, day: new Date().toISOString().slice(0, 10), ts: new Date().toISOString(), files: st.files, bytes: st.bytes, free_bytes: st.free_bytes, series_tv: n('tv'), series_anime: n('anime'), movies: n('movie', 'group_key'), missing_episodes: st.missing_episodes, watched_files: w.watched || 0, linked_files: w.linked || 0, pending_requests: st.pending_requests, tagged: db.get('SELECT COUNT(DISTINCT library_type || title_key) n FROM title_tags WHERE user=?', scope.user).n, captioned: w.captioned || 0 };
     db.saveSnapshot(row); return row;
   }
   // Subtitle audit: files with no subtitle track or sidecar in any wanted language. Sidecars count by name
@@ -889,11 +908,12 @@ function createService({ userData, log, send, host }) {
   });
 
   // ---- tags: your own words per title; genres come with the online match / Plex, sub/dub from the probe ----
-  h('tags:list', (type) => Object.fromEntries(db.tagsFor(type)));
-  h('tags:all', () => db.allTags());
-  h('tags:get', (type, key) => db.tagsOf(type, key));
-  h('tags:add', (type, key, tag) => { const t = normalizeTag(tag); if (!t) throw new Error('Empty tag'); return db.addTag(type, key, t); });
-  h('tags:remove', (type, key, tag) => db.removeTag(type, key, tag));
+  h('tags:list', (type) => Object.fromEntries(db.tagsFor(type, scope.user)));
+  h('tags:all', () => db.allTags(scope.user));
+  h('tags:get', (type, key) => db.tagsOf(type, key, scope.user));
+  h('tags:add', (type, key, tag) => { const t = normalizeTag(tag); if (!t) throw new Error('Empty tag'); return db.addTag(type, key, t, scope.user); });
+  h('tags:remove', (type, key, tag) => db.removeTag(type, key, tag, scope.user));
+  h('plex:accounts', () => db.all('SELECT id, name FROM plex_accounts ORDER BY name COLLATE NOCASE'));
 
   h('data:changes', (scanId, limit) => scanId ? db.changesForScan(scanId, limit || 5000) : db.recentChanges(limit || 500));
   h('data:changeStats', () => ({
@@ -936,7 +956,7 @@ function createService({ userData, log, send, host }) {
   return {
     get posters() { return posters; },
     notify: (event, title, message, extra) => notifier.send(event, title, message, extra),
-    init, shutdown, handlers, runScan, refreshMetadata, runPlexSync, exportDir, ffprobePath, setShowAdult: (v) => { showAdult = !!v; },
+    init, shutdown, handlers, runScan, refreshMetadata, runPlexSync, exportDir, ffprobePath, setShowAdult: (v) => { showAdult = scope.adult = !!v; }, setScope: (o) => { scope = { adult: false, libraries: null, maxRating: null, allowUnrated: true, user: '', plexAccount: null, ...(o || {}) }; showAdult = !!scope.adult; }, scope: () => ({ ...scope }),
     get settings() { return settings; }, get db() { return db; }, get scanner() { return scanner; },
     get scheduler() { return scheduler; }, get watcher() { return watcher; }, get metaJob() { return metaJob; },
   };

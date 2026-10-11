@@ -66,14 +66,30 @@ assert.strictEqual(sec.sessionOf(`ml_session=${ok.id}`).showAdult, true);
 for (let i = 0; i < 8; i++) sec.login('10.0.0.9', 'ua', { username: 'admin', password: 'bad' });
 assert.strictEqual(sec.login('10.0.0.9', 'ua', { username: 'admin', password: 'correct horse' }).reason, 'locked');
 assert.ok(sec.login('10.0.0.10', 'ua', { username: 'admin', password: 'correct horse' }).ok);
-// 2FA applies to admins only
-const setup = sec.totpSetup('pi');
+// 2FA is per account: the admin's code never applies to joe, and joe can have one of his own
+const setup = sec.totpSetup('pi', 'admin');
 assert.throws(() => sec.totpEnable('000000', '10.0.0.2', 'admin'), /did not match/);
 sec.totpEnable(totp.totp(setup.secret), '10.0.0.2', 'admin');
 assert.strictEqual(sec.login('10.0.0.3', 'ua', { username: 'admin', password: 'correct horse' }).reason, 'totp');
 assert.strictEqual(sec.login('10.0.0.3', 'ua', { username: 'admin', password: 'correct horse', code: '123456' }).reason, 'totp_bad');
 assert.ok(sec.login('10.0.0.3', 'ua', { username: 'admin', password: 'correct horse', code: totp.totp(setup.secret) }).ok);
-assert.ok(sec.login('10.0.0.3', 'ua', { username: 'joe', password: 'new joes password' }).ok, 'standard users sign in without a code');
+assert.ok(sec.login('10.0.0.3', 'ua', { username: 'joe', password: 'new joes password' }).ok, 'joe signs in without a code: the admin 2FA is not his');
+const joeSetup = sec.totpSetup('pi', 'joe'); sec.totpEnable(totp.totp(joeSetup.secret), '10.0.0.5', 'joe');
+assert.strictEqual(sec.login('10.0.0.3', 'ua', { username: 'joe', password: 'new joes password' }).reason, 'totp', 'now joe needs his code');
+assert.ok(sec.login('10.0.0.3', 'ua', { username: 'joe', password: 'new joes password', code: totp.totp(joeSetup.secret) }).ok);
+assert.ok(sec.totpEnabledFor('joe') && sec.totpEnabledFor('admin'));
+// permissions: a role preset, then what an admin sets; kids are held to a rating and never get capabilities
+assert.deepStrictEqual(sec.permsOf('joe').can, { scan: false, requests: false, collections: false, fixes: false, metadata: false, tags: true });
+assert.strictEqual(sec.permsOf('joe').adult, false); assert.strictEqual(sec.permsOf('admin').adult, true); assert.strictEqual(sec.permsOf('admin').libraries, null);
+sec.setPerms('joe', { libraries: ['tv', 'anime', 'bogus'], adult: true, maxRating: 'PG-13', can: { scan: true, requests: true }, plexAccount: '7' }, '10.0.0.2', 'admin');
+const jp = sec.permsOf('joe');
+assert.deepStrictEqual([jp.libraries, jp.adult, jp.maxRating, jp.allowUnrated, jp.can.scan, jp.can.requests, jp.can.fixes, jp.plexAccount], [['tv', 'anime'], true, 'PG-13', true, true, true, false, 7]);
+assert.throws(() => sec.setPerms('joe', { maxRating: 'X' }, '10.0.0.2', 'admin'), /rating limit/);
+sec.addUser('kid', 'kids password', 'kids', '10.0.0.2', 'admin');
+sec.setPerms('kid', { adult: true, maxRating: 'R', can: { scan: true } }, '10.0.0.2', 'admin');
+const kp = sec.permsOf('kid'); assert.deepStrictEqual([kp.adult, kp.maxRating, kp.allowUnrated, kp.can.scan, kp.can.tags], [false, 'R', false, false, false], 'a kids account can be given a higher limit but never adult content or capabilities');
+sec.setRole('kid', 'standard', '10.0.0.2', 'admin'); assert.strictEqual(sec.permsOf('kid').can.scan, true, 'as a standard user the saved capabilities apply');
+sec.deleteUser('kid', '10.0.0.2', 'admin');
 // own password change keeps the current session, drops the user's others
 const mine = sec.sessionOf(`ml_session=${ok.id}`);
 const adminSessionsBefore = Object.values(sec.state.sessions).filter(x => x.user === 'admin').length;
@@ -86,7 +102,7 @@ assert.ok(sec.isAllowedIp('8.8.8.8') && sec.guestEnabled());
 sec.setOptions({ lanOnly: true, guestEnabled: false }, '10.0.0.2', 'admin');
 assert.ok(!sec.isAllowedIp('8.8.8.8') && sec.isAllowedIp('192.168.1.5'));
 const st = sec.status(sec.sessionOf(`ml_session=${ok.id}`));
-assert.ok(st.totpEnabled && st.users.length === 2 && st.me.username === 'admin' && st.sessions.some(x => x.current) && st.events.some(e => e.event === 'ip_locked') && st.banned.length === 1);
+assert.ok(st.totpEnabled && st.users.length === 2 && st.me.username === 'admin' && st.me.perms.adult && st.users.find(u => u.username === 'joe').perms.maxRating === 'PG-13' && st.sessions.some(x => x.current) && st.events.some(e => e.event === 'ip_locked') && st.banned.length === 1);
 // persisted with tight permissions
 const again = createSecurity({ dataDir: dir });
 assert.ok(again.sessionOf(`ml_session=${ok.id}`), 'sessions survive a restart');

@@ -339,7 +339,7 @@ views.issues = async (which = 'problems') => {
 // ---- Requests: ask for media to be added ---------------------------------------------
 views.requests = async () => {
   const list = await L.requests.list();
-  const isAdmin = me.role === 'admin';
+  const isAdmin = me.role === 'admin' || !!(me.perms && me.perms.can && me.perms.can.requests); // handling requests is a capability
   const KIND = { movie: 'Movie', tv: 'TV show', anime: 'Anime', other: 'Other' };
   const STATUS = { pending: ['warn', 'Pending'], approved: ['', 'Approved'], added: ['ok', 'Added'], rejected: ['bad', 'Declined'] };
   const pending = list.filter(r => r.status === 'pending').length;

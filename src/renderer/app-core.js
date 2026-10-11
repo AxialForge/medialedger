@@ -226,9 +226,9 @@ async function refreshBadges() {
     const m = $('#missingCount'); m.textContent = d.missingEpisodes.episodes.toLocaleString(); m.hidden = !d.missingEpisodes.episodes;
     const du = $('#dupCount'); du.textContent = d.duplicates; du.hidden = !d.duplicates;
     $('#navRename').style.opacity = s.renaming.enabled ? '' : '.45';
-    try { const a = await L.adult.status(); $('#adultSwitch').hidden = !a.rootConfigured || a.canToggle === false; $('#navAdult').hidden = !(a.rootConfigured && a.showAdult); $('#showAdult').checked = a.showAdult; const ac = $('#adultCount'); ac.textContent = a.count.toLocaleString(); ac.hidden = !a.count; } catch { /* ignore */ }
+    try { const a = await L.adult.status(); const allowed = !L.isWeb || !me || me.role === 'admin' || !!(me.perms && me.perms.adult); $('#adultSwitch').hidden = !a.rootConfigured || a.canToggle === false || !allowed; $('#navAdult').hidden = !(a.rootConfigured && a.showAdult); $('#showAdult').checked = a.showAdult; $('#adultSwitch').classList.toggle('on', !!a.showAdult); const ac = $('#adultCount'); ac.textContent = a.count.toLocaleString(); ac.hidden = !a.count; } catch { /* ignore */ }
     try { const { plan } = await L.movie.plan(); const n = plan.filter(p => p.ok && !p.unchanged).length; const mp = $('#movieNameCount'); mp.textContent = n.toLocaleString(); mp.hidden = !n; } catch { /* ignore */ }
-    try { if (me.role === 'admin') { const rq = await L.requests.list(); const n = rq.filter(r => r.status === 'pending').length; const rp = $('#reqCount'); rp.textContent = n; rp.hidden = !n; } } catch { /* ignore */ }
+    try { if (me.role === 'admin' || (me.perms && me.perms.can && me.perms.can.requests)) { const rq = await L.requests.list(); const n = rq.filter(r => r.status === 'pending').length; const rp = $('#reqCount'); rp.textContent = n; rp.hidden = !n; } } catch { /* ignore */ }
     const w = $('#watchLine'); w.hidden = !d.watch.enabled; w.textContent = d.watch.enabled ? `Watching ${d.watch.roots.length} root(s)${d.watch.pending ? ` · ${d.watch.pending} change(s) pending` : ''}` : '';
   } catch { /* ignore */ }
 }
@@ -250,8 +250,17 @@ const loadPrefs = async () => { try { prefs = (await L.prefs.get()) || {}; } cat
 const applyQuery = (tb, table) => { if (routeQuery.q) { const inp = $('input[type=search]', tb); if (inp) { inp.value = routeQuery.q; table.setQuery(routeQuery.q); } } };
 async function loadMe() {
   try { me = await L.security.me(); } catch { /* desktop or pre-login */ }
-  document.body.classList.remove('role-admin', 'role-standard', 'role-guest');
+  document.body.classList.remove('role-admin', 'role-standard', 'role-guest', 'role-kids');
   document.body.classList.add('role-' + (me.role || 'admin'));
+  // The sidebar follows the account: libraries it may not see are gone, and so are pages its abilities do not cover.
+  const p = me.perms || {};
+  for (const [lib, view] of [['tv', 'tv'], ['anime', 'anime'], ['movie', 'movies'], ['web', 'web']]) { const a = document.querySelector(`.sidebar a[data-view="${view}"]`); if (a) a.hidden = !!(p.libraries && !p.libraries.includes(lib)); }
+  document.body.classList.toggle('cap-requests', me.role === 'admin' || !!(p.can && p.can.requests));
+  document.body.classList.toggle('cap-fixes', me.role === 'admin' || !!(p.can && p.can.fixes));
+  document.body.classList.toggle('cap-scan', me.role === 'admin' || !!(p.can && p.can.scan));
+  document.body.classList.toggle('cap-collections', me.role === 'admin' || !!(p.can && p.can.collections));
+  document.body.classList.toggle('cap-metadata', me.role === 'admin' || !!(p.can && p.can.metadata));
+  document.body.classList.toggle('cap-tags', me.role === 'admin' || !!(p.can && p.can.tags));
   const line = $('#accountLine');
   if (!L.isWeb) { line.hidden = true; return; }
   line.hidden = false;

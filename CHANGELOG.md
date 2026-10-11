@@ -8,6 +8,37 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [3.1.0] - 2026-10-12
+
+### Added
+
+- **Permissions per account** (web server): an administrator sets, for each
+  standard account, which libraries it sees, whether it may switch adult
+  content on, a content-rating limit (G, PG, PG-13 or R, with TV ratings
+  mapped to the same levels; unrated titles optionally hidden), what it may
+  also do (run scans, handle requests, edit collections, fix files, match
+  series, keep tags), and which Plex account its "watched" follows. A
+  **Who can do what** table on the Security page shows it all at once.
+- **Kids role**: browse and Watch tonight only, always held to a content
+  rating (PG unless raised), never adult content, no extra abilities.
+- **Your account** page for standard and kids accounts: change the password,
+  set up or turn off their own two-factor codes, and see what the account
+  may do.
+- **Two-factor codes per account.** Each user sets up their own; an admin's
+  existing code is carried over to each admin account.
+- **Ratings and tags per account** (schema v16). Standard and kids accounts
+  rate and tag for themselves; admins and the desktop share the owner's set,
+  so nothing already entered moves.
+- **Watched as a Plex account**: with an account mapped, the TV, Anime,
+  Movies and Watch tonight pages count "watched" from that account's play
+  history instead of the server's.
+
+### Changed
+
+- The adult-content switch at the bottom of the sidebar is a proper toggle,
+  and only appears for accounts allowed adult content.
+- A standard account's Security link opens its own account page.
+
 ## [3.0.0] - 2026-10-12
 
 A major release: the desktop can be a client of the Pi, duplicates can be

@@ -27,7 +27,17 @@ const LOCK_FAILS = 8;         // failures per IP …
 const LOCK_WINDOW_MS = 15 * 60000; // … within this window …
 const LOCK_MS = 15 * 60000;   // … ban the IP for this long
 const MIN_PASSWORD = 8;
-const ROLES = ['admin', 'standard'];
+const ROLES = ['admin', 'standard', 'kids'];
+// What an account may do beyond its role's pages. Each key is a group of channels the web server opens up.
+const CAPS = ['scan', 'requests', 'collections', 'fixes', 'metadata', 'tags'];
+const LIBRARIES = ['tv', 'anime', 'movie', 'web'];
+const RATINGS = ['G', 'PG', 'PG-13', 'R'];
+// Role presets: what a new account of that role gets, and what a kids account is held to whatever is ticked.
+const PRESET = {
+  admin: { libraries: null, adult: true, maxRating: null, allowUnrated: true, can: Object.fromEntries(CAPS.map(c => [c, true])) },
+  standard: { libraries: null, adult: false, maxRating: null, allowUnrated: true, can: { scan: false, requests: false, collections: false, fixes: false, metadata: false, tags: true } },
+  kids: { libraries: null, adult: false, maxRating: 'PG', allowUnrated: false, can: { scan: false, requests: false, collections: false, fixes: false, metadata: false, tags: false } },
+};
 const USERNAME_RE = /^[a-z0-9][a-z0-9._-]{1,31}$/;
 
 /** Private / local address? Loopback, RFC 1918, link-local, CGNAT, IPv6 ULA + link-local. */
@@ -57,6 +67,8 @@ function createSecurity({ dataDir, log = () => {} }) {
     state = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(webFile, 'utf8')) };
     state.totp = { ...DEFAULTS.totp, ...(state.totp || {}) }; state.sessions = state.sessions || {}; state.users = state.users || {}; state.webhook = { ...DEFAULTS.webhook, ...(state.webhook || {}) };
     for (const [k, v] of Object.entries(state.sessions)) if (!v || !v.lastSeen || !v.user) delete state.sessions[k]; // pre-1.1 sessions have no user
+    // Before 3.1 one two-factor secret covered every admin. It becomes each admin's own, so standard users can have theirs.
+    if (state.totp && state.totp.enabled && !state.totp.migrated) { for (const u of Object.values(state.users)) if (u.role === 'admin' && !u.totp) u.totp = { enabled: true, secret: state.totp.secret }; state.totp = { ...state.totp, migrated: true }; try { fs.writeFileSync(webFile, JSON.stringify(state, null, 2), { mode: 0o600 }); } catch { /* next save */ } }
   } catch { /* first run */ }
   // 1.0 → 1.1: the single password becomes the "admin" account.
   if (state.passwordHash && !Object.keys(state.users).length) { state.users.admin = { hash: state.passwordHash, role: 'admin', created: Date.now() }; }
@@ -86,18 +98,37 @@ function createSecurity({ dataDir, log = () => {} }) {
   // Per-account preferences (card colour rules, editor level, dashboard layouts). Guests read the first admin's.
   function getPrefs(name) { const u = name ? state.users[normUser(name)] : null; const src = u || Object.values(state.users).find(x => x.role === 'admin'); return (src && src.prefs) || {}; }
   function setPrefs(name, patch) { const u = state.users[normUser(name)]; if (!u) throw new Error('No such user'); u.prefs = { ...(u.prefs || {}), ...(patch || {}) }; for (const k of Object.keys(u.prefs)) if (u.prefs[k] === null) delete u.prefs[k]; save(); return u.prefs; }
-  function listUsers() { return Object.entries(state.users).map(([name, u]) => ({ username: name, role: u.role, created: u.created, lastLogin: u.lastLogin || null, sessions: Object.values(state.sessions).filter(s => s.user === name).length })).sort((a, b) => a.username.localeCompare(b.username)); }
+  /** The effective permissions of an account: the role's preset, then what an admin set on it. Kids never get adult or capabilities. */
+  function permsOf(name) {
+    const u = state.users[normUser(name)]; if (!u) return { ...PRESET.standard };
+    const base = PRESET[u.role] || PRESET.standard, p = u.perms || {};
+    const out = { libraries: Array.isArray(p.libraries) ? p.libraries.filter(l => LIBRARIES.includes(l)) : base.libraries, adult: u.role === 'admin' ? true : u.role === 'kids' ? false : !!p.adult, maxRating: u.role === 'admin' ? null : (RATINGS.includes(p.maxRating) ? p.maxRating : (p.maxRating === null ? null : base.maxRating)), allowUnrated: u.role === 'admin' ? true : (p.allowUnrated == null ? base.allowUnrated : !!p.allowUnrated), can: { ...base.can, ...(u.role === 'admin' || u.role === 'kids' ? {} : (p.can || {})) }, plexAccount: p.plexAccount == null ? null : Number(p.plexAccount) };
+    if (u.role === 'kids') out.maxRating = out.maxRating || 'PG';
+    return out;
+  }
+  function setPerms(name, patch, ip, by) {
+    const u = normUser(name); const user = state.users[u]; if (!user) throw new Error('No such user');
+    const p = { ...(user.perms || {}) }, x = patch || {};
+    if ('libraries' in x) p.libraries = x.libraries == null ? null : [...new Set((Array.isArray(x.libraries) ? x.libraries : []).filter(l => LIBRARIES.includes(l)))];
+    if ('adult' in x) p.adult = !!x.adult;
+    if ('maxRating' in x) { if (x.maxRating != null && !RATINGS.includes(x.maxRating)) throw new Error('The rating limit must be G, PG, PG-13 or R'); p.maxRating = x.maxRating == null ? null : x.maxRating; }
+    if ('allowUnrated' in x) p.allowUnrated = !!x.allowUnrated;
+    if ('can' in x && x.can && typeof x.can === 'object') p.can = Object.fromEntries(CAPS.map(c => [c, c in x.can ? !!x.can[c] : !!((p.can || {})[c])]));
+    if ('plexAccount' in x) p.plexAccount = x.plexAccount == null || x.plexAccount === '' ? null : Number(x.plexAccount);
+    user.perms = p; save(); audit('perms_changed', ip, `${u}: ${JSON.stringify(permsOf(u))}`, by); return permsOf(u);
+  }
+  function listUsers() { return Object.entries(state.users).map(([name, u]) => ({ username: name, role: u.role, created: u.created, lastLogin: u.lastLogin || null, sessions: Object.values(state.sessions).filter(s => s.user === name).length, perms: permsOf(name), totp: !!(u.totp && u.totp.enabled) })).sort((a, b) => a.username.localeCompare(b.username)); }
   function addUser(name, password, role, ip, by) {
     const u = normUser(name);
     if (!USERNAME_RE.test(u)) throw new Error('Username: 2–32 characters, letters, digits, dot, dash or underscore');
     if (state.users[u]) throw new Error('That username already exists');
-    if (!ROLES.includes(role)) throw new Error('Role must be admin or standard');
+    if (!ROLES.includes(role)) throw new Error('Role must be admin, standard or kids');
     if (!password || password.length < MIN_PASSWORD) throw new Error(`Password must be at least ${MIN_PASSWORD} characters`);
     state.users[u] = { hash: hashPassword(password), role, created: Date.now() }; save(); audit('user_added', ip, `${u} (${role})`, by); return true;
   }
   function setRole(name, role, ip, by) {
     const u = normUser(name); if (!state.users[u]) throw new Error('No such user');
-    if (!ROLES.includes(role)) throw new Error('Role must be admin or standard');
+    if (!ROLES.includes(role)) throw new Error('Role must be admin, standard or kids');
     if (state.users[u].role === 'admin' && role !== 'admin' && adminCount() === 1) throw new Error('That is the last admin');
     state.users[u].role = role; for (const s of Object.values(state.sessions)) if (s.user === u) s.role = role; save(); audit('role_changed', ip, `${u} → ${role}`, by); return true;
   }
@@ -148,12 +179,13 @@ function createSecurity({ dataDir, log = () => {} }) {
     if (!hasUsers()) return { ok: false, reason: 'nopassword' };
     const u = normUser(username); const user = state.users[u];
     if (!user || !checkHash(String(password || ''), user.hash)) { failed(ip); audit('login_failed', ip, user ? 'wrong password' : 'unknown user', u || null); return { ok: false, reason: 'password' }; }
-    if (state.totp.enabled && user.role === 'admin') {
+    const tf = user.totp && user.totp.enabled && user.totp.secret;
+    if (tf) {
       if (!code) return { ok: false, reason: 'totp' }; // password right, now ask for the code
-      if (!totp.verify(state.totp.secret, code)) { failed(ip); audit('login_failed', ip, 'wrong 2FA code', u); return { ok: false, reason: 'totp_bad' }; }
+      if (!totp.verify(user.totp.secret, code)) { failed(ip); audit('login_failed', ip, 'wrong 2FA code', u); return { ok: false, reason: 'totp_bad' }; }
     }
     fails.delete(ip);
-    return { ok: true, role: user.role, username: u, twoFactor: !!(state.totp.enabled && user.role === 'admin') };
+    return { ok: true, role: user.role, username: u, twoFactor: !!tf };
   }
   function login(ip, ua, creds) {
     const v = verify(ip, creds); if (!v.ok) return v;
@@ -182,16 +214,19 @@ function createSecurity({ dataDir, log = () => {} }) {
   }
 
   // ---- two-factor (admins) ----
-  function totpSetup(account) { const secret = totp.newSecret(); state.totp.pending = secret; save(); return { secret, url: totp.otpauthUrl(secret, account) }; }
+  // Two-factor codes are per account (3.1): each user sets up and keeps their own.
+  const totpOf = (name) => { const u = state.users[normUser(name)]; if (!u) throw new Error('No such user'); u.totp = u.totp || { enabled: false, secret: null, pending: null }; return u.totp; };
+  function totpSetup(account, user) { const t = totpOf(user); const secret = totp.newSecret(); t.pending = secret; save(); return { secret, url: totp.otpauthUrl(secret, account) }; }
   function totpEnable(code, ip, by) {
-    if (!state.totp.pending) throw new Error('Start 2FA setup first');
-    if (!totp.verify(state.totp.pending, code)) throw new Error('That code did not match; check the phone clock and try again');
-    state.totp = { enabled: true, secret: state.totp.pending, pending: null }; save(); audit('2fa_enabled', ip, 'applies to admin sign-ins', by); return true;
+    const t = totpOf(by); if (!t.pending) throw new Error('Start 2FA setup first');
+    if (!totp.verify(t.pending, code)) throw new Error('That code did not match; check the phone clock and try again');
+    Object.assign(t, { enabled: true, secret: t.pending, pending: null }); save(); audit('2fa_enabled', ip, '', by); return true;
   }
   function totpDisable(s, password, ip) {
     if (!checkHash(String(password || ''), state.users[s.user].hash)) { failed(ip); throw new Error('Password is wrong'); }
-    state.totp = { enabled: false, secret: null, pending: null }; save(); audit('2fa_disabled', ip, '', s.user); return true;
+    Object.assign(totpOf(s.user), { enabled: false, secret: null, pending: null }); save(); audit('2fa_disabled', ip, '', s.user); return true;
   }
+  const totpEnabledFor = (name) => { const u = state.users[normUser(name || '')]; return !!(u && u.totp && u.totp.enabled); };
 
   // ---- options ----
   function setOptions({ lanOnly, idleMinutes, guestEnabled }, ip, by) {
@@ -216,8 +251,8 @@ function createSecurity({ dataDir, log = () => {} }) {
   function status(current, extra = {}) {
     prune();
     return {
-      passwordSet: hasUsers(), totpEnabled: state.totp.enabled, totpPending: !!state.totp.pending, lanOnly: state.lanOnly, idleMinutes: state.idleMinutes, guestEnabled: state.guestEnabled,
-      me: current ? { username: current.user, role: current.role } : null,
+      passwordSet: hasUsers(), totpEnabled: current ? totpEnabledFor(current.user) : false, totpPending: !!(current && state.users[current.user] && state.users[current.user].totp && state.users[current.user].totp.pending), lanOnly: state.lanOnly, idleMinutes: state.idleMinutes, guestEnabled: state.guestEnabled,
+      me: current ? { username: current.user, role: current.role, perms: permsOf(current.user) } : null, caps: CAPS, libraries: LIBRARIES, ratings: RATINGS,
       users: listUsers(),
       sessions: Object.entries(state.sessions).map(([id, s]) => ({ id: shortId(id), current: current && id === current.id, user: s.user, role: s.role, created: s.created, lastSeen: s.lastSeen, expires: s.expires, ip: s.ip, ua: s.ua })).sort((a, b) => b.lastSeen - a.lastSeen),
       events: recent.slice(-100).reverse(),
@@ -233,9 +268,9 @@ function createSecurity({ dataDir, log = () => {} }) {
   return {
     get state() { return state; }, audit, isBanned, isAllowedIp, verify, login, logout, sessionOf, setSessionFlag, cookieFor, clearCookie,
     setPassword, hasPassword: hasUsers, changePassword, needsReauth, reauth, totpSetup, totpEnable, totpDisable, setOptions, status, revoke, revokeOthers,
-    listUsers, addUser, setRole, resetPassword, deleteUser, userOf, guestEnabled: () => state.guestEnabled, statusKey, statusOk, getPrefs, setPrefs,
-    webhookSet, webhookOk, webhook: () => state.webhook, totpEnabled: () => !!state.totp.enabled,
+    listUsers, addUser, setRole, resetPassword, deleteUser, userOf, guestEnabled: () => state.guestEnabled, statusKey, statusOk, getPrefs, setPrefs, permsOf, setPerms,
+    webhookSet, webhookOk, webhook: () => state.webhook, totpEnabled: () => Object.values(state.users).some(u => u.role === 'admin' && u.totp && u.totp.enabled), totpEnabledFor,
   };
 }
 
-module.exports = { createSecurity, isPrivateIp, hashPassword, checkHash, MIN_PASSWORD, ROLES };
+module.exports = { createSecurity, isPrivateIp, hashPassword, checkHash, MIN_PASSWORD, ROLES, CAPS, LIBRARIES, RATINGS };

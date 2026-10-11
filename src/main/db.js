@@ -392,6 +392,19 @@ const MIGRATIONS = [
       ALTER TABLE snapshots ADD COLUMN health INTEGER;         -- 0-100, the dashboard's Library health on that day
     `,
   },
+  {
+    version: 16, name: 'ratings and tags per user',
+    sql: `
+      -- user '' is the owner's set (the desktop, and every admin on the web server); other accounts have their own.
+      CREATE TABLE user_ratings_v16 (id INTEGER PRIMARY KEY, library_type TEXT NOT NULL, title_key TEXT NOT NULL, title TEXT, stars REAL, note TEXT, updated TEXT, user TEXT NOT NULL DEFAULT '', UNIQUE(library_type, title_key, user));
+      INSERT INTO user_ratings_v16 (id, library_type, title_key, title, stars, note, updated) SELECT id, library_type, title_key, title, stars, note, updated FROM user_ratings;
+      DROP TABLE user_ratings; ALTER TABLE user_ratings_v16 RENAME TO user_ratings;
+      CREATE TABLE title_tags_v16 (id INTEGER PRIMARY KEY, library_type TEXT NOT NULL, title_key TEXT NOT NULL, tag TEXT NOT NULL, created TEXT, user TEXT NOT NULL DEFAULT '', UNIQUE(library_type, title_key, tag, user));
+      INSERT INTO title_tags_v16 (id, library_type, title_key, tag, created) SELECT id, library_type, title_key, tag, created FROM title_tags;
+      DROP TABLE title_tags; ALTER TABLE title_tags_v16 RENAME TO title_tags;
+      CREATE INDEX IF NOT EXISTS idx_title_tags ON title_tags(library_type, title_key);
+    `,
+  },
 ];
 
 class Db {
@@ -521,18 +534,18 @@ class Db {
   }
   deleteSeriesMeta(type, show) { return this.run('DELETE FROM series_meta WHERE library_type=? AND show_name=?', type, show).changes; }
   // ---- custom title tags ----------------------------------------------------
-  tagsFor(type) { const m = new Map(); for (const r of this.all('SELECT title_key, tag FROM title_tags WHERE library_type=? ORDER BY tag COLLATE NOCASE', type)) { if (!m.has(r.title_key)) m.set(r.title_key, []); m.get(r.title_key).push(r.tag); } return m; }
-  tagsOf(type, key) { return this.all('SELECT tag FROM title_tags WHERE library_type=? AND title_key=? ORDER BY tag COLLATE NOCASE', type, key).map(r => r.tag); }
-  allTags() { return this.all('SELECT tag, COUNT(*) n FROM title_tags GROUP BY tag ORDER BY n DESC, tag COLLATE NOCASE').map(r => ({ tag: r.tag, n: r.n })); }
-  addTag(type, key, tag) { this.run('INSERT OR IGNORE INTO title_tags (library_type, title_key, tag, created) VALUES (?,?,?,?)', type, key, tag, new Date().toISOString()); return this.tagsOf(type, key); }
-  removeTag(type, key, tag) { this.run('DELETE FROM title_tags WHERE library_type=? AND title_key=? AND tag=? COLLATE NOCASE', type, key, tag); return this.tagsOf(type, key); }
+  tagsFor(type, user = '') { const m = new Map(); for (const r of this.all('SELECT title_key, tag FROM title_tags WHERE library_type=? AND user=? ORDER BY tag COLLATE NOCASE', type, user)) { if (!m.has(r.title_key)) m.set(r.title_key, []); m.get(r.title_key).push(r.tag); } return m; }
+  tagsOf(type, key, user = '') { return this.all('SELECT tag FROM title_tags WHERE library_type=? AND title_key=? AND user=? ORDER BY tag COLLATE NOCASE', type, key, user).map(r => r.tag); }
+  allTags(user = '') { return this.all('SELECT tag, COUNT(*) n FROM title_tags WHERE user=? GROUP BY tag ORDER BY n DESC, tag COLLATE NOCASE', user).map(r => ({ tag: r.tag, n: r.n })); }
+  addTag(type, key, tag, user = '') { this.run('INSERT OR IGNORE INTO title_tags (library_type, title_key, tag, created, user) VALUES (?,?,?,?,?)', type, key, tag, new Date().toISOString(), user); return this.tagsOf(type, key, user); }
+  removeTag(type, key, tag, user = '') { this.run('DELETE FROM title_tags WHERE library_type=? AND title_key=? AND tag=? COLLATE NOCASE AND user=?', type, key, tag, user); return this.tagsOf(type, key, user); }
   // ---- user ratings ---------------------------------------------------------
-  setUserRating(type, key, title, stars, note) {
-    this.run(`INSERT INTO user_ratings (library_type, title_key, title, stars, note, updated) VALUES (?,?,?,?,?,?)
-      ON CONFLICT(library_type, title_key) DO UPDATE SET title=excluded.title, stars=excluded.stars, note=excluded.note, updated=excluded.updated`, type, key, title, stars, note, new Date().toISOString());
-    return this.get('SELECT * FROM user_ratings WHERE library_type=? AND title_key=?', type, key);
+  setUserRating(type, key, title, stars, note, user = '') {
+    this.run(`INSERT INTO user_ratings (library_type, title_key, title, stars, note, updated, user) VALUES (?,?,?,?,?,?,?)
+      ON CONFLICT(library_type, title_key, user) DO UPDATE SET title=excluded.title, stars=excluded.stars, note=excluded.note, updated=excluded.updated`, type, key, title, stars, note, new Date().toISOString(), user);
+    return this.get('SELECT * FROM user_ratings WHERE library_type=? AND title_key=? AND user=?', type, key, user);
   }
-  userRatings(type) { return type ? this.all('SELECT * FROM user_ratings WHERE library_type=?', type) : this.all('SELECT * FROM user_ratings'); }
+  userRatings(type, user = '') { return type ? this.all('SELECT * FROM user_ratings WHERE library_type=? AND user=?', type, user) : this.all('SELECT * FROM user_ratings WHERE user=?', user); }
 
   // ---- movie rename batches ------------------------------------------------
   createBatch(mode, layout, note) { return Number(this.run('INSERT INTO rename_batches (ts, mode, layout, status, note) VALUES (?,?,?,?,?)', new Date().toISOString(), mode, layout, 'running', note || null).lastInsertRowid); }

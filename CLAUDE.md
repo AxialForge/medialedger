@@ -253,6 +253,15 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 - **Moving duplicates aside is a rename batch** (`layout: 'duplicates'`), so `movieRename.undoBatch` reverses it and
   the Movie names page lists it. Moved files are marked `ignored=1`, not deleted; a scan treats `_duplicates/` as
   any other folder, which is why the mark matters.
+- **Every core query that lists titles goes through `AF()` and `WATCHED()`.** `AF()` is no longer just the adult
+  clause: it carries the caller's libraries and content-rating limit, set per request by `svc.setScope()` from the
+  account's permissions (`sec.permsOf`). A new `FROM files` query that forgets `${AF()}` leaks hidden libraries to a
+  limited account. `WATCHED()` swaps `plex_view_count>0` for one Plex account's history when the account is mapped.
+  `remember()` keys its cache by the whole scope, not just adult, or one user's view would be served to another.
+- **Ratings and tags carry a `user` column** ('' = the owner's set: the desktop and every admin). Any new
+  `db.userRatings` / `db.tagsFor` call must pass `scope.user`, or it reads the owner's set for everyone.
+- **Capabilities are enforced in `allowed()`**, not in the page. The CSS `cap-*` classes only hide buttons; the server
+  decides. Adding a channel a capability should open means adding it to `CAP_CHANNELS` in server.js.
 - **`X-Forwarded-For` is believed only from loopback** (`src/server/clientip.js`). Trusting it from any socket would let
   a LAN client pick its own address and walk around LAN-only and the lockout.
 - **The dashboard editor must not reload data per edit.** `dash.js` re-renders on every move, resize and option
