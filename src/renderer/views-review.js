@@ -232,6 +232,27 @@ views.missing = async () => {
   $('#refreshAll').onclick = async () => { toast('Re-checking all unlocked series in the background…'); L.meta.refresh({ onlyNew: false }); };
 };
 
+// ---- Subtitles: files with no subtitle track or sidecar in a wanted language, by title, with where to look ----
+views.subtitles = async () => {
+  const s = await L.data.subtitles();
+  const osl = (t) => `https://www.opensubtitles.org/en/search2/sublanguageid-${encodeURIComponent(s.wanted[0] || 'eng')}/moviename-${encodeURIComponent((t.title || '').replace(/\s+/g, '+'))}`;
+  view.innerHTML = `<h1>Subtitles</h1>
+    <p class="lead">Files that have no subtitles in <b>${esc(s.wanted.join(', '))}</b>, neither as a track inside the file nor as a sidecar beside it (<span class="mono">Show.S01E01.en.srt</span>). Change the wanted languages under Settings, Episodes and quality. <b>Find</b> opens a search on OpenSubtitles for the title; subtitle files you add are picked up by the next scan.</p>
+    <div class="tiles compact">${tile(s.lacking ? 'warnt' : 'okt', 'Files without subtitles', s.lacking, `of ${s.total.toLocaleString()} probed`)}${tile('', 'Titles affected', s.titles.length)}${tile('okt', 'Covered', s.have.toLocaleString(), `${pct(s.have, s.total)}% of files`)}${s.unknown ? tile('', 'Sidecars without a language', s.unknown, 'name them Show.S01E01.en.srt to count') : ''}</div>`;
+  const cols = [
+    { key: 'library_type', label: 'Library', render: r => `<span class="badge ${r.library_type}">${typeName(r.library_type)}</span>` },
+    { key: 'title', label: 'Title', cls: 'wrap', render: r => `<a href="${r.library_type === 'movie' ? '#movies/' + encodeURIComponent(r.title_key) : '#' + r.library_type + '/' + encodeURIComponent(r.title_key)}">${esc(r.title || '')}</a>${r.year ? ` <span class="muted">(${r.year})</span>` : ''}` },
+    { key: 'files', label: 'Files without', num: true },
+    { key: 'episodes', label: 'Which', cls: 'wrap', sortVal: r => r.files, render: r => r.library_type === 'movie' ? '' : esc(r.episodes.length > 12 ? `${r.episodes.slice(0, 12).join(', ')} … (${r.episodes.length})` : r.episodes.join(', ')) },
+    { key: 'audio', label: 'Audio', render: r => esc(r.audio.join(' ')) },
+    { key: 'bytes', label: 'Size', num: true, render: r => fmtBytes(r.bytes) },
+    { key: 'id', label: '', cls: 'rowacts', render: r => `<a class="small ext" href="#" data-url="${esc(osl(r))}">Find</a>` },
+  ];
+  const t = makeTable(s.titles, cols, { search: r => r.title || '', defaultSort: { key: 'files', asc: false } });
+  view.append(searchToolbar(t, s.titles.length), t.node);
+  t.node.addEventListener('click', e => { const a = e.target.closest('a.ext'); if (a) { e.preventDefault(); L.openExternal(a.dataset.url); } });
+};
+
 views.duplicates = async () => {
   const groups = await L.data.duplicates();
   const decided = groups.filter(g => g.decided).length;
@@ -244,6 +265,7 @@ views.duplicates = async () => {
       ${tile('', 'Space in extras', fmtBytes(wasted), 'size of all but the largest file per episode')}
       ${tile('okt', 'Decided', decided, `${groups.length - decided} still to review`)}
     </div>
+    <div class="card" style="margin:12px 0"><h3>One sweep</h3><p class="muted">Two steps, each asks first. <b>Keep the best copy everywhere</b> marks the keeper in every undecided group by resolution, then bitrate, then the smaller file. <b>Move the discards aside</b> moves every discarded file into a <span class="mono">_duplicates</span> folder at the top of its root (nothing is deleted; the move is a batch you can undo on the Movie names page). Moving needs the renaming switch on, and your password.</p><div class="inline"><button class="small" id="dupBest" ${groups.some(g => !g.decided) ? '' : 'disabled'}>Keep the best copy everywhere</button><button class="small" id="dupMove">Move the discards aside…</button><span class="muted tiny" id="dupPlanLine"></span></div></div>
     <div class="toolbar" style="margin-top:12px"><input type="search" id="dupq" placeholder="Filter by series…"><label class="inline small"><input type="checkbox" id="hideDecided"> Hide decided</label><span class="muted small" id="dupCountLine"></span></div>
     <div id="dupList"></div>`;
   const order = ['4K', '1440p', '1080p', '720p', '576p', '480p', 'SD'];
@@ -261,6 +283,16 @@ views.duplicates = async () => {
   };
   render();
   $('#dupq').oninput = render; $('#hideDecided').onchange = render;
+  const planLine = async () => { try { const p = await L.dup.plan(); $('#dupPlanLine').textContent = p.items.length ? `${p.items.length} discarded file${p.items.length === 1 ? '' : 's'} · ${fmtBytes(p.bytes)}${p.live ? '' : ' · renaming is switched off'}` : 'nothing is marked as a discard yet'; $('#dupMove').disabled = !p.items.length; } catch { /* ignore */ } };
+  planLine();
+  $('#dupBest').onclick = async () => { if (!confirm('Mark the best copy as the keeper in every undecided group? Nothing moves yet; you can change any choice afterwards.')) return; try { const r = await L.dup.keepBest(); toast(`${r.decided} group${r.decided === 1 ? '' : 's'} decided`); views.issues('duplicates'); } catch (e) { toast(e.message, true); } };
+  $('#dupMove').onclick = async () => {
+    const p = await L.dup.plan(); if (!p.items.length) return toast('Nothing is marked as a discard', true);
+    if (!p.live) return toast('Turn on renaming under Settings, Renaming first; moving uses the same switch', true);
+    const card = openModal(`<h2>Move ${p.items.length} discarded file${p.items.length === 1 ? '' : 's'} aside</h2><p class="muted">Each goes to <span class="mono">_duplicates\\…</span> inside its root, keeping its folder path, and is marked ignored in the library. ${fmtBytes(p.bytes)} in total. A batch per root; undo on the Movie names page.</p><div class="preview" style="max-height:260px;overflow:auto">${p.items.slice(0, 200).map(i => `<div>${esc(i.show)} ${sxe(i)} <span class="muted">${esc(i.from)}</span></div>`).join('')}${p.items.length > 200 ? `<div class="muted">… and ${p.items.length - 200} more</div>` : ''}</div><div class="actions"><span class="grow"></span><button id="dmCancel">Cancel</button><button class="danger" id="dmGo">Move them</button></div>`);
+    $('#dmCancel', card).onclick = closeModal;
+    $('#dmGo', card).onclick = async () => { $('#dmGo', card).disabled = true; const out = []; for (const root of p.roots) { try { const r = await L.dup.moveDiscards(root); out.push(`${root}: ${r.done} moved${r.failed ? `, ${r.failed} failed` : ''} (batch #${r.batchId})`); } catch (e) { out.push(`${root}: ${e.message}`); } } closeModal(); toast(out.join(' · '), out.some(x => /failed|Error|off/i.test(x))); views.issues('duplicates'); };
+  };
   $('#dupList').addEventListener('click', async e => {
     const k = e.target.closest('.dupkeep'); if (k) { await L.dup.keep(k.dataset.root, k.dataset.rel, Number(k.dataset.id)); return views.duplicates(); }
     const c = e.target.closest('.dupclear'); if (c) { await L.dup.clear(c.dataset.root, c.dataset.rel); return views.duplicates(); }
@@ -295,11 +327,12 @@ views.quality = async () => {
 
 // ---- Issues: problems and duplicates on one page ------------------------------------
 views.issues = async (which = 'problems') => {
-  if (which === 'duplicates') await views.duplicates(); else await views.problems();
-  const bar = el(`<div class="toolbar" style="margin:-6px 0 12px"><button class="${which === 'problems' ? 'primary' : ''}" id="issTabP">Problems</button><button class="${which === 'duplicates' ? 'primary' : ''}" id="issTabD">Duplicates</button><span class="muted tiny">Problems: names, probe errors, missing files, fixes. Duplicates: episodes that exist as several files.</span></div>`);
+  if (which === 'duplicates') await views.duplicates(); else if (which === 'subtitles') await views.subtitles(); else await views.problems();
+  const bar = el(`<div class="toolbar" style="margin:-6px 0 12px"><button class="${which === 'problems' ? 'primary' : ''}" id="issTabP">Problems</button><button class="${which === 'duplicates' ? 'primary' : ''}" id="issTabD">Duplicates</button><button class="${which === 'subtitles' ? 'primary' : ''}" id="issTabS">Subtitles</button><span class="muted tiny">Problems: names, probe errors, missing files, fixes. Duplicates: episodes that exist as several files. Subtitles: files without the languages you want.</span></div>`);
   const h1 = view.querySelector('h1'); h1.textContent = 'Issues'; h1.after(bar);
   $('#issTabP').onclick = () => { location.hash = '#issues/problems'; };
   $('#issTabD').onclick = () => { location.hash = '#issues/duplicates'; };
+  $('#issTabS').onclick = () => { location.hash = '#issues/subtitles'; };
   document.querySelectorAll('.sidebar a').forEach(a => a.classList.toggle('active', a.dataset.view === 'issues'));
 };
 

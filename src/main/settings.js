@@ -38,6 +38,7 @@ const DEFAULTS = {
     truth: 'parser',          // parser | plex  — where Title/Year come from
     parts: ['source', 'resolution', 'hdr', 'codec', 'audio', 'edition'], // what follows "Title (Year) -", in order; drop entries to leave them out
   },
+  subtitles: { wanted: 'eng' }, // the subtitle languages a file should have (ISO 639-2 codes, comma separated); the audit lists files without one
   quality: {                  // low-bitrate thresholds in kbps by resolution label
     minKbps: { '4K': 6000, '1440p': 3000, '1080p': 1500, '720p': 700, '576p': 400, '480p': 350, SD: 250 },
   },

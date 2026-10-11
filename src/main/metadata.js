@@ -200,4 +200,5 @@ function applyCollectPolicy(res, pref) {
   return { ...out, missing, missingCount: missing.reduce((a, m) => a + m.missing.length, 0), policy: 'from' };
 }
 
-module.exports = { applyCollectPolicy, lookupSeries, fetchById, searchCandidates, missingEpisodes, cleanTitle, similarity };
+const anilistById = (id) => anilist(ANILIST_BY_ID, { id: Number(id) });
+module.exports = { applyCollectPolicy, lookupSeries, fetchById, searchCandidates, missingEpisodes, cleanTitle, similarity, getJson, anilistById };

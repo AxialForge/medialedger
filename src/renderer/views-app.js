@@ -88,9 +88,9 @@ views.log = async () => {
 
 const SETTINGS_GROUPS = [
   ['Library', 'Where the files are and how they are read', ['Library roots', 'Network shares', 'Scanning', 'ffprobe', 'Folder watch', 'Adult content']],
-  ['Episodes and quality', 'What counts as complete and as good enough', ['Expected episodes', 'Quality thresholds', 'Posters']],
+  ['Episodes and quality', 'What counts as complete and as good enough', ['Expected episodes', 'Quality thresholds', 'Subtitles', 'Posters']],
   ['Automation', 'What runs by itself and what it tells you', ['Schedules', 'Notifications', 'Updates']],
-  ['Connections', 'Other programs MediaLedger talks to', ['Plex', 'CSV export']],
+  ['Connections', 'Other programs MediaLedger talks to', ['Plex', 'CSV export', 'Desktop']],
   ['Renaming', 'Changes to file names on the share', ['Renaming']],
   ['Backup and data', 'The database, its backups and restore', ['Data']],
   ['Appearance', 'How this device shows MediaLedger', ['Appearance']],
@@ -167,8 +167,14 @@ views.settings = async () => {
       <div class="field"><label>Include in CSV exports</label><input type="checkbox" id="adultCsv" ${s.adult.exportCsv ? 'checked' : ''}><div class="hint">Off by default: adult roots are left out of every CSV. In the app they are hidden until the "Show adult content" switch in the sidebar is on; the switch resets each launch.</div></div>
       <div class="field"><label>When unsure, treat as</label><select id="adultDefault"><option value="anime" ${s.adult.defaultSubtype === 'anime' ? 'selected' : ''}>Anime</option><option value="tv" ${s.adult.defaultSubtype === 'tv' ? 'selected' : ''}>TV</option></select><div class="hint">Adult roots classify each file as anime, TV or movie from its folder and name. Files that match none of the patterns fall back to this.</div></div>
 
+      <h2>Subtitles</h2>
+      <div class="field"><label>Wanted languages</label><input type="text" id="subWanted" value="${esc((s.subtitles || {}).wanted || 'eng')}" placeholder="eng, jpn"><div class="hint">Three-letter codes, comma separated. A file counts as covered when it has a subtitle track or a sidecar (<span class="mono">Show.S01E01.en.srt</span>) in any of them. The audit is under Issues, Subtitles.</div></div>
+
       <h2>Quality thresholds</h2>
       <div class="field"><label>Minimum bitrate (kbps)</label><div class="inline" id="thr">${Object.entries(s.quality.minKbps).map(([k, v]) => `<label class="inline small">${esc(k)} <input type="number" min="0" data-res="${esc(k)}" value="${v}" style="width:74px"></label>`).join('')}</div><div class="hint">Files below these values for their resolution are listed under Quality → Low-bitrate files.</div></div>
+
+      ${!L.isWeb || L.isDesktopClient ? `<h2>Desktop</h2>
+      <div class="field"><label>Use a server instead</label><div id="clientBox"><p class="muted">Loading…</p></div><div class="hint">The desktop application can show a MediaLedger server's pages instead of keeping its own library: one database, one set of fixes, and the desktop still opens folders in Explorer through a path mapping. Switching restarts the application. The server's certificate is remembered on first contact.</div></div>` : ''}
 
       <h2>CSV export</h2>
       <div class="field"><label>Output folder</label><div class="inline"><input type="text" id="csvDir" style="flex:1" placeholder="${esc(info.exportDir)}" value="${esc(s.csvOutputDir)}"><button class="small" id="pickCsv">Browse…</button><button class="small" id="openCsv">Open</button></div></div>
@@ -217,6 +223,7 @@ views.settings = async () => {
       <div class="inline" style="margin-top:18px"><button class="primary" id="save">Save settings</button></div>
     </div>`;
   groupSettings($('.form', view));
+  if ($('#clientBox')) paintClient($('#clientBox')).catch(e => { $('#clientBox').innerHTML = `<p class="muted">${esc(e.message)}</p>`; });
   if ($('#sharesBox')) paintShares($('#sharesBox')).catch(e => { $('#sharesBox').innerHTML = `<p class="muted">${esc(e.message)}</p>`; });
 
   const rootsBody = $('#roots');
@@ -297,6 +304,7 @@ views.settings = async () => {
       metadata: { ...s.metadata, enabled: $('#metaOn').checked, refreshDays: Number($('#metaDays').value) || 14 },
       watchFolders: $('#watchOn').checked, rootCheckMinutes: Number($('#rootCheckMin').value) || 0, watchSettleSeconds: Number($('#watchSettle').value) || 90,
       renaming: { ...s.renaming, enabled: $('#renOn').checked },
+      subtitles: { wanted: $('#subWanted').value.trim() || 'eng' },
       adult: { exportCsv: $('#adultCsv').checked, defaultSubtype: $('#adultDefault').value },
       quality: { minKbps: Object.fromEntries([...document.querySelectorAll('#thr input[data-res]')].map(i => [i.dataset.res, Number(i.value) || 0])) },
       plex: { enabled: $('#plexOn').checked, everyHours: Math.max(0, Number($('#plexEvery').value) || 0), baseUrl: $('#plexUrl').value.trim(), token: $('#plexToken').value.trim(), pathMap: [...document.querySelectorAll('#plexMap .inline')].map(r => ({ plex: $('.pm-plex', r).value.trim(), local: $('.pm-local', r).value.trim() })).filter(m => m.plex && m.local) },
@@ -369,6 +377,25 @@ async function downloadFfmpeg(msgEl, progEl, barEl, after) {
   try { const r = await L.ffmpeg.download(); toast('ffprobe installed: ' + r.version); after && after(); }
   catch (e) { toast('Download failed: ' + e.message, true); msgEl.textContent = e.message; }
   finally { progEl.hidden = true; if (ffDlUnsub) { ffDlUnsub(); ffDlUnsub = null; } }
+}
+
+// ---- The desktop as a client of a server (connect-to-server mode) ----
+async function paintClient(box) {
+  const api = L.client; const c = await api.get();
+  if (!c.available) { box.innerHTML = '<p class="muted">Only the desktop application can connect to a server.</p>'; return; }
+  const maps = (c.pathMap || []).length ? c.pathMap : [{ server: '/mnt/medialedger/', local: '\\\\server\\share\\' }];
+  box.innerHTML = `<p>${c.mode === 'server' ? `Showing <b>${esc(c.url)}</b>. This computer's own library is not in use.` : 'Using this computer\'s own library.'}</p>
+    <div class="inline" style="margin:6px 0"><input type="text" id="clUrl" value="${esc(c.url || '')}" placeholder="https://medialedger.home" style="width:320px"></div>
+    <div class="muted tiny">Path mapping, so Explorer can open a file the server names (server path → path from this PC):</div>
+    <table class="roots-table" id="clMaps"><thead><tr><th>On the server</th><th>From this PC</th><th></th></tr></thead><tbody>${maps.map(m => `<tr><td><input type="text" class="cm-s" value="${esc(m.server)}"></td><td><input type="text" class="cm-l" value="${esc(m.local)}"></td><td><button class="small cm-del">✕</button></td></tr>`).join('')}</tbody></table>
+    <div class="inline" style="margin-top:8px"><button class="small" id="clAddMap">Add mapping</button><span class="grow"></span>${c.mode === 'server' ? '<button class="small" id="clLocal">Use this computer\'s library</button>' : ''}<button class="primary small" id="clConnect">${c.mode === 'server' ? 'Save and reconnect' : 'Connect to the server'}</button></div>`;
+  const rowHtml = () => el('<tr><td><input type="text" class="cm-s" placeholder="/mnt/medialedger/Media"></td><td><input type="text" class="cm-l" placeholder="\\\\192.168.1.204\\Media"></td><td><button class="small cm-del">✕</button></td></tr>');
+  const wire = () => box.querySelectorAll('.cm-del').forEach(b => { b.onclick = () => b.closest('tr').remove(); });
+  wire();
+  $('#clAddMap', box).onclick = () => { $('#clMaps tbody', box).append(rowHtml()); wire(); };
+  const collectMaps = () => [...box.querySelectorAll('#clMaps tbody tr')].map(tr => ({ server: $('.cm-s', tr).value.trim(), local: $('.cm-l', tr).value.trim() })).filter(m => m.server && m.local);
+  $('#clConnect', box).onclick = async () => { const url = $('#clUrl', box).value.trim(); if (!url) return toast('Type the server address', true); if (!confirm(`Connect this desktop to ${url}? The application restarts and shows the server's pages. This computer's own library stays on disk and can be used again from the same place.`)) return; try { await api.set({ url, pathMap: collectMaps() }); toast('Restarting…'); } catch (e) { toast(e.message, true); } };
+  if ($('#clLocal', box)) $('#clLocal', box).onclick = async () => { if (!confirm('Go back to this computer\'s own library? The application restarts.')) return; try { await api.set({ url: '', pathMap: collectMaps() }); toast('Restarting…'); } catch (e) { toast(e.message, true); } };
 }
 
 // ---- System: host health and hardware ------------------------------------------------

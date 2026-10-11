@@ -14,7 +14,7 @@ const OUT = path.resolve(process.argv[2]);
 const SHOTS = path.join(OUT, 'screenshots');
 const pkg = require(path.join(L.REPO, 'package.json'));
 const V = pkg.version;
-const BUILD = process.env.BUILD_DATE || '2026-09-30';
+const BUILD = process.env.BUILD_DATE || '2026-10-12';
 const DOC = new Date().toISOString().slice(0, 10);
 const byId = Object.fromEntries(screens.map(s => [s.id, s]));
 const shot = (id, caption, annotated = true, o) => picture(path.join(SHOTS, `${id}_${annotated ? 'annotated' : 'clean'}.png`), caption, o);
@@ -95,12 +95,12 @@ body.push(...bullets(byId['48_theme_example'].features));
 
 // ---------------------------------------------------------------- 4 one section per page
 const chapters = [
-  ['3. Library', ['02_dashboard', '03_dashboard_edit', '04_dashboard_add_card', '05_dashboard_card_options', '06_tv_shows', '07_poster_wall', '07b_poster_hover', '08_series_page', '09_movies', '10_movie_page', '11_web_videos', '12_adult']],
-  ['4. Review', ['13_missing', '14_match_dialog', '15_collect_dialog', '16_issues_problems', '17_fix_dialog', '18_issues_duplicates', '19_quality', '20_upgrades', '21_reclaim', '22_ratings', '23_watch_tonight', '24_watched', '25_requests', '26_request_phone_page']],
+  ['3. Library', ['02_dashboard', '03_dashboard_edit', '04_dashboard_add_card', '05_dashboard_card_options', '06_tv_shows', '07_poster_wall', '07b_poster_hover', '08_series_page', '09_movies', '10_movie_page', '11_web_videos', '12_adult', '58_collections', '59_collection']],
+  ['4. Review', ['13_missing', '14_match_dialog', '15_collect_dialog', '16_issues_problems', '17_fix_dialog', '18_issues_duplicates', '61_issues_subtitles', '19_quality', '20_upgrades', '21_reclaim', '22_ratings', '23_watch_tonight', '24_watched', '25_requests', '26_request_phone_page']],
   ['5. Maintenance', ['27_change_log', '28_movie_names', '29_rename_tv_anime', '30_rename_confirm', '31_csv_export']],
   ['6. Application', ['32_system', '33_family_portal_admin', '34_family_invite_created', '35_log', '36_security', '37_two_factor_setup', '47_about']],
   ['7. Settings', ['38_settings_appearance_roots', '38b_settings_network_shares', '46b_connect_share', '39_settings_scanning', '44_settings', '40_settings_schedules', '41_settings_data_posters', '45_restore_dialog', '46_folder_browser', '42_settings_updates_notifications', '43_settings_plex']],
-  ['8. The family portal', ['50_portal_library', '51_portal_title', '52_portal_tonight', '53_portal_requests', '54_portal_settings', '55_portal_admin_requests', '56_portal_admin_invites', '57_portal_admin_status']],
+  ['8. The family portal', ['50_portal_library', '51_portal_title', '52_portal_tonight', '53_portal_requests', '67_portal_request_lookup', '65_portal_sets', '54_portal_settings', '55_portal_admin_requests', '56_portal_admin_invites', '57_portal_admin_status']],
 ];
 const intro = {
   '3. Library': 'What you have. The Dashboard summarises it; the list pages show it title by title.',

@@ -178,4 +178,4 @@ function undoBatch(db, batchId, log = () => {}) {
   return { batchId, undone, failed: results.filter(r => !r.ok).length, results };
 }
 
-module.exports = { runBatch, undoBatch, preflight, targetFor, sampleHash };
+module.exports = { runBatch, undoBatch, preflight, targetFor, sampleHash, moveVerified };

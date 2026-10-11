@@ -48,7 +48,7 @@ function createService({ userData, log, send, host }) {
   // Every call that can change what the library looks like bumps `dataVersion`; read-only calls do not. Expensive
   // reports (the dashboard) are answered from memory while the version stands and the answer is under a minute old.
   let dataVersion = 0;
-  const READS = /^(data:|app:|collections:(list|get|search)$|scan:(status|list)$|jobs:(list|overdue)$|posters:(status|index|get)$|prefs:get$|log:|roots:(last|check|listDirs)$|meta:(get|status|search)$|plex:(status|test)$|tags:(list|all|get)$|ratings:list$|requests:list$|override:(list|suggest)$|movie:(plan|batches|batchItems)$|rename:(proposals|history|dry)$|export:list$|collect:get$|db:(stats|backups|restoreList)$|sys:|schedule:(taskStatus|nextInApp)$|update:|adult:status$|settings:get$|web:|notify:test$)/;
+  const READS = /^(data:|app:|collections:(list|get|search|suggest)$|dup:plan$|scan:(status|list)$|jobs:(list|overdue)$|posters:(status|index|get)$|prefs:get$|log:|roots:(last|check|listDirs)$|meta:(get|status|search)$|plex:(status|test)$|tags:(list|all|get)$|ratings:list$|requests:list$|override:(list|suggest)$|movie:(plan|batches|batchItems)$|rename:(proposals|history|dry)$|export:list$|collect:get$|db:(stats|backups|restoreList)$|sys:|schedule:(taskStatus|nextInApp)$|update:|adult:status$|settings:get$|web:|notify:test$)/;
   const h = (ch, fn) => handlers.set(ch, READS.test(ch) ? fn : (...a) => { dataVersion++; return fn(...a); });
   const remember = (ch, ttlMs, fn) => { const memo = new Map(); h(ch, (...a) => { const key = `${showAdult ? 1 : 0}|${JSON.stringify(a)}`; const hit = memo.get(key); if (hit && hit.v === dataVersion && !scanner.running && Date.now() - hit.t < ttlMs) return hit.r; const r = fn(...a); if (!(r && typeof r.then === 'function')) { if (memo.size > 8) memo.clear(); memo.set(key, { v: dataVersion, t: Date.now(), r }); } return r; }); };
 
@@ -357,6 +357,37 @@ function createService({ userData, log, send, host }) {
     return planMovieNames(rows.map(r => ({ ...r, truth, parts })));
   }
   h('movie:plan', () => ({ plan: moviePlan(), lock: renameLock, settings: settings.get().movieRename }));
+  // ---- duplicate wizard: pick the best copy of every undecided episode, then move the discards aside ----
+  const RES_RANK = ['4K', '1440p', '1080p', '720p', '576p', '480p', 'SD'];
+  const bestOf = (files) => files.slice().sort((a, b) => ((RES_RANK.indexOf(a.resolution) + 1 || 99) - (RES_RANK.indexOf(b.resolution) + 1 || 99)) || ((b.bitrate_kbps || 0) - (a.bitrate_kbps || 0)) || ((a.size || 0) - (b.size || 0)))[0];
+  h('dup:keepBest', () => { let n = 0; for (const g of handlers.get('data:duplicates')()) { if (g.decided) continue; const b = bestOf(g.files); handlers.get('dup:keep')(b.root_id, b.rel_path, b.id); n++; } return { decided: n }; });
+  // What a move would do: every discarded file (keep=0 in a decided group), where it goes, per root.
+  const discardPlan = () => { const cfg = settings.get(); const out = []; for (const g of handlers.get('data:duplicates')()) { if (!g.decided) continue; for (const f of g.files) { if (f.keep !== 0) continue; const root = cfg.roots.find(r => r.id === f.root_id); if (!root) continue; const to_rel = path.join('_duplicates', f.rel_path); out.push({ id: f.id, root_id: f.root_id, rootPath: root.path, rel_path: f.rel_path, abs_path: f.abs_path, size: f.size, name: f.file_name, from: f.rel_path, to_rel, to_abs: path.join(root.path, to_rel), show: g.show_name, season: g.season, episode: g.episode }); } } return out; };
+  h('dup:plan', () => { const items = discardPlan(); return { items: items.map(i => ({ id: i.id, root_id: i.root_id, show: i.show, season: i.season, episode: i.episode, from: i.from, to: i.to_rel, size: i.size })), bytes: items.reduce((a, i) => a + (i.size || 0), 0), roots: [...new Set(items.map(i => i.root_id))], live: !!settings.get().renaming.enabled }; });
+  h('dup:moveDiscards', async (rootId) => {
+    const cfg = settings.get();
+    if (!cfg.renaming.enabled) throw new Error('Moving files is switched off. Turn on renaming under Settings, Renaming first; moving the discards uses the same switch.');
+    if (renameLock) throw new Error('Another batch is still running'); if (scanner.running) throw new Error('A scan is running; wait for it to finish');
+    const items = discardPlan().filter(i => i.root_id === rootId); if (!items.length) throw new Error('No discarded files in that root');
+    renameLock = { rootId, since: new Date().toISOString() };
+    try {
+      const batchId = db.createBatch('live', 'duplicates', `discards of ${items.length} duplicate episodes moved to _duplicates`);
+      let done = 0, failed = 0; const results = [];
+      for (const it of items) {
+        const itemId = db.addBatchItem({ batch_id: batchId, file_id: it.id, root_id: it.root_id, from_rel: it.rel_path, to_rel: it.to_rel, from_abs: it.abs_path, to_abs: it.to_abs, size: it.size, status: 'pending' });
+        try {
+          if (fs.existsSync(it.to_abs)) throw new Error('a file with that name is already in _duplicates');
+          fs.mkdirSync(path.dirname(it.to_abs), { recursive: true });
+          movieRename.moveVerified(it.abs_path, it.to_abs, it.size);
+          db.transaction(() => { db.run('UPDATE files SET rel_path=?, abs_path=?, ignored=1 WHERE id=?', it.to_rel, it.to_abs, it.id); db.run('UPDATE overrides SET rel_path=? WHERE root_id=? AND rel_path=?', it.to_rel, it.root_id, it.rel_path); db.updateBatchItem(itemId, { status: 'done', ts: new Date().toISOString() }); });
+          done++; results.push({ id: it.id, from: it.from, to: it.to_rel, ok: true }); log(`duplicate moved "${it.rel_path}" -> "${it.to_rel}"`);
+        } catch (e) { failed++; db.updateBatchItem(itemId, { status: 'failed', error: e.message, ts: new Date().toISOString() }); results.push({ id: it.id, from: it.from, to: it.to_rel, ok: false, error: e.message }); log(`duplicate move FAILED "${it.rel_path}": ${e.message}`); }
+      }
+      db.finishBatch(batchId, { status: failed ? 'stopped' : 'done', planned: items.length, done, failed });
+      return { batchId, done, failed, results };
+    } finally { renameLock = null; db.checkpoint(); }
+  });
+
   h('movie:run', async (ids, opts) => {
     const cfg = settings.get();
     if (opts.live && !cfg.movieRename.enabled) throw new Error('Live renaming is switched off in this tab. Turn on "Allow live renames" first.');
@@ -706,9 +737,27 @@ function createService({ userData, log, send, host }) {
     const st = handlers.get('data:status')();
     const w = db.get(`SELECT SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) linked, SUM(CASE WHEN plex_view_count>0 THEN 1 ELSE 0 END) watched, SUM(CASE WHEN has_captions=1 THEN 1 ELSE 0 END) captioned FROM files WHERE missing=0 AND ignored=0 AND adult=0`);
     const n = (t, col = 'show_name') => db.get(`SELECT COUNT(DISTINCT ${col}) n FROM files WHERE library_type=? AND missing=0 AND ignored=0 AND adult=0`, t).n;
-    const row = { day: new Date().toISOString().slice(0, 10), ts: new Date().toISOString(), files: st.files, bytes: st.bytes, free_bytes: st.free_bytes, series_tv: n('tv'), series_anime: n('anime'), movies: n('movie', 'group_key'), missing_episodes: st.missing_episodes, watched_files: w.watched || 0, linked_files: w.linked || 0, pending_requests: st.pending_requests, tagged: db.get('SELECT COUNT(DISTINCT library_type || title_key) n FROM title_tags').n, captioned: w.captioned || 0 };
+    const q = db.get(`SELECT SUM(CASE WHEN parse_ok=0 THEN 1 ELSE 0 END) unparsed, SUM(CASE WHEN probed_at IS NOT NULL AND probe_ok=0 THEN 1 ELSE 0 END) probe_errors, SUM(missing) missing_files, COUNT(*) total FROM files WHERE ignored=0 AND adult=0`);
+    const dups = db.get(`SELECT COUNT(*) n FROM (SELECT 1 FROM files WHERE missing=0 AND ignored=0 AND adult=0 AND library_type IN ('tv','anime') AND parse_ok=1 GROUP BY library_type, show_name, season, episode HAVING COUNT(*)>1)`).n;
+    let lowBitrate = 0; try { lowBitrate = handlers.get('data:quality')().lowTotal; } catch { /* not yet */ }
+    const health = q.total ? Math.max(0, 100 - Math.round(((q.unparsed || 0) + (q.probe_errors || 0) + (q.missing_files || 0)) / q.total * 100)) : null;
+    const row = { duplicates: dups, low_bitrate: lowBitrate, unparsed: q.unparsed || 0, probe_errors: q.probe_errors || 0, health, day: new Date().toISOString().slice(0, 10), ts: new Date().toISOString(), files: st.files, bytes: st.bytes, free_bytes: st.free_bytes, series_tv: n('tv'), series_anime: n('anime'), movies: n('movie', 'group_key'), missing_episodes: st.missing_episodes, watched_files: w.watched || 0, linked_files: w.linked || 0, pending_requests: st.pending_requests, tagged: db.get('SELECT COUNT(DISTINCT library_type || title_key) n FROM title_tags').n, captioned: w.captioned || 0 };
     db.saveSnapshot(row); return row;
   }
+  // Subtitle audit: files with no subtitle track or sidecar in any wanted language. Sidecars count by name
+  // ("Show.S01E01.en.srt" carries "en"); a sidecar with no language tag counts as unknown, listed separately.
+  h('data:subtitles', () => {
+    const wanted = String((settings.get().subtitles || {}).wanted || 'eng').toLowerCase().split(/[,\s;]+/).filter(Boolean);
+    const two = { eng: 'en', jpn: 'ja', spa: 'es', fra: 'fr', fre: 'fr', ger: 'de', deu: 'de', ita: 'it', por: 'pt', rus: 'ru', kor: 'ko', chi: 'zh', zho: 'zh', ara: 'ar', nld: 'nl', dut: 'nl', swe: 'sv', pol: 'pl', tur: 'tr' };
+    const codes = new Set(wanted.flatMap(w => [w, two[w] || w.slice(0, 2)]));
+    const rows = db.all(`SELECT id, library_type, show_name, season, episode, movie_title, movie_year, group_key, file_name, rel_path, abs_path, root_id, sub_langs, sidecar_subs, sub_count, audio_langs, size FROM files WHERE missing=0 AND ignored=0 AND probe_ok=1${AF()}`);
+    const has = (f) => { const embedded = String(f.sub_langs || '').toLowerCase().split(/[;,]/).filter(Boolean); if (embedded.some(l => codes.has(l))) return 'yes'; const side = String(f.sidecar_subs || '').split(';').filter(x => /\.(srt|ass|ssa|sub|idx|vtt|sup)$/i.test(x)); for (const s of side) { const m = /\.([a-z]{2,3})(?:\.(?:forced|sdh|hi))?\.[a-z]+$/i.exec(s); if (m && codes.has(m[1].toLowerCase())) return 'yes'; } if (side.length && !side.some(s => /\.[a-z]{2,3}(?:\.(?:forced|sdh|hi))?\.[a-z]+$/i.test(s))) return 'unknown'; return 'no'; };
+    const lacking = [], unknown = []; let have = 0;
+    for (const f of rows) { const h = has(f); if (h === 'yes') have++; else (h === 'unknown' ? unknown : lacking).push(f); }
+    const byTitle = new Map();
+    for (const f of lacking) { const key = f.library_type === 'movie' ? `movie|${f.group_key}` : `${f.library_type}|${f.show_name}`; if (!byTitle.has(key)) byTitle.set(key, { library_type: f.library_type, title_key: f.library_type === 'movie' ? f.group_key : f.show_name, title: f.library_type === 'movie' ? f.movie_title : f.show_name, year: f.movie_year, files: 0, bytes: 0, episodes: [], audio: new Set() }); const t = byTitle.get(key); t.files++; t.bytes += f.size || 0; if (f.library_type !== 'movie') t.episodes.push(f.season != null && f.episode != null ? `S${String(f.season).padStart(2, '0')}E${String(f.episode).padStart(2, '0')}` : f.file_name); String(f.audio_langs || '').split(/[;,]/).filter(Boolean).forEach(a => t.audio.add(a)); }
+    return { wanted, total: rows.length, have, lacking: lacking.length, unknown: unknown.length, titles: [...byTitle.values()].map(t => ({ ...t, audio: [...t.audio], episodes: t.episodes.sort() })).sort((a, b) => b.files - a.files), unknownFiles: unknown.slice(0, 200).map(f => ({ id: f.id, library_type: f.library_type, rel_path: f.rel_path, sidecar_subs: f.sidecar_subs })) };
+  });
   h('data:snapshots', (days) => db.snapshots(Number(days) || 365));
   h('data:watched', (opts) => watched.report(db, { ...(opts || {}), adultFilter: AF() }));
   h('data:reclaim', (opts) => watched.reclaim(db, { ...(opts || {}), adultFilter: AF() }));
@@ -729,6 +778,15 @@ function createService({ userData, log, send, host }) {
   h('collections:removeItem', (id, itemId) => { collections.removeItem(id, itemId); return collections.get(id, AF()); });
   h('collections:setNote', (id, itemId, note) => { collections.setNote(id, itemId, note); return collections.get(id, AF()); });
   h('collections:reorder', (id, ids) => { collections.reorder(id, ids); return collections.get(id, AF()); });
+  h('collections:suggest', async (opts) => {
+    const o = opts || {};
+    const movies = db.all(`SELECT group_key title_key, MIN(movie_title) title, MIN(movie_year) year FROM files WHERE library_type='movie' AND missing=0 AND ignored=0${AF()} GROUP BY group_key`);
+    const metas = { tv: db.allSeriesMeta('tv'), anime: db.allSeriesMeta('anime') };
+    const series = db.all(`SELECT library_type, show_name title_key, show_name title FROM files WHERE library_type IN ('tv','anime') AND missing=0 AND ignored=0${AF()} GROUP BY library_type, show_name`).map(s => { const m = metas[s.library_type].get(s.title_key); return { ...s, anilist_id: m && m.source === 'anilist' ? m.source_id : null }; });
+    const have = new Set(db.all('SELECT library_type, title_key FROM collection_items WHERE title_key IS NOT NULL').map(r => r.library_type + '|' + r.title_key));
+    return require('./suggest').suggest({ movies, series }, have, { web: o.web !== false, cap: Number(o.cap) || 40 }, p => send('collections:suggestProgress', p));
+  });
+  h('collections:createFromSuggestion', (sug) => { const s = sug || {}; const id = collections.save({ name: s.name, note: s.source === 'local' ? null : `Suggested from ${s.source === 'anilist' ? 'AniList' : 'Wikidata'}` }); for (const it of s.items || []) collections.addItem(id, { library_type: it.library_type, title_key: it.title_key }); for (const m of s.missing || []) collections.addItem(id, { library_type: (s.items[0] || {}).library_type || 'movie', title: m.title, year: m.year }); collections.sortByRelease(id, AF()); return collections.get(id, AF()); });
   h('collections:sortByRelease', (id) => { collections.sortByRelease(id, AF()); return collections.get(id, AF()); });
   h('data:nextUp', (opts) => watched.nextUp(db, { ...(opts || {}), adultFilter: AF() }));
   h('data:snapshotNow', () => takeSnapshot());

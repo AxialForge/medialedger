@@ -23,6 +23,25 @@ if (!gotLock) {
   let updateStatus = { state: 'idle' };
   const userData = app.getPath('userData');
   const logFile = path.join(userData, 'medialedger.log');
+  // Connect-to-server: client.json = { url, pathMap: [{ server, local }], fingerprint }. With a url, the window shows
+  // the server's pages instead of this computer's library (see preload-desktop.js). The server's certificate is
+  // pinned on first contact (Caddy's own authority is unknown to Electron), so a changed certificate stops the
+  // connection with a message rather than being accepted silently.
+  const clientFile = path.join(userData, 'client.json');
+  const readClient = () => { try { return { url: '', pathMap: [], fingerprint: null, ...JSON.parse(fs.readFileSync(clientFile, 'utf8')) }; } catch { return { url: '', pathMap: [], fingerprint: null }; } };
+  const writeClient = (c) => fs.writeFileSync(clientFile, JSON.stringify(c, null, 2));
+  const client = readClient();
+  const serverMode = !!client.url && !process.argv.find(a => a.startsWith('--url=')) && !process.argv.includes('--local');
+  const mapPath = (p) => { for (const m of client.pathMap || []) { if (!m.server || !m.local) continue; const s = String(m.server).replace(/[\\/]+$/, ''); if (p === s || p.startsWith(s + '/') || p.startsWith(s + '\\')) return String(m.local).replace(/[\\/]+$/, '') + p.slice(s.length).replace(/\//g, '\\'); } return null; };
+  app.on('certificate-error', (e, _wc, url, _err, cert, cb) => {
+    let host = ''; try { host = new URL(url).host; } catch { /* not a url */ }
+    let want = ''; try { want = new URL(client.url).host; } catch { /* none */ }
+    if (!serverMode || !host || host !== want) return cb(false);
+    if (!client.fingerprint) { client.fingerprint = cert.fingerprint; writeClient(client); log(`server certificate pinned for ${host}: ${cert.fingerprint}`); e.preventDefault(); return cb(true); }
+    if (client.fingerprint === cert.fingerprint) { e.preventDefault(); return cb(true); }
+    log(`server certificate for ${host} changed (${cert.fingerprint}); refusing. Reconnect from Settings to accept the new one.`);
+    cb(false);
+  });
   const log = (...a) => { const line = `[${new Date().toISOString()}] ${a.join(' ')}\n`; try { fs.appendFileSync(logFile, line); } catch { /* ignore */ } if (!app.isPackaged) process.stdout.write(line); };
   const send = (ch, payload) => { if (win && !win.isDestroyed()) win.webContents.send(ch, payload); };
 
@@ -62,9 +81,13 @@ function createWindow() {
       icon: path.join(__dirname, '..', '..', 'build', 'icon.png'),
       // `--url=<http://…>` renders the web server's UI (no preload, so the browser bridge is used) — for documentation screenshots.
       // sandbox must be false: the preload requires renderer/bridge-shape.js, which a sandboxed preload cannot load (it dies silently and the page shows "Failed to fetch").
-      webPreferences: { preload: urlArg ? undefined : path.join(__dirname, '..', 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
+      webPreferences: { preload: urlArg ? undefined : path.join(__dirname, '..', serverMode ? 'preload-desktop.js' : 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: false },
     });
-    if (urlArg) win.loadURL(urlArg); else win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+    if (urlArg) win.loadURL(urlArg);
+    else if (serverMode) { log(`connect-to-server: showing ${client.url}`); win.setTitle(`MediaLedger — ${client.url}`); win.webContents.once('did-finish-load', () => log(`connect-to-server: ${win.webContents.getURL()} loaded`)); win.loadURL(client.url).catch(e => { log('server page failed: ' + e.message); win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html')); }); }
+    else win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+    // A server that does not answer must not leave a blank window: fall back to this computer's library with a note.
+    if (serverMode) win.webContents.on('did-fail-load', (_e, code, desc, url, isMain) => { if (!isMain) return; log(`server ${url} did not load (${code} ${desc}); showing the local library`); win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'), { hash: 'settings' }); });
     win.on('closed', () => { win = null; });
   }
 
@@ -194,6 +217,19 @@ function createWindow() {
   h('shell:open', (p) => shell.openPath(p));
   h('shell:openExternal', (u) => /^https:\/\//.test(u) ? shell.openExternal(u) : false);
   h('shell:showItem', (p) => shell.showItemInFolder(p));
+  // connect-to-server (also reachable from a server's page through preload-desktop.js)
+  h('client:get', () => ({ available: true, mode: serverMode ? 'server' : 'local', url: client.url, pathMap: client.pathMap || [], fingerprint: client.fingerprint, local: userData }));
+  h('client:set', (o) => {
+    const url = String((o || {}).url || '').trim().replace(/\/+$/, '');
+    if (url && !/^https?:\/\/[a-z0-9.-]+(:\d+)?$/i.test(url)) throw new Error('The server address must look like https://medialedger.home or http://192.168.1.203:8080');
+    const pathMap = Array.isArray((o || {}).pathMap) ? o.pathMap.filter(m => m && m.server && m.local).map(m => ({ server: String(m.server), local: String(m.local) })) : client.pathMap;
+    const next = { url, pathMap, fingerprint: url && url === client.url ? client.fingerprint : null };
+    writeClient(next); log(url ? `connect-to-server set to ${url}; restarting` : 'connect-to-server cleared; restarting with the local library');
+    setTimeout(() => { app.relaunch(); app.exit(0); }, 400);
+    return { restarting: true, url };
+  });
+  ipcMain.handle('desktop:reveal', (_e, p) => { const local = mapPath(p); if (!local) throw new Error('No path mapping covers ' + p + '. Add one under Settings, Connections, Desktop.'); shell.showItemInFolder(local); return local; });
+  ipcMain.handle('desktop:open', (_e, p) => { const local = mapPath(p); if (!local) throw new Error('No path mapping covers ' + p); return shell.openPath(local); });
   h('update:install', () => updater.installNow());
   h('update:status', () => updateStatus);
   h('update:check', async () => {

@@ -12,7 +12,7 @@ const { screens } = require('./screens.js');
 const OUT = path.resolve(process.argv[2]);
 const SHOTS = path.join(OUT, 'screenshots');
 const V = require(path.join(L.REPO, 'package.json')).version;
-const BUILD = process.env.BUILD_DATE || '2026-09-30';
+const BUILD = process.env.BUILD_DATE || '2026-10-12';
 const DOC = new Date().toISOString().slice(0, 10);
 const byId = Object.fromEntries(screens.map(s => [s.id, s]));
 const sh = fs.readFileSync(path.join(L.REPO, 'server', 'install.sh'), 'utf8');

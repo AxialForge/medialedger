@@ -24,6 +24,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { clientIp, forwardedProto } = require('./clientip');
+const metadata = require('../main/metadata');
 
 const sha = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
 const rand = (n) => crypto.randomBytes(n).toString('base64url');
@@ -73,6 +74,18 @@ const noPaths = (s) => String(s).replace(/(^|\s)((?:[A-Za-z]:[\\/]|\\\\|(?<!:)\/
 const projectAdminRequest = (r) => ({ ...projectRequest(r), by: r.requested_by ? String(r.requested_by) : null });
 
 const normTitle = (s) => String(s || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, ' ').replace(/\b(the|a|an)\b/g, ' ').replace(/\s+/g, ' ').trim();
+
+// Posters for the request form: TVmaze for TV, AniList for anime. Only the fields the form needs are passed on.
+async function lookupTitles(kind, text) {
+  try {
+    if (kind === 'anime') {
+      const d = await metadata.getJson('https://graphql.anilist.co', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: 'query ($s: String) { Page(perPage: 6) { media(search: $s, type: ANIME, sort: SEARCH_MATCH) { title { romaji english } seasonYear format episodes coverImage { medium } siteUrl } } }', variables: { s: text } }) });
+      return (((d || {}).data || {}).Page || { media: [] }).media.filter(m => m.format !== 'MUSIC').map(m => ({ title: (m.title && (m.title.english || m.title.romaji)) || '', year: m.seasonYear || null, format: m.format || null, episodes: m.episodes || null, image: m.coverImage && /^https:\/\/s4\.anilist\.co\//.test(m.coverImage.medium) ? m.coverImage.medium : null, url: m.siteUrl || null }));
+    }
+    const r = await metadata.getJson(`https://api.tvmaze.com/search/shows?q=${encodeURIComponent(text)}`) || [];
+    return r.slice(0, 6).map(x => ({ title: x.show.name, year: x.show.premiered ? Number(x.show.premiered.slice(0, 4)) : null, format: x.show.type || null, episodes: null, image: x.show.image && /^https:\/\/static\.tvmaze\.com\//.test(x.show.image.medium) ? x.show.image.medium : null, url: x.show.url || null }));
+  } catch { return []; }
+}
 
 function createPortal({ svc, dataDir, log, audit, version, notify, sec }) {
   const file = path.join(dataDir, 'portal.json');
@@ -164,7 +177,7 @@ function createPortal({ svc, dataDir, log, audit, version, notify, sec }) {
   const allJobs = async () => [...(await svc.handlers.get('jobs:list')()), job()];
 
   // ---- replies --------------------------------------------------------------------------------------
-  const HEADERS = { 'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'", 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'referrer-policy': 'no-referrer', 'permissions-policy': 'camera=(), microphone=(), geolocation=()', 'x-robots-tag': 'noindex, nofollow' };
+  const HEADERS = { 'content-security-policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://static.tvmaze.com https://s4.anilist.co; frame-ancestors 'none'; base-uri 'none'; form-action 'self'", 'x-content-type-options': 'nosniff', 'x-frame-options': 'DENY', 'referrer-policy': 'no-referrer', 'permissions-policy': 'camera=(), microphone=(), geolocation=()', 'x-robots-tag': 'noindex, nofollow' };
   const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.webmanifest': 'application/manifest+json' };
   const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); };
   const page = (res, code, title, text) => { res.writeHead(code, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }); res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${title}</title><body style="font:16px system-ui;background:#0f1115;color:#e6e8ec;display:grid;place-items:center;min-height:100vh;margin:0"><div style="max-width:420px;padding:24px;text-align:center"><h1 style="font-size:20px">${title}</h1><p style="color:#9aa3b2">${text}</p></div>`); };
@@ -286,6 +299,13 @@ function createPortal({ svc, dataDir, log, audit, version, notify, sec }) {
               return json(res, 200, { ok: true, result: { type, key, title: key, genres: arr(e.genres), tags: arr(e.tags), episodes: files.map(projectEpisode).sort((a, b) => (a.season - b.season) || (a.episode - b.episode)), missing } });
             }
             return json(res, 400, { ok: false, error: 'type must be tv, anime or movie' });
+          }
+          if (name === 'lookup') {
+            need('request');
+            if (!within('look:' + v.id, 30, 60000)) { res.setHeader('retry-after', '60'); return json(res, 429, { ok: false, error: 'Too many searches; wait a minute' }); }
+            const kind = q.get('kind'), text = String(q.get('q') || '').trim().slice(0, 80);
+            if (text.length < 2 || !['tv', 'anime'].includes(kind)) return json(res, 200, { ok: true, result: [] });
+            return json(res, 200, { ok: true, result: await lookupTitles(kind, text) });
           }
           if (name === 'collections') { need('browse'); return json(res, 200, { ok: true, result: (await core('collections:list')).map(projectCollection) }); }
           if (name === 'collection') { need('browse'); const c = await core('collections:get', Number(q.get('id'))); if (!c) return json(res, 404, { ok: false, error: 'No such collection' }); return json(res, 200, { ok: true, result: { ...projectCollection({ ...c, items: c.items.length, present: c.items.filter(i => i.present).length, missing: c.items.filter(i => !i.present).length, seconds: c.items.reduce((a, i) => a + (i.seconds || 0), 0), types: [...new Set(c.items.map(i => i.library_type))], preview: [] }), list: c.items.map(projectCollectionItem) } }); }

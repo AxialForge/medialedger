@@ -242,6 +242,17 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   picker said "No sub-folders". `rootcheck.listDirs` stats anything that is not plainly a file.
 - **Routes are serialised.** `route()` queues behind the page still loading and then draws only the newest hash;
   before, a slow first page (the dashboard) finished last and painted over the welcome guide.
+- **Connect-to-server is `--url` made permanent.** `client.json` in userData holds the server address; `main.js` then
+  loads that URL with `src/preload-desktop.js` instead of `preload.js`. The page is the server's own, so it builds
+  `window.ledger` over HTTP (`webbridge.js`), which notices `window.ledgerDesktop` and routes `showItem`/`openPath`
+  and the client settings through it. Electron rejects Caddy's internal certificate, so `certificate-error` pins the
+  fingerprint on first contact for that host only. `desktop:*` IPC is registered with `ipcMain.handle` directly, not
+  `h()`: `test/service.test.js` requires every `h('x:y')` in main.js to have a web counterpart.
+- **Handlers must not capture `db` at definition time.** `db` is assigned in `init()`; `createCollections(db)`
+  written inline captured `undefined` and every call failed. Build such modules lazily (see the `collections` Proxy).
+- **Moving duplicates aside is a rename batch** (`layout: 'duplicates'`), so `movieRename.undoBatch` reverses it and
+  the Movie names page lists it. Moved files are marked `ignored=1`, not deleted; a scan treats `_duplicates/` as
+  any other folder, which is why the mark matters.
 - **`X-Forwarded-For` is believed only from loopback** (`src/server/clientip.js`). Trusting it from any socket would let
   a LAN client pick its own address and walk around LAN-only and the lockout.
 - **The dashboard editor must not reload data per edit.** `dash.js` re-renders on every move, resize and option

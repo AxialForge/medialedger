@@ -140,7 +140,7 @@
   async function requests() {
     const STATUS = { pending: ['waiting', ''], approved: ['approved', 'ok'], added: ['added', 'ok'], rejected: ['declined', 'bad'] };
     view.innerHTML = `<h1>Ask for something</h1>
-      <div class="card"><div class="field"><span>Title</span><input type="text" id="rTitle" maxlength="120" autocomplete="off" placeholder="What should be added?"></div>
+      <div class="card"><div class="field"><span>Title</span><input type="text" id="rTitle" maxlength="120" autocomplete="off" placeholder="What should be added?"></div><div id="rHits" class="hits" hidden></div>
       <div class="two"><div class="field"><span>Kind</span><select id="rKind"><option value="movie">Movie</option><option value="tv">TV show</option><option value="anime">Anime</option><option value="other">Other</option></select></div><div class="field"><span>Year (optional)</span><input type="number" id="rYear" min="1900" max="2100" inputmode="numeric"></div></div>
       <div class="field"><span>Note (optional)</span><textarea id="rNote" maxlength="400" placeholder="Edition, dub or sub, where it streams…"></textarea></div>
       <div id="rExists"></div><button class="btn primary" id="rSend">Send request</button></div>
@@ -161,6 +161,18 @@
       finally { $('#rSend').disabled = false; }
     };
     $('#rSend').onclick = () => send(false);
+    // As you type a TV or anime title, posters from TVmaze or AniList appear; tapping one fills the form in.
+    let deb = null;
+    const lookup = async () => {
+      const kind = $('#rKind').value, text = $('#rTitle').value.trim(), hits = $('#rHits');
+      if (text.length < 3 || !['tv', 'anime'].includes(kind)) { hits.hidden = true; return; }
+      let r = []; try { r = await api(`lookup?kind=${kind}&q=${encodeURIComponent(text)}`); } catch { /* quiet */ }
+      hits.innerHTML = r.map((x, i) => `<div class="hit" data-i="${i}">${x.image ? `<img src="${esc(x.image)}" alt="">` : '<span class="pthumb none">?</span>'}<div><b>${esc(x.title)}</b><div class="muted tiny">${[x.year, x.format, x.episodes ? x.episodes + ' episodes' : ''].filter(Boolean).join(' · ')}</div></div></div>`).join('');
+      hits.hidden = !r.length;
+      hits.querySelectorAll('.hit').forEach(h => { h.onclick = () => { const x = r[Number(h.dataset.i)]; $('#rTitle').value = x.title; if (x.year) $('#rYear').value = x.year; hits.hidden = true; }; });
+    };
+    $('#rTitle').oninput = () => { clearTimeout(deb); deb = setTimeout(lookup, 350); };
+    $('#rKind').onchange = () => { $('#rHits').hidden = true; if ($('#rTitle').value.trim().length >= 3) lookup(); };
     list();
   }
 

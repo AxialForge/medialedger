@@ -11,7 +11,7 @@ const { H1, H2, H3, P, note, bullets, table, cover, toc, write } = L;
 
 const OUT = path.resolve(process.argv[2]);
 const V = require(path.join(L.REPO, 'package.json')).version;
-const BUILD = process.env.BUILD_DATE || '2026-09-30';
+const BUILD = process.env.BUILD_DATE || '2026-10-12';
 const DOC = new Date().toISOString().slice(0, 10);
 
 // ---- CHANGELOG.md -> [{ version, date, intro, groups: { Added: [..], Changed: [..], Fixed: [..] } }]

@@ -31,6 +31,12 @@ const dialogs = [
   { id: 'd09_ignore_collisions', name: 'Ignore the other files', kind: 'dialog', parent: '28_movie_names', src: ['src/renderer/views-maintenance.js', '<h2>Ignore ${others.length}'],
     purpose: 'When several files would get the same name, keeps one and marks the others as ignored. The ignored files stay on disk.',
     controls: [c('#ckC', 'Cancel', 'Button', 'Closes without changing.', '', '', ''), c('#ckGo', 'Ignore them', 'Button', 'Marks the other files as ignored.', '', '', '')] },
+  { id: 'd11_desktop_connect', name: 'Desktop: connect to a server (Settings, Connections)', kind: 'section', parent: 'settings_page', purpose: 'On the Windows desktop application only: a server address and a path mapping. Saving restarts the application, which then shows the server\'s pages instead of its own library; Explorer still opens a file\'s folder through the mapping. "Use this computer\'s library" switches back.', src: ['src/renderer/views-app.js', 'async function paintClient(box)'], controls: [
+    { sel: '#clUrl', name: 'Server address', type: 'Text field', does: 'The server to show, for example https://medialedger.home.', inputs: 'http:// or https:// and a host, optionally a port.', def: 'empty', notes: 'The server\'s certificate is remembered on first contact.' },
+    { sel: '#clMaps', name: 'Path mapping', type: 'Table', does: 'Pairs of a path as the server names it and the same place as this PC reaches it.', inputs: '', def: '', notes: 'Needed for Reveal in Explorer; otherwise the server\'s pages work without it.' },
+    { sel: '#clConnect', name: 'Connect to the server', type: 'Button', does: 'Saves and restarts into server mode.', inputs: '', def: '', notes: 'Asks first.' },
+    { sel: '#clLocal', name: 'Use this computer\'s library', type: 'Button', does: 'Restarts with the local library.', inputs: '', def: '', notes: 'Shown in server mode only.' },
+  ] },
   { id: 'd10_card_settings_legacy', name: 'Card settings (before version 2.0)', kind: 'dialog', parent: '02_dashboard', src: ['src/renderer/app-core.js', '<h2>Card settings'], unreachable: true,
     purpose: 'The colour-rule dialog of versions 1.9 to 1.12, opened by a gear on a tile. Version 2.0 replaced it with the card options dialog; the code remains but no gear opens it.',
     controls: [c('#csLevel', 'Editor level', 'Drop-down list', 'Simple, Standard or Advanced.', '', 'Standard', ''), c('#csRule', 'Colour rule', 'Group', 'Amber and red thresholds.', '', '', 'Advanced only.')] },

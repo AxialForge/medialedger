@@ -8,6 +8,46 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [3.0.0] - 2026-10-12
+
+A major release: the desktop can be a client of the Pi, duplicates can be
+moved aside, and collections can be found rather than typed.
+
+### Added
+
+- **Connect to a server** (desktop): Settings → Connections → Desktop takes
+  a server address; the desktop application then shows the server's pages
+  instead of its own library, with one database and one set of fixes.
+  Explorer still opens a file's folder through a path mapping (server path
+  → path from this PC). The server's certificate is remembered on first
+  contact, so a changed one is refused rather than accepted silently. A
+  server that does not answer falls back to the local library.
+- **Duplicate sweep** (Issues → Duplicates): *Keep the best copy everywhere*
+  decides every undecided group by resolution, bitrate and size; *Move the
+  discards aside* moves the discarded files into a `_duplicates` folder at
+  the top of their root, as an undoable batch. Nothing is deleted. Moving
+  needs the renaming switch and your password.
+- **Find sets in the library** (Collections): suggestions from the names in
+  the library, from AniList's sequel and side-story links for matched
+  anime, and from Wikidata's "part of the series" for films and shows.
+  All free, no key. One press creates the collection, with placeholders
+  for the titles not owned yet.
+- **Subtitle audit** (Issues → Subtitles): files with no subtitle track or
+  tagged sidecar in the wanted languages (Settings → Episodes and quality →
+  Subtitles), by title, with a Find link to OpenSubtitles.
+- **Posters on the family portal's request form**: typing a TV or anime
+  title shows matches from TVmaze or AniList with a poster; tapping one
+  fills the form in. Movies stay as typed, since no keyless free source
+  has movie posters.
+- **Dashboard cards**: Library health over time and Duplicates and
+  low-bitrate over time (trends from the daily snapshots, schema v15),
+  Collections, and Subtitles.
+
+### Changed
+
+- The daily snapshot records duplicates, low-bitrate files, unparsed names,
+  probe errors and the health score, so trends can be drawn from it.
+
 ## [2.7.1] - 2026-10-11
 
 ### Fixed

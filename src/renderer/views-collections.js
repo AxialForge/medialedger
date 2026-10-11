@@ -14,7 +14,20 @@ views.collections = async (arg) => {
     <p class="lead">Sets of titles that belong together, across TV, anime and movies: a film series, a shared universe, a director's work. Each shows what you have, what is missing, and the order to watch it in.${fromPlex ? ` ${fromPlex} came from Plex and follow Plex's lists; the titles you add to them yourself stay.` : ''}</p>
     <div class="tiles compact">${tile('', 'Collections', cols.length, `${fromPlex} from Plex · ${cols.length - fromPlex} yours`)}${tile(cols.some(c => c.missing) ? 'warnt' : 'okt', 'Complete', `${cols.filter(c => !c.missing && c.items).length} of ${cols.length}`, `${cols.reduce((a, c) => a + c.missing, 0)} titles not in the library`)}${tile('', 'Titles in sets', cols.reduce((a, c) => a + c.present, 0), fmtBytes(cols.reduce((a, c) => a + c.bytes, 0)))}</div>
     <div class="toolbar"><input type="search" id="colQ" placeholder="Filter…">${canEditCollections() ? '<button class="primary" id="colNew">New collection</button>' : ''}<span class="muted tiny">Plex collections are read from Plex on each sync and never written back.</span></div>
-    <div class="colgrid" id="colGrid"></div>`;
+    <div class="colgrid" id="colGrid"></div>
+    ${canEditCollections() ? `<div class="card" style="margin-top:16px"><h3>Find sets in the library</h3><p class="muted">Looks for titles that belong together: names in the library itself ("Rocky II", "Pirates of the Caribbean: …"), AniList's sequel and side-story links for matched anime, and Wikidata's "part of the series" for films and shows. All free, no key. Each suggestion lists what it would gather; nothing is made until you press Create.</p><div class="inline"><button class="small" id="sugLocal">From names only (instant)</button><button class="small primary" id="sugWeb">Names, AniList and Wikidata (a minute or two)</button><span class="muted tiny" id="sugLine"></span></div><div id="sugList"></div></div>` : ''}`;
+  const sugRun = async (web) => {
+    const line = $('#sugLine'), box = $('#sugList'); $('#sugLocal').disabled = $('#sugWeb').disabled = true; line.textContent = web ? 'Asking AniList and Wikidata…' : 'Looking…'; box.innerHTML = '';
+    const off = L.collections.onSuggestProgress ? L.collections.onSuggestProgress(p => { line.textContent = `${p.phase === 'anilist' ? 'AniList' : 'Wikidata'} ${p.done} of ${p.total}: ${p.title}`; }) : null;
+    try {
+      const sugs = await L.collections.suggest({ web });
+      line.textContent = sugs.length ? `${sugs.length} suggestion${sugs.length === 1 ? '' : 's'}` : 'Nothing found that is not already in a collection.';
+      box.innerHTML = sugs.map((g, i) => `<div class="card" style="margin-top:10px" data-i="${i}"><div class="inline"><b>${esc(g.name)}</b><span class="badge">${g.source === 'local' ? 'names' : g.source === 'anilist' ? 'AniList' : 'Wikidata'}</span><span class="muted tiny">${esc(g.why)}</span><span class="grow"></span><button class="small primary sugMake">Create</button></div><div class="muted tiny" style="margin-top:6px">${g.items.map(it => `<span class="badge ${it.library_type}">${COL_TYPE[it.library_type] || it.library_type}</span> ${esc(it.title)}${it.year ? ` (${it.year})` : ''}`).join(' · ')}${g.missing.length ? `<br><span class="muted">Not in the library (added as placeholders): ${g.missing.slice(0, 12).map(m => esc(m.title) + (m.year ? ` (${m.year})` : '')).join(', ')}${g.missing.length > 12 ? ` … and ${g.missing.length - 12} more` : ''}</span>` : ''}</div></div>`).join('');
+      box.querySelectorAll('.sugMake').forEach(b => { b.onclick = async () => { const g = sugs[Number(b.closest('.card').dataset.i)]; b.disabled = true; try { const c = await L.collections.createFromSuggestion(g); toast(`Created ${c.name}`); b.closest('.card').remove(); } catch (e) { toast(e.message, true); b.disabled = false; } }; });
+    } catch (e) { line.textContent = e.message; }
+    finally { if (off) off(); $('#sugLocal').disabled = $('#sugWeb').disabled = false; }
+  };
+  if ($('#sugLocal')) { $('#sugLocal').onclick = () => sugRun(false); $('#sugWeb').onclick = () => sugRun(true); }
   const draw = () => {
     const q = $('#colQ').value.trim().toLowerCase();
     const list = cols.filter(c => !q || c.name.toLowerCase().includes(q));

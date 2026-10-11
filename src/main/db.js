@@ -382,6 +382,16 @@ const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS idx_collection_items ON collection_items(collection_id, position);
     `,
   },
+  {
+    version: 15, name: 'health in snapshots',
+    sql: `
+      ALTER TABLE snapshots ADD COLUMN duplicates INTEGER;     -- episodes present as more than one file
+      ALTER TABLE snapshots ADD COLUMN low_bitrate INTEGER;    -- files under the bitrate threshold for their resolution
+      ALTER TABLE snapshots ADD COLUMN unparsed INTEGER;
+      ALTER TABLE snapshots ADD COLUMN probe_errors INTEGER;
+      ALTER TABLE snapshots ADD COLUMN health INTEGER;         -- 0-100, the dashboard's Library health on that day
+    `,
+  },
 ];
 
 class Db {

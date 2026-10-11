@@ -107,6 +107,14 @@
   }
   window.ledger = build(window.LEDGER_SHAPE);
   window.ledger.isWeb = true;
+  // In the desktop application's connect-to-server mode this page is shown by Electron, which adds window.ledgerDesktop:
+  // Explorer can then open a file's folder through a path mapping, and the client settings come from the desktop.
+  if (window.ledgerDesktop) {
+    window.ledger.showItem = (p) => window.ledgerDesktop.reveal(p);
+    window.ledger.openPath = (p) => window.ledgerDesktop.open(p);
+    window.ledger.client = window.ledgerDesktop.client;
+    window.ledger.isDesktopClient = true;
+  }
   window.ledger.logout = async () => { await fetch('api/logout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); location.reload(); };
   window.ledger.signIn = () => askLogin(false);
 })();

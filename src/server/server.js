@@ -71,9 +71,9 @@ const portal = createPortal({ svc, dataDir, log, audit: (...a) => sec.audit(...a
 // What a guest (no account) may call: read-only library statistics, plus filing a media request.
 const GUEST = new Set(['collections:list', 'collections:get', 'posters:index', 'app:info', 'security:me', 'data:dashboard', 'data:series', 'data:episodes', 'data:movies', 'data:movieFiles', 'data:search', 'web:channels', 'web:videos', 'ratings:list', 'meta:get', 'scan:status', 'scan:list', 'update:status', 'adult:status', 'requests:list', 'requests:add', 'roots:last', 'tags:list', 'tags:all', 'tags:get', 'data:tonight', 'data:storage', 'data:airing', 'prefs:get', 'data:snapshots']);
 // A standard user: everything a guest may, plus the review pages, own ratings, the adult switch for their own session.
-const STANDARD = new Set([...GUEST, 'data:watched', 'data:reclaim', 'data:nextUp', 'data:continue', 'data:problems', 'data:duplicates', 'data:missing', 'data:quality', 'data:changes', 'data:changeStats', 'movie:plan', 'movie:batches', 'movie:batchItems', 'rename:proposals', 'rename:history', 'export:list', 'override:list', 'override:suggest', 'meta:status', 'plex:status', 'watch:status', 'schedule:nextInApp', 'db:stats', 'settings:get', 'adult:toggle', 'ratings:setUser', 'security:changePassword', 'tags:add', 'tags:remove', 'data:upgrades', 'rename:dry', 'prefs:set']);
+const STANDARD = new Set([...GUEST, 'data:watched', 'data:reclaim', 'data:nextUp', 'data:continue', 'data:subtitles', 'data:problems', 'data:duplicates', 'data:missing', 'data:quality', 'data:changes', 'data:changeStats', 'movie:plan', 'movie:batches', 'movie:batchItems', 'rename:proposals', 'rename:history', 'export:list', 'override:list', 'override:suggest', 'meta:status', 'plex:status', 'watch:status', 'schedule:nextInApp', 'db:stats', 'settings:get', 'adult:toggle', 'ratings:setUser', 'security:changePassword', 'tags:add', 'tags:remove', 'data:upgrades', 'rename:dry', 'prefs:set']);
 // Admins: every channel. Actions that write to the share or throw data away also need a fresh password (re-auth).
-const SENSITIVE = new Set(['shares:add', 'shares:remove', 'portal:set', 'portal:invite', 'portal:renew', 'db:restoreStage', 'security:tlsEnable', 'security:tlsDisable', 'status:rotate', 'plex:webhookSet', 'movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']);
+const SENSITIVE = new Set(['dup:moveDiscards', 'shares:add', 'shares:remove', 'portal:set', 'portal:invite', 'portal:renew', 'db:restoreStage', 'security:tlsEnable', 'security:tlsDisable', 'status:rotate', 'plex:webhookSet', 'movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser']);
 const isSensitive = (ch, args) => ch === 'movie:run' ? !!(args[1] && args[1].live) : SENSITIVE.has(ch);
 const allowed = (role, ch) => role === 'admin' || (role === 'standard' ? STANDARD.has(ch) : GUEST.has(ch));
 // Settings hold secrets (Plex token, GitHub token); a standard user sees them blanked.
@@ -93,6 +93,8 @@ const webHandlers = new Map([
   ['shell:open', () => false],
   ['shell:openExternal', () => false],
   ['shell:showItem', () => false],
+  ['client:get', () => ({ available: false })],
+  ['client:set', () => { throw new Error('Only the desktop application connects to a server'); }],
   ['update:check', async () => {
     const newer = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) > (y[i] || 0)) return true; if ((x[i] || 0) < (y[i] || 0)) return false; } return false; };
     try {
