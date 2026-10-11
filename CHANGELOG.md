@@ -8,6 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [2.7.1] - 2026-10-11
+
+### Fixed
+
+- The Settings tab strip let rows scroll through the gap above and beside
+  it. It now reaches the page edge and casts a shadow.
+
 ## [2.7.0] - 2026-10-11
 
 ### Added
