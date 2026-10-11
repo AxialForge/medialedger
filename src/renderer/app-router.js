@@ -27,7 +27,7 @@ async function routeNow() {
     else if (name === 'movies' && arg) await movieFilesView(decodeURIComponent(arg));
     else if (name === 'web' && arg) await webVideosView(decodeURIComponent(arg));
     else if (name === 'issues') await views.issues(arg);
-    else if (views[name]) await views[name]();
+    else if (views[name]) await views[name](arg ? decodeURIComponent(arg) : undefined);
     else await views.dashboard();
   } catch (e) { view.innerHTML = `<div class="empty">Error: ${esc(e.message)}</div>`; }
 }

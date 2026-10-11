@@ -453,3 +453,14 @@ td.rowacts { width: 1%; text-align: right; white-space: nowrap; }
 /* A small progress bar inside a table cell (Continue watching) */
 .meter-sm { display: inline-block; width: 70px; height: 6px; border-radius: 3px; background: var(--panel3); vertical-align: middle; overflow: hidden; }
 .meter-sm > span { display: block; height: 100%; background: var(--accent); }
+
+/* ---- Collections ---- */
+.colgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.colcard { cursor: pointer; } .colcard:hover { border-color: var(--accent); }
+.colcard .strip { display: flex; gap: 4px; margin: 8px 0 6px; min-height: 48px; }
+.colcard .strip .pthumb { width: 32px; height: 48px; }
+.colitems .pos { width: 34px; color: var(--muted); text-align: right; }
+.colitems tr.gone td { opacity: .6; }
+.colitems .ord button { padding: 1px 6px; font-size: 11px; }
+.addbox { position: relative; } .addbox .hits { position: absolute; z-index: 20; left: 0; right: 0; top: 100%; background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; max-height: 300px; overflow: auto; box-shadow: 0 10px 30px #000a; }
+.addbox .hits div { padding: 6px 10px; cursor: pointer; } .addbox .hits div:hover { background: var(--panel3); }

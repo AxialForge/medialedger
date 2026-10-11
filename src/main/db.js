@@ -367,6 +367,21 @@ const MIGRATIONS = [
       ALTER TABLE files ADD COLUMN plex_released TEXT;          -- movies: YYYY-MM-DD release date
     `,
   },
+  {
+    version: 14, name: 'collections',
+    sql: `
+      -- Named sets of titles across libraries. source: manual (yours) | plex (mirrored on each sync, never written back).
+      CREATE TABLE IF NOT EXISTS collections (
+        id INTEGER PRIMARY KEY, name TEXT NOT NULL, note TEXT, source TEXT NOT NULL DEFAULT 'manual', plex_key TEXT, created TEXT, updated TEXT
+      );
+      -- One title per row: a library title (title_key) or a placeholder (title, year) for something not owned yet.
+      CREATE TABLE IF NOT EXISTS collection_items (
+        id INTEGER PRIMARY KEY, collection_id INTEGER NOT NULL, position INTEGER NOT NULL,
+        library_type TEXT NOT NULL, title_key TEXT, title TEXT, year INTEGER, note TEXT, from_plex INTEGER DEFAULT 0, added TEXT
+      );
+      CREATE INDEX IF NOT EXISTS idx_collection_items ON collection_items(collection_id, position);
+    `,
+  },
 ];
 
 class Db {

@@ -95,6 +95,19 @@
       }).join('') + (me.perms.request && totalGone ? `<p class="muted tiny">Something missing you want? <a href="#requests">Send a request</a>.</p>` : '');
   }
 
+  // ---- Collections: sets across the libraries, read-only here -----------------------------------
+  async function collections(id) {
+    view.innerHTML = '<div class="empty">Loading…</div>';
+    await loadPosters();
+    if (id) {
+      let c; try { c = await api('collection?id=' + encodeURIComponent(id)); } catch (e) { if (e.message !== 'invite') view.innerHTML = `<p><a href="#collections">‹ Collections</a></p><div class="empty">${esc(e.message)}</div>`; return; }
+      view.innerHTML = `<p><a href="#collections">‹ Collections</a></p><h1>${esc(c.name)}</h1><p class="muted">${c.present} of ${c.items} in the library${c.minutes ? ' · ' + mins(c.minutes) : ''}${c.missing ? ` · <span class="badge warn">${c.missing} not in the library</span>` : ''}</p>${c.note ? `<p class="muted tiny">${esc(c.note)}</p>` : ''}<div class="list">${c.list.map(i => i.present ? `<a class="row has-poster" href="${hrefOf(i)}">${poster(i)}<div class="t"><span class="muted">${i.position}.</span> ${esc(i.title)}${i.year ? ` <span class="muted">(${i.year})</span>` : ''}</div><div class="s"><span class="badge ${i.type}">${TYPE[i.type] || i.type}</span>${i.best ? `<span class="badge">${esc(i.best)}${i.hdr ? ' ' + esc(i.hdr) : ''}</span>` : ''}${i.episodes != null ? `<span>${i.episodes} episodes</span>` : i.minutes ? `<span>${mins(i.minutes)}</span>` : ''}${i.rated ? `<span class="badge">${esc(i.rated)}</span>` : ''}</div>${i.note ? `<div class="muted tiny">${esc(i.note)}</div>` : ''}</a>` : `<div class="row gone" style="cursor:default;opacity:.6"><span class="pthumb none">–</span><div class="t"><span class="muted">${i.position}.</span> ${esc(i.title)}${i.year ? ` <span class="muted">(${i.year})</span>` : ''}</div><div class="s"><span class="badge warn">not in the library</span></div></div>`).join('') || '<div class="empty">Nothing in this collection yet.</div>'}</div>`;
+      return;
+    }
+    let rows; try { rows = await cached('collections'); } catch (e) { if (e.message !== 'invite') view.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+    view.innerHTML = `<h1>Collections</h1><p class="muted tiny">Sets of films and series that belong together, across the libraries.</p><div class="list">${rows.map(c => `<a class="row" href="#collections/${c.id}"><div class="t">${esc(c.name)}</div><div class="s"><span>${c.present} of ${c.items} titles</span>${c.minutes ? `<span>${mins(c.minutes)}</span>` : ''}${c.missing ? `<span class="badge warn">${c.missing} missing</span>` : '<span class="badge ok">complete</span>'}${c.types.map(t => `<span class="badge ${t}">${TYPE[t] || t}</span>`).join('')}</div><div class="strip">${c.preview.map(p => poster({ type: p.type, key: p.key, title: p.title }, 'pmini')).join('')}</div></a>`).join('') || '<div class="empty">No collections yet.</div>'}</div>`;
+  }
+
   // ---- Tonight ------------------------------------------------------------------------------------
   async function tonight() {
     const pref = store.get('tonight', { kind: '', unwatched: true, complete: false, minutes: '', genre: '' });
@@ -159,7 +172,7 @@
     $('#mTheme').onchange = () => { const v = $('#mTheme').value; if (v) document.documentElement.dataset.theme = v; else delete document.documentElement.dataset.theme; try { v ? localStorage.setItem('medialedger.theme', v) : localStorage.removeItem('medialedger.theme'); } catch { /* ignore */ } };
     $('#mLeave').onclick = async () => { if (!confirm('Forget this device?')) return; try { await api('leave', {}); } catch { /* gone either way */ } noInvite(); };
   }
-  const TABS = [['library', '▤', 'Library', 'browse'], ['tonight', '▷', 'Tonight', 'tonight'], ['requests', '✚', 'Requests', 'request']];
+  const TABS = [['library', '▤', 'Library', 'browse'], ['collections', '❖', 'Sets', 'browse'], ['tonight', '▷', 'Tonight', 'tonight'], ['requests', '✚', 'Requests', 'request']];
   function route() {
     if (!me) return;
     const parts = location.hash.replace(/^#/, '').split('/');
@@ -170,7 +183,7 @@
     if (!tabs.some(t => t[0] === tab)) tab = tabs[0] ? tabs[0][0] : '';
     drawTabs(tabs, tab); if (tab) store.set('tab', tab);
     window.scrollTo(0, 0);
-    if (tab === 'library') return library(); if (tab === 'tonight') return tonight(); if (tab === 'requests') return requests();
+    if (tab === 'library') return library(); if (tab === 'collections') return collections(parts[1]); if (tab === 'tonight') return tonight(); if (tab === 'requests') return requests();
     view.innerHTML = '<div class="empty">Your invite does not include anything yet.</div>';
   }
   const drawTabs = (tabs, on) => { $('#tabs').innerHTML = tabs.map(([id, icon, label]) => `<a href="#${id}" class="${id === on ? 'on' : ''}"><i>${icon}</i>${label}</a>`).join(''); };

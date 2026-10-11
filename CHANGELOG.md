@@ -8,6 +8,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [2.7.0] - 2026-10-11
+
+### Added
+
+- **Collections** (schema v14): named sets of titles across TV, anime and
+  movies, such as a film series or a shared universe. A new Collections page
+  lists them with a poster strip, how many titles are in the library, total
+  runtime and how many are watched. Open one to see its titles in order,
+  with what is on hand and what is not; add any title from the whole library
+  by typing its name, add a placeholder for one you do not own yet, move
+  titles up and down, order by release date, and keep a note on each.
+- **Plex collections come in on each sync**, read only: MediaLedger never
+  writes to Plex. Titles you add to a Plex collection yourself stay through
+  the next sync; a Plex collection whose name matches one of yours gets
+  "(Plex)" after its name.
+- The family portal has a **Sets** tab showing the same collections.
+
 ## [2.6.1] - 2026-10-11
 
 ### Changed

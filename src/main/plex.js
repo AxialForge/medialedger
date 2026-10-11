@@ -98,6 +98,17 @@ function flattenVideo(v, section) {
   };
 }
 
+// Plex's own collections in a section, with the rating keys of what is in each. Read only.
+async function fetchCollections(cfg, section) {
+  const mc = await api(cfg, `/library/sections/${section.key}/collections`, 60000).catch(() => ({}));
+  const out = [];
+  for (const c of mc.Metadata || []) {
+    const kids = await api(cfg, `/library/collections/${c.ratingKey}/children`, 60000).catch(() => ({}));
+    out.push({ key: String(c.ratingKey), title: c.title, section: section.title, items: (kids.Metadata || []).map(v => ({ ratingKey: String(v.ratingKey), type: v.type, title: v.title, year: pick(v, 'year') })) });
+  }
+  return out;
+}
+
 // Fetch every item of a section. Movies: /all. Shows: /all?type=4 (episodes) plus /all (shows) for show-level ratings.
 async function fetchSection(cfg, section, onProgress = () => {}) {
   const out = { videos: [], shows: [] };
@@ -131,7 +142,7 @@ async function syncLibrary(db, cfg, opts = {}) {
   const filesByPath = new Map(db.all('SELECT id, root_id, abs_path, library_type, show_name, group_key FROM files WHERE missing=0').map(f => [norm(f.abs_path), f]));
   let pathMap = (cfg.pathMap || []).filter(m => m.plex && m.local);
   let mappingSuggested = null;
-  const stats = { sections: sections.length, items: 0, matched: 0, unmatched: 0, shows: 0, unmatchedSamples: [], bySection: [] };
+  const stats = { sections: sections.length, items: 0, matched: 0, unmatched: 0, shows: 0, unmatchedSamples: [], bySection: [], collections: [] };
   const now = new Date().toISOString();
 
   for (const sec of sections) {
@@ -167,6 +178,7 @@ async function syncLibrary(db, cfg, opts = {}) {
       stats.shows += shows.length;
     });
     log(`plex: ${sec.title}: ${videos.length} items, ${matched.length} matched, ${unmatched.length} unmatched`);
+    if (opts.collections !== false) { onProgress({ phase: 'fetch', section: sec.title, message: `Fetching collections in ${sec.title}…` }); stats.collections.push(...await fetchCollections(cfg, sec)); }
   }
   // Files Plex no longer has: clear stale links from earlier syncs
   db.run('UPDATE files SET plex_rating_key=NULL WHERE plex_synced_at IS NOT NULL AND plex_synced_at < ?', now);
@@ -280,4 +292,4 @@ function parseWebhookBody(contentType, body) {
   return null;
 }
 
-module.exports = { syncHistory, fetchHistory, fetchAccounts, historyKeyOf, testConnection, listSections, syncLibrary, mapPath, deriveMapping, matchItems, flattenVideo, applyWebhookEvent, parseWebhookBody };
+module.exports = { fetchCollections, syncHistory, fetchHistory, fetchAccounts, historyKeyOf, testConnection, listSections, syncLibrary, mapPath, deriveMapping, matchItems, flattenVideo, applyWebhookEvent, parseWebhookBody };

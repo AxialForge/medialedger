@@ -101,7 +101,7 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 | `docs/RASPBERRY-PI.md` | The Pi guide; also becomes the README inside the server package |
 | `src/main/paths.js` | `absOf(rootPath, rel)`: stored `rel_path` uses `\` on every OS; join with the local separator only when touching disk |
 | `server/install.sh` | Pi installer: Node 22, ffmpeg, CIFS fstab mount at `/mnt/media`, `medialedger` system user, systemd unit, `medialedger` / `medialedger-update` commands |
-| `src/renderer/` | `index.html`, `styles.css`, and the renderer in six plain scripts loaded in order (they share the page scope): `app-core.js` (bridge, helpers, tables, modals, posters), `views-library.js`, `views-review.js`, `views-maintenance.js`, `views-app.js` (settings, security, shares, welcome), `app-router.js` (router and start-up) |
+| `src/renderer/` | `index.html`, `styles.css`, and the renderer in seven plain scripts loaded in order (they share the page scope): `app-core.js` (bridge, helpers, tables, modals, posters), `views-library.js`, `views-collections.js`, `views-review.js`, `views-maintenance.js`, `views-app.js` (settings, security, shares, welcome), `app-router.js` (router and start-up) |
 | `test/` | Parser + updater tests, scan harness |
 | `tools/make-icon.js` | Icon generator |
 | `electron-builder.yml` | NSIS one-click, per-user, `publish: github` (feeds the updater) |
@@ -220,7 +220,7 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   never creates a web session. Cookies ignore ports, so reusing `ml_session` would have made a portal sign-in on
   `medialedger.home:8090` a full web-app session on `:8080`. Job notes pass through `noPaths()`: the backup job's
   note names the backup file with its full path. Add a route there only if it cannot change settings or files.
-- **Renderer files.** The renderer is six classic scripts, not modules: a top-level `const` in one is visible to the
+- **Renderer files.** The renderer is seven classic scripts, not modules: a top-level `const` in one is visible to the
   others, so names must stay unique across them, and anything run at load time may only use what an earlier script
   defined (`app-router.js` is last for that reason). Split by page group so a feature lands in one file; helpers used
   by more than one page go in `app-core.js`.
@@ -258,7 +258,7 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   nothing adult exists on disk to serve.
 - **`dash.js` is vendored from the Bracket kit** with four marked `[ML]` changes (the `after` hook and the editor
   level). MediaLedger has no kit `ui.js`; `ui-shim.js` provides `window.UI` and forwards to `window.__ml`, which
-  `app-core.js` fills in. Script order matters: `ui-shim.js`, `dash.js`, then the six renderer scripts. To add a dashboard card, add an entry to
+  `app-core.js` fills in. Script order matters: `ui-shim.js`, `dash.js`, then the renderer scripts. To add a dashboard card, add an entry to
   `DASH_CARDS` in `views-library.js`; cards that need an extra call use `c.lazy(key, fn)` so it is fetched once per render.
 - **"Added" for a title is not `first_seen`.** `first_seen` is when MediaLedger first saw the file, so on a young
   ledger every title looks new. `watched.reclaim()` uses the earlier of `first_seen` and the newest file's mtime.

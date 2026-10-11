@@ -63,6 +63,8 @@ const projectMovie = (showRatings) => (m) => ({
 const projectEpisode = (f) => ({ season: num(f.season), episode: num(f.episode), episode_end: num(f.episode_end), title: f.episode_title ? String(f.episode_title) : null, resolution: f.resolution || null, minutes: f.duration_s ? Math.round(f.duration_s / 60) : null, audio: csv(f.audio_langs), subs: csv(f.sub_langs) });
 const projectVersion = (f) => ({ resolution: f.resolution || null, codec: f.video_codec || null, hdr: f.hdr && f.hdr !== 'SDR' ? String(f.hdr) : null, edition: f.edition_tag ? String(f.edition_tag) : null, minutes: f.duration_s ? Math.round(f.duration_s / 60) : null, audio: csv(f.audio_langs), subs: csv(f.sub_langs), gb: f.size ? Math.round(f.size / 1073741824 * 10) / 10 : null });
 const projectTonight = (showRatings) => (t) => ({ kind: t.kind === 'movie' ? 'movie' : 'series', type: String(t.type), key: String(t.key), title: String(t.title), year: num(t.year), episodes: num(t.episodes), minutes: num(t.minutes), unwatched: num(t.unwatched), complete: t.complete == null ? null : !!t.complete, genres: arr(t.genres), tags: arr(t.tags), audio_type: t.audio_type || null, best: t.resolution || null, online_rating: num(t.online_rating), my_rating: showRatings ? num(t.my_rating) : null, added: t.last_added ? String(t.last_added).slice(0, 10) : null });
+const projectCollection = (c) => ({ id: c.id, name: String(c.name), note: c.note ? String(c.note) : null, items: num(c.items), present: num(c.present), missing: num(c.missing), minutes: c.seconds ? Math.round(c.seconds / 60) : null, types: arr(c.types), preview: (c.preview || []).map(p => ({ type: String(p.library_type), key: String(p.title_key), title: String(p.title) })) });
+const projectCollectionItem = (i) => ({ position: num(i.position), type: String(i.library_type), key: i.present ? String(i.title_key) : null, title: String(i.title || ''), year: num(i.year), present: !!i.present, episodes: num(i.episodes), minutes: i.seconds ? Math.round(i.seconds / 60) : null, best: bestRes(i.resolutions), hdr: i.hdr && i.hdr !== 'SDR' ? String(i.hdr) : null, rated: i.rated ? String(i.rated) : null, released: i.released ? String(i.released).slice(0, 10) : null, note: i.note ? String(i.note) : null });
 const projectRequest = (r) => ({ id: r.id, title: String(r.title), year: num(r.year), kind: String(r.kind), note: r.note ? String(r.note) : null, status: String(r.status), reply: r.admin_note ? String(r.admin_note) : null, created: r.created, updated: r.updated });
 // Job notes can name a file ("Backup copied to \\nas\Pool\x.db"): only the file's own name leaves the portal.
 // A path starts with a drive, a UNC prefix or a root slash (never the // of a URL) and runs to the end of its
@@ -285,6 +287,8 @@ function createPortal({ svc, dataDir, log, audit, version, notify, sec }) {
             }
             return json(res, 400, { ok: false, error: 'type must be tv, anime or movie' });
           }
+          if (name === 'collections') { need('browse'); return json(res, 200, { ok: true, result: (await core('collections:list')).map(projectCollection) }); }
+          if (name === 'collection') { need('browse'); const c = await core('collections:get', Number(q.get('id'))); if (!c) return json(res, 404, { ok: false, error: 'No such collection' }); return json(res, 200, { ok: true, result: { ...projectCollection({ ...c, items: c.items.length, present: c.items.filter(i => i.present).length, missing: c.items.filter(i => !i.present).length, seconds: c.items.reduce((a, i) => a + (i.seconds || 0), 0), types: [...new Set(c.items.map(i => i.library_type))], preview: [] }), list: c.items.map(projectCollectionItem) } }); }
           if (name === 'tonight') { need('tonight'); return json(res, 200, { ok: true, result: (await core('data:tonight')).map(projectTonight(state.showRatings)) }); }
           if (name === 'requests') { need('request'); return json(res, 200, { ok: true, result: (await core('requests:list')).filter(r => r.requested_by === who(v)).map(projectRequest) }); }
           return json(res, 404, { ok: false, error: 'not found' });
@@ -421,4 +425,4 @@ function createPortal({ svc, dataDir, log, audit, version, notify, sec }) {
   return { checkNow, job, start, stop, status, setOptions, createInvite, renewInvite, revokeInvite, deleteInvite, handle, file };
 }
 
-module.exports = { createPortal, normTitle, noPaths, projectSeries, projectMovie, projectEpisode, projectVersion, projectTonight, projectRequest, limiter };
+module.exports = { createPortal, normTitle, noPaths, projectCollection, projectCollectionItem, projectSeries, projectMovie, projectEpisode, projectVersion, projectTonight, projectRequest, limiter };

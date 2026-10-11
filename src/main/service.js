@@ -48,7 +48,7 @@ function createService({ userData, log, send, host }) {
   // Every call that can change what the library looks like bumps `dataVersion`; read-only calls do not. Expensive
   // reports (the dashboard) are answered from memory while the version stands and the answer is under a minute old.
   let dataVersion = 0;
-  const READS = /^(data:|app:|scan:(status|list)$|jobs:(list|overdue)$|posters:(status|index|get)$|prefs:get$|log:|roots:(last|check|listDirs)$|meta:(get|status|search)$|plex:(status|test)$|tags:(list|all|get)$|ratings:list$|requests:list$|override:(list|suggest)$|movie:(plan|batches|batchItems)$|rename:(proposals|history|dry)$|export:list$|collect:get$|db:(stats|backups|restoreList)$|sys:|schedule:(taskStatus|nextInApp)$|update:|adult:status$|settings:get$|web:|notify:test$)/;
+  const READS = /^(data:|app:|collections:(list|get|search)$|scan:(status|list)$|jobs:(list|overdue)$|posters:(status|index|get)$|prefs:get$|log:|roots:(last|check|listDirs)$|meta:(get|status|search)$|plex:(status|test)$|tags:(list|all|get)$|ratings:list$|requests:list$|override:(list|suggest)$|movie:(plan|batches|batchItems)$|rename:(proposals|history|dry)$|export:list$|collect:get$|db:(stats|backups|restoreList)$|sys:|schedule:(taskStatus|nextInApp)$|update:|adult:status$|settings:get$|web:|notify:test$)/;
   const h = (ch, fn) => handlers.set(ch, READS.test(ch) ? fn : (...a) => { dataVersion++; return fn(...a); });
   const remember = (ch, ttlMs, fn) => { const memo = new Map(); h(ch, (...a) => { const key = `${showAdult ? 1 : 0}|${JSON.stringify(a)}`; const hit = memo.get(key); if (hit && hit.v === dataVersion && !scanner.running && Date.now() - hit.t < ttlMs) return hit.r; const r = fn(...a); if (!(r && typeof r.then === 'function')) { if (memo.size > 8) memo.clear(); memo.set(key, { v: dataVersion, t: Date.now(), r }); } return r; }); };
 
@@ -102,6 +102,7 @@ function createService({ userData, log, send, host }) {
     plexJob = { running: true, message: 'Connecting to Plex…' }; send('plex:progress', plexJob);
     try {
       const r = await plex.syncLibrary(db, cfg, { log, onProgress: p => { plexJob = { running: true, ...p }; send('plex:progress', plexJob); } });
+      if (r.collections && r.collections.length) { try { require('./collections').createCollections(db).importFromPlex(r.collections, log); } catch (e) { log('collections from Plex: ' + e.message); } }
       if (r.mappingSuggested && !(cfg.pathMap || []).length) settings.set({ plex: { pathMap: [r.mappingSuggested] } });
       try { r.history = await plex.syncHistory(db, cfg, { log, onProgress: p => { plexJob = { running: true, ...p }; send('plex:progress', plexJob); } }); } catch (e) { log('plex history failed: ' + e.message); r.historyError = e.message; }
       db.run('INSERT INTO plex_syncs (ts, sections, items, matched, unmatched, note, detail) VALUES (?,?,?,?,?,?,?)', r.synced_at, r.sections, r.items, r.matched, r.unmatched, trigger, JSON.stringify(r.bySection || []));
@@ -716,6 +717,19 @@ function createService({ userData, log, send, host }) {
     FROM files WHERE missing=0 AND ignored=0 AND plex_view_offset_ms > 60000 AND duration_s > 0${AF()} ORDER BY plex_last_viewed DESC LIMIT ?`, Math.min(50, Math.max(1, Number(limit) || 12)))
     .filter((r, i, all) => all.findIndex(x => x.library_type === r.library_type && (r.library_type === 'movie' ? x.group_key === r.group_key : x.show_name === r.show_name && x.season === r.season && x.episode === r.episode)) === i) // one row per title, the newest
     .map(r => ({ ...r, progress: Math.min(99, Math.round(r.offset_ms / 1000 / r.duration_s * 100)), left_s: Math.max(0, Math.round(r.duration_s - r.offset_ms / 1000)) })));
+  // ---- collections: sets of titles across libraries; Plex's are mirrored, yours are yours ----
+  // `db` opens in init(), after these handlers are defined, so the module is made on first use.
+  let colApi = null; const collections = new Proxy({}, { get: (_, k) => { if (!colApi) colApi = require('./collections').createCollections(db); return colApi[k]; } });
+  h('collections:list', () => collections.list(AF()));
+  h('collections:get', (id) => collections.get(id, AF()));
+  h('collections:search', (q) => collections.search(q, AF()));
+  h('collections:save', (o) => { const id = collections.save(o || {}); return collections.get(id, AF()); });
+  h('collections:delete', (id) => collections.remove(id));
+  h('collections:addItem', (id, it) => { collections.addItem(id, it || {}); return collections.get(id, AF()); });
+  h('collections:removeItem', (id, itemId) => { collections.removeItem(id, itemId); return collections.get(id, AF()); });
+  h('collections:setNote', (id, itemId, note) => { collections.setNote(id, itemId, note); return collections.get(id, AF()); });
+  h('collections:reorder', (id, ids) => { collections.reorder(id, ids); return collections.get(id, AF()); });
+  h('collections:sortByRelease', (id) => { collections.sortByRelease(id, AF()); return collections.get(id, AF()); });
   h('data:nextUp', (opts) => watched.nextUp(db, { ...(opts || {}), adultFilter: AF() }));
   h('data:snapshotNow', () => takeSnapshot());
   const snapshotTick = () => { const today = new Date().toISOString().slice(0, 10); const now = new Date(); const [sh, sm] = String((settings.get().snapshot || {}).time || '03:05').split(':').map(Number); if (now.getHours() * 60 + now.getMinutes() < sh * 60 + sm) return; if (scanner.running) return; if (db.get('SELECT 1 FROM snapshots WHERE day=?', today)) return; try { takeSnapshot(); } catch (e) { log('snapshot failed: ' + e.message); } };
