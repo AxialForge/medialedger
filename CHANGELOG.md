@@ -35,6 +35,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and the family portal. The icon files are now part of the repository, so
   release builds carry it too.
 
+### Fixed
+
+- **The sidebar did not open on a phone.** A later `.sidebar { position: relative }`
+  rule overrode the drawer's `position: fixed`, so the drawer stayed off screen.
+  The relative rule now applies only on wide screens.
+
 ## [2.6.0] - 2026-10-08
 
 ### Added
