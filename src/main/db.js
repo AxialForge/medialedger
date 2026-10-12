@@ -405,6 +405,13 @@ const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS idx_title_tags ON title_tags(library_type, title_key);
     `,
   },
+  {
+    version: 17, name: 'collection covers',
+    sql: `
+      ALTER TABLE collections ADD COLUMN cover_type TEXT;  -- the title whose poster is the collection's cover; empty = the first with a poster
+      ALTER TABLE collections ADD COLUMN cover_key TEXT;
+    `,
+  },
 ];
 
 class Db {

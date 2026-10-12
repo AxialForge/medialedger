@@ -69,7 +69,7 @@ const portal = createPortal({ svc, dataDir, log, audit: (...a) => sec.audit(...a
 
 // ---- roles ---------------------------------------------------------------------------------
 // What a guest (no account) may call: read-only library statistics, plus filing a media request.
-const GUEST = new Set(['collections:list', 'collections:get', 'posters:index', 'app:info', 'security:me', 'data:dashboard', 'data:series', 'data:episodes', 'data:movies', 'data:movieFiles', 'data:search', 'web:channels', 'web:videos', 'ratings:list', 'meta:get', 'scan:status', 'scan:list', 'update:status', 'adult:status', 'requests:list', 'requests:add', 'roots:last', 'tags:list', 'tags:all', 'tags:get', 'data:tonight', 'data:storage', 'data:airing', 'prefs:get', 'data:snapshots']);
+const GUEST = new Set(['collections:list', 'collections:get', 'collections:forTitle', 'collections:export', 'posters:index', 'app:info', 'security:me', 'data:dashboard', 'data:series', 'data:episodes', 'data:movies', 'data:movieFiles', 'data:search', 'web:channels', 'web:videos', 'ratings:list', 'meta:get', 'scan:status', 'scan:list', 'update:status', 'adult:status', 'requests:list', 'requests:add', 'roots:last', 'tags:list', 'tags:all', 'tags:get', 'data:tonight', 'data:storage', 'data:airing', 'prefs:get', 'data:snapshots']);
 // A standard user: everything a guest may, plus the review pages, own ratings, the adult switch for their own session.
 const STANDARD = new Set([...GUEST, 'data:watched', 'data:reclaim', 'data:nextUp', 'data:continue', 'data:subtitles', 'data:problems', 'data:duplicates', 'data:missing', 'data:quality', 'data:changes', 'data:changeStats', 'movie:plan', 'movie:batches', 'movie:batchItems', 'rename:proposals', 'rename:history', 'export:list', 'override:list', 'override:suggest', 'meta:status', 'plex:status', 'watch:status', 'schedule:nextInApp', 'db:stats', 'settings:get', 'adult:toggle', 'ratings:setUser', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'tags:add', 'tags:remove', 'data:upgrades', 'rename:dry', 'prefs:set']);
 // Admins: every channel. Actions that write to the share or throw data away also need a fresh password (re-auth).
@@ -79,7 +79,7 @@ const isSensitive = (ch, args) => ch === 'movie:run' ? !!(args[1] && args[1].liv
 const CAP_CHANNELS = {
   scan: ['scan:start', 'scan:cancel', 'meta:refresh'],
   requests: ['requests:update', 'requests:delete'],
-  collections: ['collections:save', 'collections:delete', 'collections:addItem', 'collections:removeItem', 'collections:setNote', 'collections:reorder', 'collections:sortByRelease', 'collections:suggest', 'collections:createFromSuggestion', 'collections:search'],
+  collections: ['collections:save', 'collections:delete', 'collections:addItem', 'collections:removeItem', 'collections:setNote', 'collections:reorder', 'collections:sortByRelease', 'collections:setCover', 'collections:suggest', 'collections:createFromSuggestion', 'collections:search'],
   fixes: ['override:save', 'override:delete', 'override:suggest', 'override:bulkSource', 'dup:keep', 'dup:clear', 'dup:keepBest', 'dup:plan'],
   metadata: ['meta:search', 'meta:setMatch', 'meta:setManual', 'meta:setNone', 'meta:unlock', 'collect:get', 'collect:set', 'meta:refresh'],
   tags: ['tags:add', 'tags:remove'],

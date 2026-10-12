@@ -49,6 +49,7 @@ function createCollections(db) {
       return { id: c.id, name: c.name, note: c.note, source: c.source, plex_key: c.plex_key, created: c.created, updated: c.updated,
         items: its.length, present: present.length, missing: its.length - present.length, bytes: present.reduce((a, i) => a + (i.bytes || 0), 0), seconds: present.reduce((a, i) => a + (i.seconds || 0), 0),
         watched: present.filter(i => i.watched === 1 || (i.episodes && i.watched === i.episodes)).length, types: [...new Set(its.map(i => i.library_type))],
+        cover: c.cover_type && c.cover_key && its.some(i => i.present && i.library_type === c.cover_type && i.title_key === c.cover_key) ? { library_type: c.cover_type, title_key: c.cover_key } : null,
         preview: its.filter(i => i.present).slice(0, 6).map(i => ({ library_type: i.library_type, title_key: i.title_key, title: i.title })) };
     });
   }
@@ -65,6 +66,17 @@ function createCollections(db) {
     if (db.get('SELECT id FROM collections WHERE name=? COLLATE NOCASE', n)) throw new Error(`There is already a collection called ${n}`);
     db.run('INSERT INTO collections (name, note, source, created, updated) VALUES (?,?,?,?,?)', n, clean(note, 1000) || null, 'manual', now, now);
     return db.get('SELECT last_insert_rowid() id').id;
+  }
+  function setCover(id, libraryType, titleKey) { db.run('UPDATE collections SET cover_type=?, cover_key=?, updated=? WHERE id=?', libraryType || null, titleKey || null, new Date().toISOString(), Number(id)); return true; }
+  /** The collections a library title is in, and all of them, for the "add to collection" dialog. */
+  function forTitle(libraryType, titleKey) { const inIds = new Set(db.all('SELECT collection_id FROM collection_items WHERE library_type=? AND title_key=?', libraryType, titleKey).map(r => r.collection_id)); return db.all('SELECT id, name, source FROM collections ORDER BY name COLLATE NOCASE').map(c => ({ ...c, has: inIds.has(c.id) })); }
+  /** CSV of one collection: what is on hand and what is not, in order. */
+  function exportCsv(id, adultFilter = '') {
+    const c = get(id, adultFilter); if (!c) throw new Error('No such collection');
+    const q = (v) => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const rows = [['position', 'title', 'year', 'kind', 'in_library', 'released', 'content_rating', 'episodes', 'seasons', 'minutes', 'gb', 'best_resolution', 'watched', 'note']];
+    for (const i of c.items) rows.push([i.position, i.title, i.year || '', i.library_type, i.present ? 'yes' : 'no', i.released || '', i.rated || '', i.episodes == null ? '' : i.episodes, i.seasons || '', i.seconds ? Math.round(i.seconds / 60) : '', i.bytes ? (i.bytes / 1073741824).toFixed(2) : '', i.resolutions ? String(i.resolutions).split(',').sort().pop() : '', i.watched == null ? '' : (i.episodes != null ? `${i.watched}/${i.episodes}` : (i.watched ? 'yes' : 'no')), i.note || '']);
+    return { name: c.name, filename: `${c.name.replace(/[^A-Za-z0-9 _-]+/g, '').trim() || 'collection'}.csv`, csv: rows.map(r => r.map(q).join(',')).join('\r\n') + '\r\n' };
   }
   function remove(id) { db.run('DELETE FROM collection_items WHERE collection_id=?', Number(id)); return db.run('DELETE FROM collections WHERE id=?', Number(id)).changes > 0; }
   const nextPos = (cid) => (db.get('SELECT COALESCE(MAX(position), 0) p FROM collection_items WHERE collection_id=?', cid).p || 0) + 1;
@@ -127,7 +139,7 @@ function createCollections(db) {
     return { collections: plexCols.length, made, items };
   }
 
-  return { list, get, save, remove, addItem, removeItem, setNote, reorder, sortByRelease, search, importFromPlex, titleOf };
+  return { list, get, save, remove, addItem, removeItem, setNote, reorder, sortByRelease, search, importFromPlex, titleOf, setCover, forTitle, exportCsv };
 }
 
 module.exports = { createCollections };

@@ -8,6 +8,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [3.2.0] - 2026-10-12
+
+### Added
+
+- **Collection covers** (schema v17): press ★ on a title in a collection to
+  make its poster the collection's cover, shown on the Collections page and
+  the family portal's Sets tab.
+- **Add to a collection from a title page**: a ❖ Collection button on every
+  series and movie page ticks the sets the title belongs in, or makes a new
+  one.
+- **Export a collection** as a CSV (position, title, year, kind, in the
+  library, released, rating, episodes, length, size, watched, note).
+- **Keyboard**: `/` jumps to the page's filter box; Escape in it clears the
+  filter.
+
 ## [3.1.0] - 2026-10-12
 
 ### Added

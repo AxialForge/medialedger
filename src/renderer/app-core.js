@@ -55,6 +55,25 @@ function stepThrough(items, { what, run }) {
 }
 $('#modal').addEventListener('click', e => { if (e.target === $('#modal')) closeModal(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+// Keyboard: "/" jumps to the page's filter box; Escape in it clears the filter.
+document.addEventListener('keydown', e => {
+  const t = e.target, typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+  if (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) { const box = view.querySelector('.toolbar input[type=search], input[type=search]'); if (box) { e.preventDefault(); box.focus(); box.select(); } }
+  if (e.key === 'Escape' && t && t.tagName === 'INPUT' && t.type === 'search' && t.value) { t.value = ''; t.dispatchEvent(new Event('input', { bubbles: true })); }
+});
+/** Hands the browser (or the desktop window) a file to save. */
+function downloadText(filename, text, mime = 'text/plain') { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: mime + ';charset=utf-8' })); a.download = filename; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); }
+/** "Add to collection" on a title page: tick the sets it belongs in, or make a new one. */
+const colBtn = (type, key) => `<button class="small colbtn" data-type="${esc(type)}" data-key="${esc(key)}" title="Add this title to a collection">❖ Collection</button>`;
+document.addEventListener('click', async e => {
+  const b = e.target.closest('.colbtn'); if (!b) return;
+  const type = b.dataset.type, key = b.dataset.key;
+  let list; try { list = await L.collections.forTitle(type, key); } catch (err) { return toast(err.message, true); }
+  const card = openModal(`<h2>Collections for this title</h2><div class="preview" style="max-height:300px;overflow:auto">${list.map(c => `<label class="inline" style="display:flex;padding:3px 0"><input type="checkbox" class="colPick" value="${c.id}" ${c.has ? 'checked' : ''}> ${esc(c.name)}${c.source === 'plex' ? ' <span class="muted tiny">Plex</span>' : ''}</label>`).join('') || '<div class="muted">No collections yet.</div>'}</div><div class="inline" style="margin-top:10px"><input type="text" id="colNewName" placeholder="New collection…" style="flex:1"><button class="small" id="colNewGo">Create and add</button></div><div class="actions"><span class="grow"></span><button id="colCancel">Close</button></div>`);
+  $('#colCancel', card).onclick = closeModal;
+  card.querySelectorAll('.colPick').forEach(i => { i.onchange = async () => { try { if (i.checked) await L.collections.addItem(Number(i.value), { library_type: type, title_key: key }); else { const c = await L.collections.get(Number(i.value)); const it = (c.items || []).find(x => x.library_type === type && x.title_key === key); if (it) await L.collections.removeItem(c.id, it.id); } toast(i.checked ? 'Added' : 'Removed'); } catch (err) { toast(err.message, true); i.checked = !i.checked; } }; });
+  $('#colNewGo', card).onclick = async () => { const name = $('#colNewName', card).value.trim(); if (!name) return toast('Type a name', true); try { const c = await L.collections.save({ name }); await L.collections.addItem(c.id, { library_type: type, title_key: key }); closeModal(); toast(`Added to ${c.name}`); } catch (err) { toast(err.message, true); } };
+});
 
 // Sortable, filterable table. cols: [{key, label, num, render, sortVal, cls}]
 function makeTable(rows, cols, { onRow, search, defaultSort, short, sorts, hover } = {}) {

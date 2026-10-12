@@ -48,7 +48,7 @@ function createService({ userData, log, send, host }) {
   // Every call that can change what the library looks like bumps `dataVersion`; read-only calls do not. Expensive
   // reports (the dashboard) are answered from memory while the version stands and the answer is under a minute old.
   let dataVersion = 0;
-  const READS = /^(data:|app:|collections:(list|get|search|suggest)$|dup:plan$|scan:(status|list)$|jobs:(list|overdue)$|posters:(status|index|get)$|prefs:get$|log:|roots:(last|check|listDirs)$|meta:(get|status|search)$|plex:(status|test)$|tags:(list|all|get)$|ratings:list$|requests:list$|override:(list|suggest)$|movie:(plan|batches|batchItems)$|rename:(proposals|history|dry)$|export:list$|collect:get$|db:(stats|backups|restoreList)$|sys:|schedule:(taskStatus|nextInApp)$|update:|adult:status$|settings:get$|web:|notify:test$)/;
+  const READS = /^(data:|app:|collections:(list|get|search|suggest|forTitle|export)$|dup:plan$|scan:(status|list)$|jobs:(list|overdue)$|posters:(status|index|get)$|prefs:get$|log:|roots:(last|check|listDirs)$|meta:(get|status|search)$|plex:(status|test)$|tags:(list|all|get)$|ratings:list$|requests:list$|override:(list|suggest)$|movie:(plan|batches|batchItems)$|rename:(proposals|history|dry)$|export:list$|collect:get$|db:(stats|backups|restoreList)$|sys:|schedule:(taskStatus|nextInApp)$|update:|adult:status$|settings:get$|web:|notify:test$)/;
   const h = (ch, fn) => handlers.set(ch, READS.test(ch) ? fn : (...a) => { dataVersion++; return fn(...a); });
   const remember = (ch, ttlMs, fn) => { const memo = new Map(); h(ch, (...a) => { const key = `${scopeKey()}|${JSON.stringify(a)}`; const hit = memo.get(key); if (hit && hit.v === dataVersion && !scanner.running && Date.now() - hit.t < ttlMs) return hit.r; const r = fn(...a); if (!(r && typeof r.then === 'function')) { if (memo.size > 8) memo.clear(); memo.set(key, { v: dataVersion, t: Date.now(), r }); } return r; }); };
 
@@ -806,6 +806,9 @@ function createService({ userData, log, send, host }) {
     return require('./suggest').suggest({ movies, series }, have, { web: o.web !== false, cap: Number(o.cap) || 40 }, p => send('collections:suggestProgress', p));
   });
   h('collections:createFromSuggestion', (sug) => { const s = sug || {}; const id = collections.save({ name: s.name, note: s.source === 'local' ? null : `Suggested from ${s.source === 'anilist' ? 'AniList' : 'Wikidata'}` }); for (const it of s.items || []) collections.addItem(id, { library_type: it.library_type, title_key: it.title_key }); for (const m of s.missing || []) collections.addItem(id, { library_type: (s.items[0] || {}).library_type || 'movie', title: m.title, year: m.year }); collections.sortByRelease(id, AF()); return collections.get(id, AF()); });
+  h('collections:setCover', (id, type, key) => { collections.setCover(id, type, key); return collections.get(id, AF()); });
+  h('collections:forTitle', (type, key) => collections.forTitle(type, key));
+  h('collections:export', (id) => collections.exportCsv(id, AF()));
   h('collections:sortByRelease', (id) => { collections.sortByRelease(id, AF()); return collections.get(id, AF()); });
   h('data:nextUp', (opts) => watched.nextUp(db, { ...(opts || {}), adultFilter: AF() }));
   h('data:snapshotNow', () => takeSnapshot());

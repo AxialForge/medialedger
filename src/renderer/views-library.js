@@ -259,7 +259,7 @@ async function episodesView(type, show) {
   ];
   const table = makeTable(rows, cols, { search: r => `${r.file_name} ${r.episode_title || ''} ${sxe(r)}`, defaultSort: { key: 'season' }, onRow: r => L.showItem(r.abs_path) });
   await loadPosterIndex();
-  view.innerHTML = `${posterTag(type, show, show, 'pbig')}<div class="detail-head"><span class="back" id="back">← ${typeName(type)}</span><h1>${esc(show)}</h1><span class="muted">${live.length} episodes · ${fmtBytes(bytes)} · ${fmtHours(secs)}</span>${miss && miss.expected ? (miss.missing_count ? `<span class="badge bad">${miss.missing_count} missing of ${miss.expected}</span>` : '<span class="badge ok">complete</span>') : ''}<span class="grow"></span>${matchBtn(type, show)}</div>`;
+  view.innerHTML = `${posterTag(type, show, show, 'pbig')}<div class="detail-head"><span class="back" id="back">← ${typeName(type)}</span><h1>${esc(show)}</h1><span class="muted">${live.length} episodes · ${fmtBytes(bytes)} · ${fmtHours(secs)}</span>${miss && miss.expected ? (miss.missing_count ? `<span class="badge bad">${miss.missing_count} missing of ${miss.expected}</span>` : '<span class="badge ok">complete</span>') : ''}<span class="grow"></span>${colBtn(type, show)}${matchBtn(type, show)}</div>`;
   $('#back').onclick = () => { location.hash = '#' + type; };
   view.insertAdjacentHTML('beforeend', tagStrip(type, show, { genres: data.genres || [], audio: live.length ? (rows.some(r => /jpn|\bja\b/i.test(r.audio_langs || '')) ? (live.every(r => /jpn|\bja\b/i.test(r.audio_langs || '') && /eng|\ben\b/i.test(r.audio_langs || '')) ? 'dual' : live.every(r => /jpn|\bja\b/i.test(r.audio_langs || '')) ? 'sub' : 'mixed') : (type === 'anime' && live.some(r => /eng|\ben\b/i.test(r.audio_langs || '')) ? 'dub' : null)) : null, tags: data.tags || [] })); refreshTagSuggestions();
   if (miss && miss.expected) view.insertAdjacentHTML('beforeend', missingGrid(miss));
@@ -335,7 +335,7 @@ async function movieFilesView(groupKey) {
   ];
   const table = makeTable(rows, cols, { onRow: r => L.showItem(r.abs_path) });
   await loadPosterIndex();
-  view.innerHTML = `${posterTag('movie', groupKey, r0.movie_title || groupKey, 'pbig')}<div class="detail-head"><span class="back" id="back">← Movies</span><h1>${esc(r0.movie_title || groupKey)}${r0.movie_year ? ` <span class="muted">(${r0.movie_year})</span>` : ''}</h1><span class="muted">${rows.length} file(s)</span></div>`;
+  view.innerHTML = `${posterTag('movie', groupKey, r0.movie_title || groupKey, 'pbig')}<div class="detail-head"><span class="back" id="back">← Movies</span><h1>${esc(r0.movie_title || groupKey)}${r0.movie_year ? ` <span class="muted">(${r0.movie_year})</span>` : ''}</h1><span class="muted">${rows.length} file(s)</span><span class="grow"></span>${colBtn('movie', groupKey)}</div>`;
   $('#back').onclick = () => { location.hash = '#movies'; };
   const mg = (() => { try { const g = JSON.parse(rows.map(r => r.plex_genres).find(Boolean) || '[]'); return Array.isArray(g) ? g : []; } catch { return []; } })();
   const live = rows.filter(r => !r.missing); const jp = r => /jpn|\bja\b/i.test(r.audio_langs || ''), en = r => /eng|\ben\b/i.test(r.audio_langs || '');

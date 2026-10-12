@@ -479,6 +479,11 @@ td.rowacts { width: 1%; text-align: right; white-space: nowrap; }
 
 /* Capabilities: controls that a standard account only gets with the matching permission */
 body:not(.cap-fixes) .fixbtn, body:not(.cap-fixes) .dupkeep, body:not(.cap-fixes) #dupBest, body:not(.cap-fixes) .dupclear, body:not(.cap-scan) .scanbox, body:not(.cap-scan) #topScan,
-body:not(.cap-collections) #colNew, body:not(.cap-collections) #sugLocal, body:not(.cap-collections) #sugWeb, body:not(.cap-metadata) .matchbtn, body:not(.cap-metadata) .collectbtn, body:not(.cap-tags) .tag-add { display: none !important; }
+body:not(.cap-collections) #colNew, body:not(.cap-collections) .colbtn, body:not(.cap-collections) #sugLocal, body:not(.cap-collections) #sugWeb, body:not(.cap-metadata) .matchbtn, body:not(.cap-metadata) .collectbtn, body:not(.cap-tags) .tag-add { display: none !important; }
 body.role-kids [data-view="missing"], body.role-kids [data-view="issues"], body.role-kids [data-view="quality"], body.role-kids [data-view="upgrades"], body.role-kids [data-view="reclaim"], body.role-kids [data-view="ratings"], body.role-kids [data-view="watched"], body.role-kids [data-view="requests"], body.role-kids [data-view="changes"], body.role-kids [data-view="movienames"], body.role-kids [data-view="rename"], body.role-kids [data-view="export"], body.role-kids [data-view="family"], body.role-kids [data-view="system"], body.role-kids [data-view="log"], body.role-kids [data-view="settings"], body.role-kids .scanbox, body.role-kids #topScan, body.role-kids .adminonly, body.role-kids .starwidget, body.role-kids .tag-add { display: none !important; }
 .whocan th { font-size: 11px; } .whocan td { font-size: 12.5px; }
+
+/* Collection cards with a cover poster */
+.colcard.with-cover { display: flex; gap: 12px; }
+.colcard .cover { flex: none; } .pcover { width: 84px; height: 126px; border-radius: 6px; object-fit: cover; background: var(--panel3); display: inline-grid; place-items: center; font-size: 28px; color: var(--muted); }
+.colcard .colbody { min-width: 0; flex: 1; }
