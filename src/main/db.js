@@ -412,6 +412,18 @@ const MIGRATIONS = [
       ALTER TABLE collections ADD COLUMN cover_key TEXT;
     `,
   },
+  {
+    version: 18, name: 'owned discs',
+    sql: `
+      -- "I still have this on a shelf": a fact about the title, shared by the household (not per user).
+      CREATE TABLE IF NOT EXISTS discs (
+        library_type TEXT NOT NULL, title_key TEXT NOT NULL,
+        format TEXT NOT NULL DEFAULT 'bluray',   -- bluray | uhd | dvd | other
+        note TEXT, updated TEXT NOT NULL,
+        PRIMARY KEY (library_type, title_key)
+      );
+    `,
+  },
 ];
 
 class Db {
@@ -543,6 +555,11 @@ class Db {
   // ---- custom title tags ----------------------------------------------------
   tagsFor(type, user = '') { const m = new Map(); for (const r of this.all('SELECT title_key, tag FROM title_tags WHERE library_type=? AND user=? ORDER BY tag COLLATE NOCASE', type, user)) { if (!m.has(r.title_key)) m.set(r.title_key, []); m.get(r.title_key).push(r.tag); } return m; }
   tagsOf(type, key, user = '') { return this.all('SELECT tag FROM title_tags WHERE library_type=? AND title_key=? AND user=? ORDER BY tag COLLATE NOCASE', type, key, user).map(r => r.tag); }
+  // owned discs: Map title_key -> { format, note } for one library type; set/remove by title
+  discsFor(type) { return new Map(this.all('SELECT title_key, format, note FROM discs WHERE library_type=?', type).map(r => [r.title_key, { format: r.format, note: r.note }])); }
+  discOf(type, key) { return this.get('SELECT format, note, updated FROM discs WHERE library_type=? AND title_key=?', type, key) || null; }
+  setDisc(type, key, format, note) { this.run('INSERT INTO discs (library_type, title_key, format, note, updated) VALUES (?,?,?,?,?) ON CONFLICT(library_type, title_key) DO UPDATE SET format=excluded.format, note=excluded.note, updated=excluded.updated', type, key, format, note || null, new Date().toISOString()); return this.discOf(type, key); }
+  removeDisc(type, key) { this.run('DELETE FROM discs WHERE library_type=? AND title_key=?', type, key); return null; }
   allTags(user = '') { return this.all('SELECT tag, COUNT(*) n FROM title_tags WHERE user=? GROUP BY tag ORDER BY n DESC, tag COLLATE NOCASE', user).map(r => ({ tag: r.tag, n: r.n })); }
   addTag(type, key, tag, user = '') { this.run('INSERT OR IGNORE INTO title_tags (library_type, title_key, tag, created, user) VALUES (?,?,?,?,?)', type, key, tag, new Date().toISOString(), user); return this.tagsOf(type, key, user); }
   removeTag(type, key, tag, user = '') { this.run('DELETE FROM title_tags WHERE library_type=? AND title_key=? AND tag=? COLLATE NOCASE AND user=?', type, key, tag, user); return this.tagsOf(type, key, user); }

@@ -148,9 +148,9 @@ function filterBar(rows, rebuild, { watched = true } = {}) {
   const uniq = (get) => [...new Set(rows.flatMap(get).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const genres = uniq(r => r.genres || []), tags = uniq(r => r.tags || []), audios = uniq(r => r.audio_type ? [r.audio_type] : []), origins = uniq(r => String(r.origins || '').split(',').filter(Boolean));
   const sel = (id, label, opts) => `<select id="${id}" class="small"><option value="">${label}</option>${opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>`;
-  const bar = el(`<div class="toolbar filterbar">${sel('fGenre', 'any genre', genres.map(g => [g, g]))}${sel('fAudio', 'sub or dub', audios.map(a => [a, AUDIO_LABEL[a] || a]))}${sel('fTag', 'any tag', tags.map(t => [t, t]))}${origins.length ? sel('fOrigin', 'any source', origins.map(o => [o, ORIGIN_LABEL[o] || o])) : ''}${watched ? sel('fWatched', 'watched or not', [['unwatched', 'unwatched'], ['started', 'partly watched'], ['watched', 'watched'], ['unknown', 'not in Plex']]) : ''}<button class="small" id="fClear" hidden>Clear filters</button></div>`);
+  const bar = el(`<div class="toolbar filterbar">${sel('fGenre', 'any genre', genres.map(g => [g, g]))}${sel('fAudio', 'sub or dub', audios.map(a => [a, AUDIO_LABEL[a] || a]))}${sel('fTag', 'any tag', tags.map(t => [t, t]))}${origins.length || rows.some(r => r.disc_format) ? sel('fOrigin', 'any source', origins.map(o => [o, ORIGIN_LABEL[o] || o]).concat(rows.some(r => r.disc_format) ? [['owned', 'disc owned'], ['unowned', 'no disc owned']] : [])) : ''}${watched ? sel('fWatched', 'watched or not', [['unwatched', 'unwatched'], ['started', 'partly watched'], ['watched', 'watched'], ['unknown', 'not in Plex']]) : ''}<button class="small" id="fClear" hidden>Clear filters</button></div>`);
   const state = () => ({ genre: $('#fGenre', bar).value, audio: $('#fAudio', bar).value, tag: $('#fTag', bar).value, origin: $('#fOrigin', bar) ? $('#fOrigin', bar).value : '', watched: watched ? $('#fWatched', bar).value : '' });
-  const pass = (r, f) => (!f.genre || (r.genres || []).includes(f.genre)) && (!f.audio || r.audio_type === f.audio) && (!f.tag || (r.tags || []).includes(f.tag)) && (!f.origin || String(r.origins || '').split(',').includes(f.origin))
+  const pass = (r, f) => (!f.genre || (r.genres || []).includes(f.genre)) && (!f.audio || r.audio_type === f.audio) && (!f.tag || (r.tags || []).includes(f.tag)) && (!f.origin || (f.origin === 'owned' ? !!r.disc_format : f.origin === 'unowned' ? !r.disc_format : String(r.origins || '').split(',').includes(f.origin)))
     && (!f.watched || (r.unwatched == null ? f.watched === 'unknown' : f.watched === 'unwatched' ? r.unwatched > 0 && r.watched === 0 : f.watched === 'started' ? r.watched > 0 && r.unwatched > 0 : f.watched === 'watched' ? r.unwatched === 0 : false));
   const apply = () => { const f = state(); const any = Object.values(f).some(Boolean); $('#fClear', bar).hidden = !any; rebuild(any ? rows.filter(r => pass(r, f)) : rows); };
   bar.querySelectorAll('select').forEach(x => { x.onchange = apply; });
@@ -423,6 +423,23 @@ document.addEventListener('click', async e => {
 });
 
 // ---------- tags ----------------------------------------------------------
+const DISC_LABEL = { bluray: 'Blu-ray', uhd: '4K UHD', dvd: 'DVD', other: 'disc' };
+const discBadge = (f) => f ? `<span class="badge disc" title="You own this on ${esc(DISC_LABEL[f] || f)}">💿 ${esc(DISC_LABEL[f] || f)}</span>` : '';
+// Title-page button: records (or clears) that the physical disc is still in the house. Needs the metadata capability.
+const discBtn = (type, key, cur) => `<button class="small discbtn cap-metadata-only" data-type="${esc(type)}" data-key="${esc(key)}" title="Record that you own the physical disc">${cur ? `💿 ${esc(DISC_LABEL[cur.format] || 'disc')} owned` : '💿 Own the disc?'}</button>`;
+document.addEventListener('click', async e => {
+  const b = e.target.closest('.discbtn'); if (!b) return;
+  const type = b.dataset.type, key = b.dataset.key;
+  let cur = null; try { cur = await L.disc.get(type, key); } catch (err) { return toast(err.message, true); }
+  const card = openModal(`<h2>Physical disc</h2><p class="muted small">Mark that the disc for this title is still on your shelf. Ripped-from-disc comes from the root's <i>From</i> setting; this is about the disc itself.</p>
+    <label>Format <select id="discFmt">${Object.entries(DISC_LABEL).map(([v, l]) => `<option value="${v}" ${(cur ? cur.format : 'bluray') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    <label style="margin-top:8px">Note <input type="text" id="discNote" maxlength="200" placeholder="shelf, box set, lent to…" value="${esc(cur && cur.note || '')}"></label>
+    <div class="actions">${cur ? '<button id="discDrop" class="danger">No longer have it</button>' : ''}<span class="grow"></span><button id="discCancel">Cancel</button><button id="discSave" class="primary">Save</button></div>`);
+  $('#discCancel', card).onclick = closeModal;
+  const done = () => { closeModal(); toast('Saved'); route(); };
+  $('#discSave', card).onclick = async () => { try { await L.disc.set(type, key, $('#discFmt', card).value, $('#discNote', card).value); done(); } catch (err) { toast(err.message, true); } };
+  if ($('#discDrop', card)) $('#discDrop', card).onclick = async () => { try { await L.disc.remove(type, key); done(); } catch (err) { toast(err.message, true); } };
+});
 const ORIGIN_LABEL = { download: 'downloaded', disc: 'disc rip', recorded: 'recorded', other: 'other' };
 const originBadges = (s) => String(s || '').split(',').filter(Boolean).map(o => `<span class="badge origin-${esc(o)}" title="${esc(ORIGIN_LABEL[o] || o)}">${o === 'disc' ? '◎ disc' : esc(ORIGIN_LABEL[o] || o)}</span>`).join('');
 const AUDIO_LABEL = { dual: 'Dual audio', sub: 'Subbed', dub: 'Dubbed', raw: 'Raw', mixed: 'Mixed sub/dub' };

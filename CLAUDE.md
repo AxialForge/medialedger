@@ -314,3 +314,12 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   when the setting changes.
 - **Why not a column:** changing a root's origin would need a backfill
   over every file; the CASE applies instantly and survives rescans.
+
+### Owned discs are a household fact, not a per-user one (3.4.0)
+
+- `discs` (schema v18) is keyed by `(library_type, title_key)` with **no
+  user column**, unlike `title_tags` / `user_ratings`. Owning a Blu-ray is
+  true for the whole house, so every account sees the same badge.
+- Reading is in GUEST; writing rides the *metadata* capability
+  (`CAP_CHANNELS.metadata`), not *tags*. Keep the two ideas apart:
+  "ripped from disc" = the root's `origin`; "still have the disc" = `discs`.

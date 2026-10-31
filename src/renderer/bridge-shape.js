@@ -42,6 +42,7 @@
   rename: { proposals: 'rename:proposals', apply: 'rename:apply', dry: 'rename:dry', history: 'rename:history' },
   adult: { status: 'adult:status', toggle: 'adult:toggle', dashboard: 'adult:dashboard' },
   ratings: { list: 'ratings:list', setUser: 'ratings:setUser' },
+  disc: { get: 'disc:get', set: 'disc:set', remove: 'disc:remove' },
   collections: { list: 'collections:list', get: 'collections:get', search: 'collections:search', save: 'collections:save', remove: 'collections:delete', addItem: 'collections:addItem', removeItem: 'collections:removeItem', setNote: 'collections:setNote', reorder: 'collections:reorder', sortByRelease: 'collections:sortByRelease', setCover: 'collections:setCover', forTitle: 'collections:forTitle', exportCsv: 'collections:export', suggest: 'collections:suggest', onSuggestProgress: '!collections:suggestProgress', createFromSuggestion: 'collections:createFromSuggestion' },
   tags: { list: 'tags:list', all: 'tags:all', get: 'tags:get', add: 'tags:add', remove: 'tags:remove' },
   tonight: 'data:tonight', storage: 'data:storage', backupTo: 'db:backupTo', airing: 'data:airing', upgrades: 'data:upgrades', notifyTest: 'notify:test', statusJson: 'data:status', watched: 'data:watched', reclaim: 'data:reclaim', nextUp: 'data:nextUp', continueWatching: 'data:continue', jobs: { list: 'jobs:list', run: 'jobs:run', overdue: 'jobs:overdue' }, collect: { get: 'collect:get', set: 'collect:set' }, shares: { status: 'shares:status', probe: 'shares:probe', add: 'shares:add', remove: 'shares:remove' },

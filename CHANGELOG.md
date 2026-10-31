@@ -8,6 +8,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [3.4.0] - 2026-10-31
+
+### Added
+
+- **Owned discs.** A title page has a *Own the disc?* button that records
+  the physical disc you still have (Blu-ray, 4K UHD, DVD, other) with a
+  note. Lists show a blue 💿 badge next to the title, the source filter
+  gains *disc owned* / *no disc owned*, and the Movies page counts owned
+  discs and how many are not ripped yet. Anyone may see it; editing needs
+  the *metadata* capability. Schema v18 (`discs` table).
+
 ## [3.3.1] - 2026-10-31
 
 ### Fixed

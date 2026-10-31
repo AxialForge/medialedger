@@ -48,7 +48,7 @@ function createService({ userData, log, send, host }) {
   // Every call that can change what the library looks like bumps `dataVersion`; read-only calls do not. Expensive
   // reports (the dashboard) are answered from memory while the version stands and the answer is under a minute old.
   let dataVersion = 0;
-  const READS = /^(data:|app:|collections:(list|get|search|suggest|forTitle|export)$|dup:plan$|scan:(status|list)$|jobs:(list|overdue)$|posters:(status|index|get)$|prefs:get$|log:|roots:(last|check|listDirs)$|meta:(get|status|search)$|plex:(status|test)$|tags:(list|all|get)$|ratings:list$|requests:list$|override:(list|suggest)$|movie:(plan|batches|batchItems)$|rename:(proposals|history|dry)$|export:list$|collect:get$|db:(stats|backups|restoreList)$|sys:|schedule:(taskStatus|nextInApp)$|update:|adult:status$|settings:get$|web:|notify:test$)/;
+  const READS = /^(data:|app:|collections:(list|get|search|suggest|forTitle|export)$|dup:plan$|scan:(status|list)$|jobs:(list|overdue)$|posters:(status|index|get)$|prefs:get$|log:|roots:(last|check|listDirs)$|meta:(get|status|search)$|plex:(status|test)$|tags:(list|all|get)$|disc:get$|ratings:list$|requests:list$|override:(list|suggest)$|movie:(plan|batches|batchItems)$|rename:(proposals|history|dry)$|export:list$|collect:get$|db:(stats|backups|restoreList)$|sys:|schedule:(taskStatus|nextInApp)$|update:|adult:status$|settings:get$|web:|notify:test$)/;
   const h = (ch, fn) => handlers.set(ch, READS.test(ch) ? fn : (...a) => { dataVersion++; return fn(...a); });
   const remember = (ch, ttlMs, fn) => { const memo = new Map(); h(ch, (...a) => { const key = `${scopeKey()}|${JSON.stringify(a)}`; const hit = memo.get(key); if (hit && hit.v === dataVersion && !scanner.running && Date.now() - hit.t < ttlMs) return hit.r; const r = fn(...a); if (!(r && typeof r.then === 'function')) { if (memo.size > 8) memo.clear(); memo.set(key, { v: dataVersion, t: Date.now(), r }); } return r; }); };
 
@@ -603,19 +603,20 @@ function createService({ userData, log, send, host }) {
     FROM files WHERE library_type=? AND missing=0 AND ignored=0${AF()} GROUP BY show_name ORDER BY show_name COLLATE NOCASE`, type);
     const plexShows = new Map(db.all('SELECT rating_key, user_rating, genres, year, audience_rating, rating, content_rating, released FROM plex_shows').map(s => [s.rating_key, s]));
     const tagMap = db.tagsFor(type, scope.user);
+    const discs = db.discsFor(type);
     const miss = new Map(missingSummary(type).map(m => [m.show_name, m]));
     const metas = db.allSeriesMeta(type);
     const ur = new Map(db.userRatings(type, scope.user).map(u => [u.title_key, u]));
-    return rows.map(r => { const m = miss.get(r.show_name); const sm = metas.get(r.show_name); const u = ur.get(r.show_name); const ps = r.plex_show_key ? plexShows.get(r.plex_show_key) : null; return { ...r, expected: m ? m.expected : 0, missing_count: m ? m.missing_count : 0, meta_source: m ? m.source : null, meta_status: m ? m.status : null, online_rating: sm ? sm.rating : null, my_rating: u ? u.stars : null, plex_user: ps ? ps.user_rating : null, year: ps ? ps.year : null, audience_rating: ps ? ps.audience_rating : null, critic_rating: ps ? ps.rating : null, content_rating: ps ? ps.content_rating || null : null, released: ps ? ps.released || null : null, next_airing: sm ? sm.next_airing || null : null, genres: onlineTags(sm).length ? onlineTags(sm) : onlineTags({ genres: ps && ps.genres }), audio_type: titleAudioType({ files: r.probed_audio, jpn: r.jpn_files, eng: r.eng_files, dual: r.dual_files }, { anime: type === 'anime' }), tags: tagMap.get(r.show_name) || [] }; });
+    return rows.map(r => { const m = miss.get(r.show_name); const sm = metas.get(r.show_name); const u = ur.get(r.show_name); const ps = r.plex_show_key ? plexShows.get(r.plex_show_key) : null; return { ...r, expected: m ? m.expected : 0, missing_count: m ? m.missing_count : 0, meta_source: m ? m.source : null, meta_status: m ? m.status : null, online_rating: sm ? sm.rating : null, my_rating: u ? u.stars : null, plex_user: ps ? ps.user_rating : null, year: ps ? ps.year : null, audience_rating: ps ? ps.audience_rating : null, critic_rating: ps ? ps.rating : null, content_rating: ps ? ps.content_rating || null : null, released: ps ? ps.released || null : null, next_airing: sm ? sm.next_airing || null : null, genres: onlineTags(sm).length ? onlineTags(sm) : onlineTags({ genres: ps && ps.genres }), audio_type: titleAudioType({ files: r.probed_audio, jpn: r.jpn_files, eng: r.eng_files, dual: r.dual_files }, { anime: type === 'anime' }), tags: tagMap.get(r.show_name) || [], disc_format: (discs.get(r.show_name) || {}).format || null }; });
   });
-  h('data:episodes', (type, show) => ({ tags: db.tagsOf(type, show, scope.user), genres: onlineTags(db.getSeriesMeta(type, show)), files: db.all(`SELECT * FROM files WHERE library_type=? AND show_name=? AND ignored=0${AF()} ORDER BY missing, season, episode, file_name`, type, show), missing: missingSummary(type).find(m => m.show_name === show) || null }));
-  h('data:movies', () => { const movieTags = db.tagsFor('movie', scope.user); const mine = new Map(db.userRatings('movie', scope.user).map(u => [u.title_key, u.stars])); return db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, SUM(size) bytes, MAX(duration_s) seconds,
+  h('data:episodes', (type, show) => ({ tags: db.tagsOf(type, show, scope.user), disc: db.discOf(type, show), genres: onlineTags(db.getSeriesMeta(type, show)), files: db.all(`SELECT * FROM files WHERE library_type=? AND show_name=? AND ignored=0${AF()} ORDER BY missing, season, episode, file_name`, type, show), missing: missingSummary(type).find(m => m.show_name === show) || null }));
+  h('data:movies', () => { const movieTags = db.tagsFor('movie', scope.user); const discs = db.discsFor('movie'); const mine = new Map(db.userRatings('movie', scope.user).map(u => [u.title_key, u.stars])); return db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, SUM(size) bytes, MAX(duration_s) seconds,
       GROUP_CONCAT(DISTINCT resolution) resolutions, GROUP_CONCAT(DISTINCT video_codec) codecs, GROUP_CONCAT(DISTINCT audio_langs) audio_langs, GROUP_CONCAT(DISTINCT sub_langs) sub_langs,
       MAX(has_captions) has_captions, SUM(CASE WHEN probe_ok=1 THEN 1 ELSE 0 END) probed, GROUP_CONCAT(edition_tag, ' | ') editions, MAX(plex_genres) plex_genres, GROUP_CONCAT(DISTINCT ${ORIGIN()}) origins,
       MAX(CASE WHEN ${WATCHED()} THEN 1 ELSE 0 END) watched_count, MAX(plex_user_rating) plex_user, SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) plex_linked, MAX(hdr) hdr,
       MIN(${FILE_ADDED}) added, MAX(plex_last_viewed) last_viewed, MAX(height) height, MAX(bitrate_kbps) bitrate, MAX(plex_audience_rating) audience_rating, MAX(plex_view_offset_ms) offset_ms, MAX(plex_content_rating) content_rating, MIN(plex_released) released,
       ${AUDIO_COUNTS}
-    FROM files WHERE library_type='movie' AND missing=0 AND ignored=0${AF()} GROUP BY group_key ORDER BY title COLLATE NOCASE, year`).map(r => ({ ...r, my_rating: mine.get(r.group_key) || null, genres: onlineTags({ genres: r.plex_genres }), audio_type: titleAudioType({ files: r.probed_audio, jpn: r.jpn_files, eng: r.eng_files, dual: r.dual_files }), tags: movieTags.get(r.group_key) || [] })); });
+    FROM files WHERE library_type='movie' AND missing=0 AND ignored=0${AF()} GROUP BY group_key ORDER BY title COLLATE NOCASE, year`).map(r => ({ ...r, my_rating: mine.get(r.group_key) || null, genres: onlineTags({ genres: r.plex_genres }), audio_type: titleAudioType({ files: r.probed_audio, jpn: r.jpn_files, eng: r.eng_files, dual: r.dual_files }), tags: movieTags.get(r.group_key) || [], disc_format: (discs.get(r.group_key) || {}).format || null })); });
   h('data:movieFiles', (groupKey) => db.all(`SELECT *, ${ORIGIN()} origin FROM files WHERE library_type='movie' AND group_key=?${AF()} ORDER BY missing, file_name`, groupKey));
   // ---- storage: how fast the library grows (from first_seen) and how long the free space lasts ----
   h('data:storage', () => {
@@ -914,6 +915,11 @@ function createService({ userData, log, send, host }) {
   });
 
   // ---- tags: your own words per title; genres come with the online match / Plex, sub/dub from the probe ----
+  // ---- owned discs: "ripped from disc" comes from the root; "I still have the disc" is recorded here per title ----
+  const DISC_FORMATS = new Set(['bluray', 'uhd', 'dvd', 'other']);
+  h('disc:get', (type, key) => db.discOf(type, key));
+  h('disc:set', (type, key, format, note) => { if (!DISC_FORMATS.has(format)) throw new Error('Unknown disc format'); return db.setDisc(type, key, format, String(note || '').slice(0, 200)); });
+  h('disc:remove', (type, key) => db.removeDisc(type, key));
   h('tags:list', (type) => Object.fromEntries(db.tagsFor(type, scope.user)));
   h('tags:all', () => db.allTags(scope.user));
   h('tags:get', (type, key) => db.tagsOf(type, key, scope.user));

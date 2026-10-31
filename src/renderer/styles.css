@@ -491,3 +491,7 @@ body.role-kids [data-view="missing"], body.role-kids [data-view="issues"], body.
 /* Where a file came from (a property of its root) */
 .badge.origin-disc { background: #3b2d14; color: #f0b429; border-color: #6b531f; }
 .badge.origin-recorded { background: #16302b; color: #7ee787; }
+
+/* Owned physical disc */
+.badge.disc { background: #142a3b; color: #7cc4ff; border-color: #255a80; }
+body:not(.cap-metadata) .cap-metadata-only { display: none; }

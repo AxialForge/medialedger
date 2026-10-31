@@ -37,3 +37,20 @@ const { upgradeReasons, upgradeScore } = require('../src/main/upgrades');
   assert.strictEqual(typeof upgradeScore(t), 'number');
 }
 console.log('notify/upgrade tests passed');
+
+// owned discs: one row per title, upsert keeps the newest format, remove clears
+{
+  const fs = require('fs'), os = require('os'), path = require('path');
+  const { Db } = require('../src/main/db');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ml-disc-'));
+  const db = new Db(path.join(dir, 't.db'));
+  assert.strictEqual(db.discOf('movie', 'alien|1979'), null);
+  assert.strictEqual(db.setDisc('movie', 'alien|1979', 'dvd', 'box set').format, 'dvd');
+  assert.strictEqual(db.setDisc('movie', 'alien|1979', 'uhd', null).format, 'uhd', 'second save replaces the format');
+  assert.deepStrictEqual([...db.discsFor('movie').keys()], ['alien|1979']);
+  assert.strictEqual(db.discsFor('tv').size, 0, 'types are separate');
+  db.removeDisc('movie', 'alien|1979');
+  assert.strictEqual(db.discOf('movie', 'alien|1979'), null);
+  db.close();
+  console.log('disc tests passed');
+}
