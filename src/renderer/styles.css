@@ -219,9 +219,9 @@ td .sub { display: block; color: var(--muted); font-size: 11px; line-height: 1.2
 .seasons-edit { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px; }
 .seasons-edit label { display: flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
 .seasons-edit input { width: 64px; }
-.spark { width: 100%; height: 44px; display: block; }
-.spark path { fill: none; stroke: var(--accent); stroke-width: 1.5; }
-.spark .fill { fill: var(--accent); opacity: .12; stroke: none; }
+.sparkline { width: 100%; height: 44px; display: block; }
+.sparkline path { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+.sparkline .fill { fill: var(--accent); opacity: .12; stroke: none; }
 .meter { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 6px; }
 .meter > div { height: 100%; background: var(--accent); }
 .meter.warn > div { background: var(--warn); }

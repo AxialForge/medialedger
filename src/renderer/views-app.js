@@ -455,11 +455,11 @@ const fmtRate = (bps) => bps == null ? '—' : bps >= 1e6 ? (bps / 1e6).toFixed(
 const fmtUptime = (s) => { const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`; };
 function sparkline(values, { max = null, min = 0 } = {}) {
   const v = values.filter(x => x != null);
-  if (v.length < 2) return '<svg class="spark" viewBox="0 0 100 44" preserveAspectRatio="none"></svg>';
+  if (v.length < 2) return '<svg class="sparkline" viewBox="0 0 100 44" preserveAspectRatio="none"></svg>';
   const hi = max != null ? max : Math.max(...v) * 1.05 || 1, lo = min;
   const pts = values.map((x, i) => x == null ? null : [i / (values.length - 1) * 100, 42 - (Math.min(Math.max(x, lo), hi) - lo) / (hi - lo) * 40]).filter(Boolean);
   const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
-  return `<svg class="spark" viewBox="0 0 100 44" preserveAspectRatio="none"><path class="fill" d="${d} L${pts[pts.length - 1][0].toFixed(1)} 44 L${pts[0][0].toFixed(1)} 44 Z"></path><path d="${d}"></path></svg>`;
+  return `<svg class="sparkline" viewBox="0 0 100 44" preserveAspectRatio="none"><path class="fill" d="${d} L${pts[pts.length - 1][0].toFixed(1)} 44 L${pts[0][0].toFixed(1)} 44 Z"></path><path d="${d}"></path></svg>`;
 }
 const meter = (pct, warn = 80, bad = 92) => `<div class="meter ${pct >= bad ? 'bad' : pct >= warn ? 'warn' : ''}"><div style="width:${Math.min(100, pct || 0)}%"></div></div>`;
 views.system = async () => {

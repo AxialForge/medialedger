@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [3.3.1] - 2026-10-31
+
+### Fixed
+
+- The Change log's *Last 30 days* chart drew its bars as full-width blocks
+  over the filters. A later stylesheet rule for the System page's
+  sparklines shared the same class name; the sparklines now have their own.
+- The scan selector said "Latest 500 changes" while the list held 5,000.
+
 ## [3.3.0] - 2026-10-31
 
 ### Added
