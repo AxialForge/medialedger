@@ -8,6 +8,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [3.3.0] - 2026-10-31
+
+### Added
+
+- **Where a root's files came from.** Settings → Library roots has a *From*
+  column: downloaded, ripped from disc, recorded, other. A root whose path
+  or label says "rip", "Blu-ray" or "DVD" starts as a disc rip. The Movies
+  and series lists show a *disc* badge, the filter bar gets an *any source*
+  menu, the Movies page counts titles from disc and how many are also
+  downloaded, and a movie's page shows the source of each file, so a disc
+  rip and a download of the same film sit side by side.
+
 ## [3.2.0] - 2026-10-12
 
 ### Added

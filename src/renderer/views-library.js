@@ -112,7 +112,7 @@ views.dashboard = async () => {
 async function seriesView(type) {
   const [rows] = await Promise.all([L.data.series(type), loadPosterIndex()]);
   const cols = [
-    { key: 'show_name', label: 'Series', cls: 'wrap ptitle', render: r => `${posterTag(type, r.show_name, r.show_name)}<span class="pname">${esc(r.show_name)}</span><span class="pmeta">${r.seasons} season${r.seasons === 1 ? '' : 's'} · ${r.episodes} episode${r.episodes === 1 ? '' : 's'}</span>` },
+    { key: 'show_name', label: 'Series', cls: 'wrap ptitle', render: r => `${posterTag(type, r.show_name, r.show_name)}<span class="pname">${esc(r.show_name)}</span>${r.origins && r.origins !== 'download' ? ' ' + originBadges(r.origins) : ''}<span class="pmeta">${r.seasons} season${r.seasons === 1 ? '' : 's'} · ${r.episodes} episode${r.episodes === 1 ? '' : 's'}</span>` },
     { key: 'tags', label: 'Tags', cls: 'wrap tagcell', sortVal: r => (r.tags || []).length * 100 + (r.genres || []).length, render: tagCell },
     { key: 'seasons', label: 'Seasons', num: true, render: r => r.min_season === r.max_season ? `${r.seasons}` : `${r.seasons} <span class="muted tiny">S${r.min_season}–S${r.max_season}</span>` },
     { key: 'episodes', label: 'Episodes', num: true },
@@ -269,7 +269,7 @@ async function episodesView(type, show) {
 views.movies = async () => {
   const [rows] = await Promise.all([L.data.movies(), loadPosterIndex()]);
   const cols = [
-    { key: 'title', label: 'Title', cls: 'wrap ptitle', render: r => `${posterTag('movie', r.group_key, r.title)}<span class="pname">${esc(r.title)}${r.year ? `<span class="pyear muted"> (${r.year})</span>` : ''}</span><span class="pmeta">${[fmtDur(r.seconds), (r.resolutions || '').split(',').filter(Boolean).join(' '), r.hdr && r.hdr !== 'SDR' ? r.hdr : ''].filter(Boolean).map(esc).join(' · ')}</span>${r.files > 1 ? ` <span class="badge warn">×${r.files}</span>` : ''}` },
+    { key: 'title', label: 'Title', cls: 'wrap ptitle', render: r => `${posterTag('movie', r.group_key, r.title)}<span class="pname">${esc(r.title)}${r.year ? `<span class="pyear muted"> (${r.year})</span>` : ''}${r.files > 1 ? ` <span class="badge warn">×${r.files}</span>` : ''} ${originBadges(r.origins)}</span><span class="pmeta">${[fmtDur(r.seconds), (r.resolutions || '').split(',').filter(Boolean).join(' '), r.hdr && r.hdr !== 'SDR' ? r.hdr : ''].filter(Boolean).map(esc).join(' · ')}</span>` },
     { key: 'year', label: 'Year', num: true },
     { key: 'tags', label: 'Tags', cls: 'wrap tagcell', sortVal: r => (r.tags || []).length * 100 + (r.genres || []).length, render: tagCell },
     { key: 'files', label: 'Files', num: true },
@@ -307,6 +307,7 @@ views.movies = async () => {
     ${tile('', 'Top genres', chips(mTopG.map(x => x[0])), mTopG.slice(3, 7).map(x => `${x[0]} ${x[1]}`).join(' · ') || (mTopG.length ? '' : 'from Plex once synced'))}
     ${tile('', 'Your tags', mTagged ? `${mTagged} titles` : '—', mTopT.slice(0, 4).map(x => `${x[0]} ${x[1]}`).join(' · ') || 'type one on any movie page')}
     ${mAu.sub + mAu.dub + mAu.dual + mAu.mixed ? tile('', 'Sub / dub', `${mAu.sub} subbed`, `${mAu.dual} dual · ${mAu.mixed} mixed`) : ''}
+    ${rows.some(r => (r.origins || '').includes('disc')) ? tile('', 'From disc', rows.filter(r => (r.origins || '').includes('disc')).length + ' titles', `${rows.filter(r => (r.origins || '').includes('disc') && (r.origins || '').includes('download')).length} also downloaded`) : ''}
     ${linkTile('#issues/duplicates', tile(multi.length ? 'warnt' : '', 'Multiples', multi.length + ' titles', fmtBytes(multi.reduce((a, r) => a + (r.bytes || 0), 0))))}${tile('', 'With captions', rows.filter(r => r.has_captions === 1).length)}</div>`;
   const tb = searchToolbar(table, rows.length, wallToggle() + '<label class="inline small"><input type="checkbox" id="multi"> Only titles with multiple files</label>'); wireWall(tb); $('.grow', tb).before(sc.node);
   const swap = () => { const q = $('input[type=search]', tb).value; const nt = build(); table.node.replaceWith(nt.node); table = nt; nt.node.addEventListener('count', ev => $('.count', tb).textContent = `${ev.detail} of ${rows.length}`); nt.setQuery(q); };
@@ -321,6 +322,7 @@ async function movieFilesView(groupKey) {
   const cols = [
     { key: 'file_name', label: 'File', cls: 'wrap', render: r => `<span title="${esc(r.rel_path)}">${esc(r.file_name)}</span>${r.missing ? ' <span class="badge bad">missing</span>' : ''}${r.has_override ? ' <span class="badge ok">fixed</span>' : ''}` },
     { key: 'edition_tag', label: 'Edition / tag' },
+    { key: 'origin', label: 'From', render: r => originBadges(r.origin) || '<span class="muted">—</span>' },
     { key: 'duration_s', label: 'Length', num: true, render: r => fmtDur(r.duration_s) },
     { key: 'resolution', label: 'Res', render: r => r.resolution ? `${esc(r.resolution)} <span class="muted tiny">${r.width}×${r.height}</span>` : '' },
     { key: 'fps', label: 'FPS', num: true },

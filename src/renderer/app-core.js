@@ -146,11 +146,11 @@ function searchToolbar(table, total, extra = '') {
 // Dropdown filters over a list's rows (genre, sub/dub, your tag, watched). `rebuild(rows)` swaps the table for the filtered rows.
 function filterBar(rows, rebuild, { watched = true } = {}) {
   const uniq = (get) => [...new Set(rows.flatMap(get).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  const genres = uniq(r => r.genres || []), tags = uniq(r => r.tags || []), audios = uniq(r => r.audio_type ? [r.audio_type] : []);
+  const genres = uniq(r => r.genres || []), tags = uniq(r => r.tags || []), audios = uniq(r => r.audio_type ? [r.audio_type] : []), origins = uniq(r => String(r.origins || '').split(',').filter(Boolean));
   const sel = (id, label, opts) => `<select id="${id}" class="small"><option value="">${label}</option>${opts.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select>`;
-  const bar = el(`<div class="toolbar filterbar">${sel('fGenre', 'any genre', genres.map(g => [g, g]))}${sel('fAudio', 'sub or dub', audios.map(a => [a, AUDIO_LABEL[a] || a]))}${sel('fTag', 'any tag', tags.map(t => [t, t]))}${watched ? sel('fWatched', 'watched or not', [['unwatched', 'unwatched'], ['started', 'partly watched'], ['watched', 'watched'], ['unknown', 'not in Plex']]) : ''}<button class="small" id="fClear" hidden>Clear filters</button></div>`);
-  const state = () => ({ genre: $('#fGenre', bar).value, audio: $('#fAudio', bar).value, tag: $('#fTag', bar).value, watched: watched ? $('#fWatched', bar).value : '' });
-  const pass = (r, f) => (!f.genre || (r.genres || []).includes(f.genre)) && (!f.audio || r.audio_type === f.audio) && (!f.tag || (r.tags || []).includes(f.tag))
+  const bar = el(`<div class="toolbar filterbar">${sel('fGenre', 'any genre', genres.map(g => [g, g]))}${sel('fAudio', 'sub or dub', audios.map(a => [a, AUDIO_LABEL[a] || a]))}${sel('fTag', 'any tag', tags.map(t => [t, t]))}${origins.length ? sel('fOrigin', 'any source', origins.map(o => [o, ORIGIN_LABEL[o] || o])) : ''}${watched ? sel('fWatched', 'watched or not', [['unwatched', 'unwatched'], ['started', 'partly watched'], ['watched', 'watched'], ['unknown', 'not in Plex']]) : ''}<button class="small" id="fClear" hidden>Clear filters</button></div>`);
+  const state = () => ({ genre: $('#fGenre', bar).value, audio: $('#fAudio', bar).value, tag: $('#fTag', bar).value, origin: $('#fOrigin', bar) ? $('#fOrigin', bar).value : '', watched: watched ? $('#fWatched', bar).value : '' });
+  const pass = (r, f) => (!f.genre || (r.genres || []).includes(f.genre)) && (!f.audio || r.audio_type === f.audio) && (!f.tag || (r.tags || []).includes(f.tag)) && (!f.origin || String(r.origins || '').split(',').includes(f.origin))
     && (!f.watched || (r.unwatched == null ? f.watched === 'unknown' : f.watched === 'unwatched' ? r.unwatched > 0 && r.watched === 0 : f.watched === 'started' ? r.watched > 0 && r.unwatched > 0 : f.watched === 'watched' ? r.unwatched === 0 : false));
   const apply = () => { const f = state(); const any = Object.values(f).some(Boolean); $('#fClear', bar).hidden = !any; rebuild(any ? rows.filter(r => pass(r, f)) : rows); };
   bar.querySelectorAll('select').forEach(x => { x.onchange = apply; });
@@ -423,6 +423,8 @@ document.addEventListener('click', async e => {
 });
 
 // ---------- tags ----------------------------------------------------------
+const ORIGIN_LABEL = { download: 'downloaded', disc: 'disc rip', recorded: 'recorded', other: 'other' };
+const originBadges = (s) => String(s || '').split(',').filter(Boolean).map(o => `<span class="badge origin-${esc(o)}" title="${esc(ORIGIN_LABEL[o] || o)}">${o === 'disc' ? '◎ disc' : esc(ORIGIN_LABEL[o] || o)}</span>`).join('');
 const AUDIO_LABEL = { dual: 'Dual audio', sub: 'Subbed', dub: 'Dubbed', raw: 'Raw', mixed: 'Mixed sub/dub' };
 const audioBadge = (t) => t ? `<span class="badge tag-audio tag-${t}" title="from the audio and subtitle languages ffprobe found">${AUDIO_LABEL[t] || t}</span>` : '';
 // Compact cell for list tables: genres (grey), sub/dub, then your own tags (accent).

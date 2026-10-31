@@ -133,7 +133,7 @@ views.settings = async () => {
       <div class="field"><label>Colour theme</label><select id="themeSel">${THEMES.map(([k, v]) => `<option value="${k}" ${currentTheme() === k ? 'selected' : ''}>${v}</option>`).join('')}</select><div class="hint">Applies at once and is remembered in this browser only, so every device and person can pick their own.</div></div>
 
       <h2>Library roots <span class="right"><button class="small" id="checkRoots">Check reachability</button></span></h2>
-      <table class="roots-table"><thead><tr><th>On</th><th>Label</th><th>Path (UNC or local)</th><th>Type</th><th>Status</th><th></th></tr></thead><tbody id="roots"></tbody></table>
+      <table class="roots-table"><thead><tr><th>On</th><th>Label</th><th>Path (UNC or local)</th><th>Type</th><th title="Where the files in this root came from. Shown as a badge in the lists and as a filter; a disc rip and a download of the same film appear side by side on the movie's page.">From</th><th>Status</th><th></th></tr></thead><tbody id="roots"></tbody></table>
       <div class="hint" id="rootDiag" hidden style="margin-top:6px"></div>
       <div class="inline" style="margin-top:8px"><button class="small" id="addRoot">Add root</button></div>
 
@@ -227,11 +227,12 @@ views.settings = async () => {
   if ($('#sharesBox')) paintShares($('#sharesBox')).catch(e => { $('#sharesBox').innerHTML = `<p class="muted">${esc(e.message)}</p>`; });
 
   const rootsBody = $('#roots');
-  const rootRow = (r) => el(`<tr><td><input type="checkbox" class="r-on" ${r.enabled ? 'checked' : ''}></td><td><input type="text" class="r-label" value="${esc(r.label)}" style="width:110px"></td><td><div class="inline"><input type="text" class="r-path" value="${esc(r.path)}" style="flex:1"><button class="small r-pick" title="${L.isWeb ? 'Browse folders on the server' : 'Browse…'}">…</button></div></td><td><select class="r-type">${['tv', 'anime', 'movie', 'web', 'adult'].map(t => `<option value="${t}" ${r.type === t ? 'selected' : ''}>${t === 'adult' ? 'Adult (auto-detect anime / TV / movie)' : t === 'web' ? 'Web videos' : typeName(t)}</option>`).join('')}</select></td><td class="r-status muted tiny">…</td><td><button class="small r-del">✕</button></td></tr>`);
+  const rootRow = (r) => el(`<tr><td><input type="checkbox" class="r-on" ${r.enabled ? 'checked' : ''}></td><td><input type="text" class="r-label" value="${esc(r.label)}" style="width:110px"></td><td><div class="inline"><input type="text" class="r-path" value="${esc(r.path)}" style="flex:1"><button class="small r-pick" title="${L.isWeb ? 'Browse folders on the server' : 'Browse…'}">…</button></div></td><td><select class="r-type">${['tv', 'anime', 'movie', 'web', 'adult'].map(t => `<option value="${t}" ${r.type === t ? 'selected' : ''}>${t === 'adult' ? 'Adult (auto-detect anime / TV / movie)' : t === 'web' ? 'Web videos' : typeName(t)}</option>`).join('')}</select></td><td><select class="r-origin small" title="Where these files came from">${[['', 'not set'], ['download', 'downloaded'], ['disc', 'ripped from disc'], ['recorded', 'recorded'], ['other', 'other']].map(([v, l]) => `<option value="${v}" ${(r.origin || '') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></td><td class="r-status muted tiny">…</td><td><button class="small r-del">✕</button></td></tr>`);
   const pickFolder = async (start) => L.isWeb ? browseServerFolder(start) : L.pickFolder(start);
   const addRow = (r) => { const tr = rootRow(r); tr.dataset.id = r.id || ''; rootsBody.append(tr); $('.r-del', tr).onclick = () => tr.remove(); $('.r-pick', tr).onclick = async () => { const p = await pickFolder($('.r-path', tr).value); if (p) { $('.r-path', tr).value = p; checkRoots(); } }; $('.r-path', tr).onchange = () => checkRoots(); };
   s.roots.forEach(addRow);
   $('#addRoot').onclick = () => addRow({ id: '', label: 'New', path: '', type: 'tv', enabled: true });
+  rootsBody.addEventListener('change', (e) => { const inp = e.target.closest('.r-path'); if (!inp) return; const tr = inp.closest('tr'); const sel = $('.r-origin', tr); if (sel && !sel.value && /\b(rips?|ripped|bluray|blu-ray|dvd)\b/i.test(inp.value + ' ' + $('.r-label', tr).value)) sel.value = 'disc'; });
   // Live reachability per root: checks what is typed in the form, not only what is saved.
   const STATUS = { ok: ['ok', 'Reachable'], unmounted: ['bad', 'Share not mounted'], nas_down: ['bad', 'NAS not answering'], unreachable: ['bad', 'Not reachable'] };
   async function checkRoots() {
@@ -287,7 +288,7 @@ views.settings = async () => {
   const collect = () => {
     const roots = [...rootsBody.querySelectorAll('tr')].map((tr, i) => {
       const label = $('.r-label', tr).value.trim(); const p = $('.r-path', tr).value.trim();
-      return { id: tr.dataset.id || (label.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'root') + '-' + (i + 1), label, path: p, type: $('.r-type', tr).value, enabled: $('.r-on', tr).checked };
+      return { id: tr.dataset.id || (label.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'root') + '-' + (i + 1), label, path: p, type: $('.r-type', tr).value, origin: $('.r-origin', tr).value || undefined, enabled: $('.r-on', tr).checked };
     }).filter(r => r.path);
     const list = v => v.split(/[,\s]+/).map(x => x.trim().replace(/^\./, '')).filter(Boolean);
     return {

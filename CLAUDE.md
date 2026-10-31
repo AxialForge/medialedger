@@ -303,3 +303,14 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   of 24,628 files took 25 min at 4 probes/1 thread; the TV root alone
   (11,419 files) takes 2 min 40 s at 8 probes/4 threads, and a no-change rescan
   3 s. Probing, not listing, is the floor once threads are on.
+
+### Root origin is derived, not stored (3.3.0)
+
+- **Symptom:** you look for an `origin` column on `files` and there is none.
+- **Cause:** where a file came from (disc rip / download / recorded) is a
+  property of its *root* (`settings.roots[].origin`). `ORIGIN()` in
+  service.js builds a `CASE root_id …` from settings at query time, and
+  `scopeKey()` includes the roots' origins so `remember()` caches refresh
+  when the setting changes.
+- **Why not a column:** changing a root's origin would need a backfill
+  over every file; the CASE applies instantly and survives rescans.

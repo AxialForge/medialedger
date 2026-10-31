@@ -83,7 +83,10 @@ function createService({ userData, log, send, host }) {
   };
   // "watched" for this caller: the owner's Plex play counts, or one account's history when the account is mapped
   const WATCHED = (alias = '') => scope.plexAccount ? `${alias}plex_rating_key IN (SELECT rating_key FROM plex_history WHERE account_id = ${Number(scope.plexAccount)})` : `${alias}plex_view_count > 0`;
-  const scopeKey = () => JSON.stringify(scope);
+  const scopeKey = () => JSON.stringify(scope) + '|' + (settings.get().roots || []).map(r => r.id + ':' + (r.origin || '')).join(',');
+  // Where a file came from is a property of its root (Settings, Library roots, "From"): disc rips, downloads, other.
+  // Built as a CASE over root ids so nothing is stored per file and a changed setting applies at once.
+  const ORIGIN = (alias = '') => { const roots = (settings.get().roots || []).filter(r => r.origin); return roots.length ? `CASE ${alias}root_id ${roots.map(r => `WHEN '${String(r.id).replace(/'/g, '')}' THEN '${String(r.origin).replace(/'/g, '')}'`).join(' ')} ELSE NULL END` : 'NULL'; };
 
   // Exclusive lock held while a live movie-rename batch runs; scans and the watcher back off.
   let renameLock = null; // { rootId, since }
@@ -595,7 +598,7 @@ function createService({ userData, log, send, host }) {
       SUM(CASE WHEN has_captions=1 THEN 1 ELSE 0 END) captioned, SUM(CASE WHEN parse_ok=0 THEN 1 ELSE 0 END) unparsed,
       GROUP_CONCAT(DISTINCT resolution) resolutions, GROUP_CONCAT(DISTINCT video_codec) codecs, GROUP_CONCAT(DISTINCT audio_langs) audio_langs, GROUP_CONCAT(DISTINCT sub_langs) sub_langs,
       MAX(last_seen) last_seen, SUM(CASE WHEN ${WATCHED()} THEN 1 ELSE 0 END) watched, MAX(plex_show_key) plex_show_key, SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) plex_linked,
-      MIN(${FILE_ADDED}) added, MAX(${FILE_ADDED}) last_added, MAX(plex_last_viewed) last_viewed, MAX(height) height, CAST(AVG(bitrate_kbps) AS INTEGER) bitrate, SUM(COALESCE(plex_view_count,0)) plays,
+      MIN(${FILE_ADDED}) added, MAX(${FILE_ADDED}) last_added, MAX(plex_last_viewed) last_viewed, MAX(height) height, CAST(AVG(bitrate_kbps) AS INTEGER) bitrate, SUM(COALESCE(plex_view_count,0)) plays, GROUP_CONCAT(DISTINCT ${ORIGIN()}) origins,
       ${AUDIO_COUNTS}
     FROM files WHERE library_type=? AND missing=0 AND ignored=0${AF()} GROUP BY show_name ORDER BY show_name COLLATE NOCASE`, type);
     const plexShows = new Map(db.all('SELECT rating_key, user_rating, genres, year, audience_rating, rating, content_rating, released FROM plex_shows').map(s => [s.rating_key, s]));
@@ -608,12 +611,12 @@ function createService({ userData, log, send, host }) {
   h('data:episodes', (type, show) => ({ tags: db.tagsOf(type, show, scope.user), genres: onlineTags(db.getSeriesMeta(type, show)), files: db.all(`SELECT * FROM files WHERE library_type=? AND show_name=? AND ignored=0${AF()} ORDER BY missing, season, episode, file_name`, type, show), missing: missingSummary(type).find(m => m.show_name === show) || null }));
   h('data:movies', () => { const movieTags = db.tagsFor('movie', scope.user); const mine = new Map(db.userRatings('movie', scope.user).map(u => [u.title_key, u.stars])); return db.all(`SELECT group_key, MIN(movie_title) title, MIN(movie_year) year, COUNT(*) files, SUM(size) bytes, MAX(duration_s) seconds,
       GROUP_CONCAT(DISTINCT resolution) resolutions, GROUP_CONCAT(DISTINCT video_codec) codecs, GROUP_CONCAT(DISTINCT audio_langs) audio_langs, GROUP_CONCAT(DISTINCT sub_langs) sub_langs,
-      MAX(has_captions) has_captions, SUM(CASE WHEN probe_ok=1 THEN 1 ELSE 0 END) probed, GROUP_CONCAT(edition_tag, ' | ') editions, MAX(plex_genres) plex_genres,
+      MAX(has_captions) has_captions, SUM(CASE WHEN probe_ok=1 THEN 1 ELSE 0 END) probed, GROUP_CONCAT(edition_tag, ' | ') editions, MAX(plex_genres) plex_genres, GROUP_CONCAT(DISTINCT ${ORIGIN()}) origins,
       MAX(CASE WHEN ${WATCHED()} THEN 1 ELSE 0 END) watched_count, MAX(plex_user_rating) plex_user, SUM(CASE WHEN plex_rating_key IS NOT NULL THEN 1 ELSE 0 END) plex_linked, MAX(hdr) hdr,
       MIN(${FILE_ADDED}) added, MAX(plex_last_viewed) last_viewed, MAX(height) height, MAX(bitrate_kbps) bitrate, MAX(plex_audience_rating) audience_rating, MAX(plex_view_offset_ms) offset_ms, MAX(plex_content_rating) content_rating, MIN(plex_released) released,
       ${AUDIO_COUNTS}
     FROM files WHERE library_type='movie' AND missing=0 AND ignored=0${AF()} GROUP BY group_key ORDER BY title COLLATE NOCASE, year`).map(r => ({ ...r, my_rating: mine.get(r.group_key) || null, genres: onlineTags({ genres: r.plex_genres }), audio_type: titleAudioType({ files: r.probed_audio, jpn: r.jpn_files, eng: r.eng_files, dual: r.dual_files }), tags: movieTags.get(r.group_key) || [] })); });
-  h('data:movieFiles', (groupKey) => db.all(`SELECT * FROM files WHERE library_type='movie' AND group_key=?${AF()} ORDER BY missing, file_name`, groupKey));
+  h('data:movieFiles', (groupKey) => db.all(`SELECT *, ${ORIGIN()} origin FROM files WHERE library_type='movie' AND group_key=?${AF()} ORDER BY missing, file_name`, groupKey));
   // ---- storage: how fast the library grows (from first_seen) and how long the free space lasts ----
   h('data:storage', () => {
     const months = db.all(`SELECT substr(first_seen,1,7) ym, SUM(size) bytes, COUNT(*) files FROM files WHERE first_seen IS NOT NULL AND ignored=0${AF()} GROUP BY ym ORDER BY ym DESC LIMIT 13`).reverse();
