@@ -8,6 +8,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [3.7.1] - 2026-11-11
+
+### Fixed
+
+- A disc whose online listing is only the film's name (no "Blu-ray" or
+  "DVD" in it, as with barcode 843501650837) was called "not a disc" and
+  nothing was filled in. The form now fills the title and studio and asks
+  you to pick the format. Only a listing filed under something that is not
+  media, such as hardware or food, is still called out as not a disc.
+
 ## [3.7.0] - 2026-11-11
 
 ### Added

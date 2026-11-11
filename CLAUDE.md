@@ -353,6 +353,11 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   uses the category only to decide whether a bare "4K" is a disc or a
   television. A year counts only inside brackets, so "Blade Runner 2049"
   keeps its name.
+- **No format word is not "not a disc"** (3.7.1). UPCitemdb lists some discs
+  as just the film's name ("Project Hail Mary", brand MGM, empty category).
+  `confidence()` is 'disc' when a format word was found, 'no' only when the
+  category is present and not media, otherwise 'maybe': the form fills the
+  title and asks for the format.
 - **TMDB is optional** (`src/main/tmdb.js`, `settings.tmdb.key`, redacted
   for non-admins like the Plex token). It was built against the documented
   v3 API with a pretend server and has NOT been run against the real

@@ -26,6 +26,15 @@ const EDITIONS = [
 ];
 // Words a shop adds that are not part of the film's name. Everything from the first one on is cut off the title.
 const NOISE = /\s[-–:,+/|]?\s*(4k\b|ultra[\s-]?hd|uhd\b|blu[\s-]?ray|hd[\s-]?dvd|dvd\b|digital\b|widescreen|full\s?screen|steel\s?book|\d+[\s-]dis[ck]|includes\b|with digital).*$/i;
+// A listing with no format word ("Project Hail Mary", brand MGM, no category) is still probably a disc. It is only
+// plainly NOT one when the shop filed it under something that is not media. So: 'disc', 'maybe' or 'no'.
+const MEDIA_CAT = /dvd|blu-?ray|movies|media|video|film|tv/i;
+function confidence(p, category) {
+  if (p.isDisc) return 'disc';
+  const cat = String(category || '').trim();
+  if (cat && !MEDIA_CAT.test(cat)) return 'no';
+  return 'maybe';
+}
 const norm = (s) => String(s || '').toLowerCase().replace(/&/g, 'and').replace(/^(the|a|an)\s+/, '').replace(/[^a-z0-9]+/g, '');
 
 /**
@@ -81,8 +90,8 @@ function createDiscLookup({ db, settings, log = () => {}, fetchFn = (...a) => fe
     return hits.length === 1 ? { library_type: 'movie', title_key: hits[0].group_key, title: hits[0].title, year: hits[0].year } : null;
   }
 
-  async function refine(p) {
-    const key = tmdbKey(); if (!key || !p.isDisc || p.kind === 'collection') return null;
+  async function refine(p, likely) {
+    const key = tmdbKey(); if (!key || !likely || p.kind === 'collection') return null;
     try {
       const r = p.kind === 'tv' ? await tmdb.searchTv(key, p.title, fetchFn) : await tmdb.searchMovie(key, p.title, p.year, fetchFn);
       // Only when TMDB plainly means the same thing: its name equals ours, or one begins with the other.
@@ -95,12 +104,13 @@ function createDiscLookup({ db, settings, log = () => {}, fetchFn = (...a) => fe
 
   async function suggestion(row, cached, adultFilter) {
     const p = parseProduct(row.title, row.category);
-    const t = await refine(p);
+    const conf = confidence(p, row.category), likely = conf !== 'no';
+    const t = await refine(p, likely);
     if (t) { p.title = t.title; if (t.year && p.kind !== 'tv') p.year = t.year; }
     return {
-      status: 'found', source: row.source, cached, upc: row.upc, raw_title: row.title, brand: row.brand, category: row.category, isDisc: p.isDisc,
-      release: { title: p.title, year: p.year, kind: p.kind, format: p.format, edition: p.edition, discs_count: p.discs_count, studio: p.isDisc ? row.brand || null : null },
-      link: p.isDisc ? matchLibrary(p, adultFilter) : null, tmdb: t ? { id: t.id, kind: t.kind } : null, quota: { remaining: limit.remaining, limit: limit.limit },
+      status: 'found', source: row.source, cached, upc: row.upc, raw_title: row.title, brand: row.brand, category: row.category, isDisc: conf === 'disc', maybe: conf === 'maybe',
+      release: { title: p.title, year: p.year, kind: p.kind, format: p.format, edition: p.edition, discs_count: p.discs_count, studio: likely ? row.brand || null : null },
+      link: likely ? matchLibrary(p, adultFilter) : null, tmdb: t ? { id: t.id, kind: t.kind } : null, quota: { remaining: limit.remaining, limit: limit.limit },
     };
   }
 
@@ -145,4 +155,4 @@ function createDiscLookup({ db, settings, log = () => {}, fetchFn = (...a) => fe
   return { lookup, state, matchLibrary };
 }
 
-module.exports = { createDiscLookup, parseProduct, norm };
+module.exports = { createDiscLookup, parseProduct, confidence, norm };

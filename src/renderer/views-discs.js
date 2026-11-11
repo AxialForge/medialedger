@@ -78,8 +78,8 @@ function discReleaseForm(o = {}, onSaved) {
     const when = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     L.disc.lookup(o.upc).then(r => {
       if (!card.isConnected || !$('#drLook', card)) return;
-      if (r.status === 'found' && r.isDisc) {
-        look.className = 'disclook ok'; look.innerHTML = `Looks like <b>${esc(r.raw_title)}</b> <span class="muted">· from UPCitemdb${r.tmdb ? ' and TMDB' : ''}. Check it, then save.</span>`;
+      if (r.status === 'found' && (r.isDisc || r.maybe)) {
+        look.className = 'disclook ok'; look.innerHTML = r.isDisc ? `Looks like <b>${esc(r.raw_title)}</b> <span class="muted">· from UPCitemdb${r.tmdb ? ' and TMDB' : ''}. Check it, then save.</span>` : `Found <b>${esc(r.raw_title)}</b>${r.brand ? ` <span class="muted">(${esc(r.brand)})</span>` : ''}. <b>The listing does not say which format</b>: pick it below, then save.`;
         if (!touched) {
           const f = r.release; $('#drTitle', card).value = f.title || ''; $('#drYear', card).value = f.year || ''; $('#drKind', card).value = f.kind || 'movie'; if (f.format) $('#drFormat', card).value = f.format; $('#drEdition', card).value = f.edition || '';
           extra = { discs_count: f.discs_count, studio: f.studio, lookup_source: r.source };
@@ -263,7 +263,7 @@ async function discSubmit(code, force = false) {
   discPaintLast(entry); discPaintQueue(); discPaintRecent();
   if (kind !== 'unknown') return;
   if (!($('#discBulk') && $('#discBulk').checked)) return discDescribe(entry);
-  L.disc.lookup(entry.code).then(l => { entry.hint = l.status === 'found' ? (l.isDisc ? `Looks like ${l.release.title}${l.release.format ? ` (${l.release.format})` : ''}.` : `Not a disc: ${l.raw_title}.`) : l.status === 'limited' ? 'Lookup resting (free limit).' : l.status === 'none' ? 'Not in the online database.' : ''; discPaintQueue(); if (discQueue[0] === entry) discPaintLast(entry); }).catch(() => {});
+  L.disc.lookup(entry.code).then(l => { entry.hint = l.status === 'found' ? (l.isDisc || l.maybe ? `Looks like ${l.release.title}${l.release.format ? ` (${l.release.format})` : ', format not stated'}.` : `Not a disc: ${l.raw_title}.`) : l.status === 'limited' ? 'Lookup resting (free limit).' : l.status === 'none' ? 'Not in the online database.' : ''; discPaintQueue(); if (discQueue[0] === entry) discPaintLast(entry); }).catch(() => {});
 }
 // An unknown barcode becomes a release: the form opens with the barcode filled in.
 function discDescribe(entry) {

@@ -24,6 +24,14 @@ assert.strictEqual(P('The Dark Knight Trilogy (Blu-ray)').kind, 'collection');
 assert.strictEqual(P('Seven Samurai (The Criterion Collection) [Blu-ray]').kind, 'movie', 'Criterion is an edition, not a box set');
 assert.strictEqual(P('Seven Samurai (The Criterion Collection) [Blu-ray]').edition, 'Criterion');
 assert.strictEqual(P('Jaws 45th Anniversary Limited Edition (4K Ultra HD + Blu-ray)').edition, 'Limited Edition, 45th Anniversary');
+{
+  const { confidence } = require('../src/main/discLookup');
+  assert.strictEqual(confidence(P('Dune (Blu-ray)'), ''), 'disc');
+  assert.strictEqual(confidence(P('Project Hail Mary'), ''), 'maybe');
+  assert.strictEqual(confidence(P('Some Film'), 'Media > DVDs & Videos'), 'maybe');
+  assert.strictEqual(confidence(P('THHN Wire'), 'Hardware > Electrical'), 'no');
+  assert.strictEqual(confidence(P('Corn Chips'), 'Food, Beverages & Tobacco'), 'no');
+}
 // not discs
 assert.strictEqual(P('Southwire 22965858 500 ft. 12 White Stranded CU THHN Wire', 'Hardware > Power & Electrical Supplies').isDisc, false);
 assert.strictEqual(P('Samsung 55" Class 4K Smart TV', 'Electronics > Televisions').isDisc, false, '"4K" alone is not a disc');
@@ -74,6 +82,12 @@ const found = (title, extra = {}) => reply(200, { code: 'OK', total: 1, items: [
   next = found('Southwire 500 ft. 12 White Stranded CU THHN Wire', { category: 'Hardware > Electrical Wires & Cable', brand: 'Southwire' });
   const w = await L.lookup('012345678905');
   assert.strictEqual(w.isDisc, false); assert.strictEqual(w.link, null); assert.strictEqual(w.release.studio, null);
+
+  // a real one (843501650837): just the film's name and the studio, no format word, no category. Still a disc, probably.
+  next = found('Project Hail Mary', { brand: 'MGM', category: '' });
+  const ph = await L.lookup('843501650837');
+  assert.deepStrictEqual([ph.isDisc, ph.maybe, ph.release.title, ph.release.format, ph.release.studio], [false, true, 'Project Hail Mary', null, 'MGM'], 'no format word is "pick the format", not "not a disc"');
+  assert.strictEqual(w.maybe, false, 'a hardware category is still plainly not a disc');
 
   // unknown to the service: remembered, so it is not asked again for a month
   const before = calls.length;
