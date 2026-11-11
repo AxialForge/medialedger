@@ -8,16 +8,31 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-## [3.4.0] - 2026-10-31
+## [3.4.0] - 2026-11-11
 
 ### Added
 
-- **Owned discs.** A title page has a *Own the disc?* button that records
-  the physical disc you still have (Blu-ray, 4K UHD, DVD, other) with a
-  note. Lists show a blue 💿 badge next to the title, the source filter
-  gains *disc owned* / *no disc owned*, and the Movies page counts owned
-  discs and how many are not ripped yet. Anyone may see it; editing needs
-  the *metadata* capability. Schema v18 (`discs` table).
+- **Discs.** A new page for the physical discs on the shelf, tracked by
+  barcode. *Scan* takes a USB barcode scanner (or the number typed): a known
+  barcode adds a copy, an unknown one opens a short form once, a barcode you
+  already hold asks before adding a second copy, and a wished-for disc that
+  gets scanned becomes owned. Three different beeps say which happened, the
+  location you type is kept for the next scans, and a burst of digits is
+  caught even when the box has lost focus. *Owned* and *Wishlist* list the
+  releases; a release page holds its details, its copies (location,
+  condition, bought, price, store, lent to, digital code) and the library
+  titles it contains.
+- A title you hold on disc shows a blue 💿 badge in the lists and a link to
+  the disc on its page; a title without one offers *Own the disc?*. The
+  source filter gains *disc owned* / *no disc owned*, and the Movies page
+  counts owned discs and how many are not ripped yet.
+- `discs.csv`, a ninth export file with one row per copy, also downloadable
+  from the Discs page. Tick *Discs* under Settings → Export on an existing
+  install to include it in scheduled exports.
+- Signed-in accounts can read the Discs page, the *metadata* ability can
+  scan and edit, and only an admin can delete a release. Nothing is removed
+  on its own: a copy changes status instead.
+- Schema v19 (`disc_releases`, `disc_copies`, `disc_titles`, `disc_scans`).
 
 ## [3.3.1] - 2026-10-31
 

@@ -423,23 +423,6 @@ document.addEventListener('click', async e => {
 });
 
 // ---------- tags ----------------------------------------------------------
-const DISC_LABEL = { bluray: 'Blu-ray', uhd: '4K UHD', dvd: 'DVD', other: 'disc' };
-const discBadge = (f) => f ? `<span class="badge disc" title="You own this on ${esc(DISC_LABEL[f] || f)}">💿 ${esc(DISC_LABEL[f] || f)}</span>` : '';
-// Title-page button: records (or clears) that the physical disc is still in the house. Needs the metadata capability.
-const discBtn = (type, key, cur) => `<button class="small discbtn cap-metadata-only" data-type="${esc(type)}" data-key="${esc(key)}" title="Record that you own the physical disc">${cur ? `💿 ${esc(DISC_LABEL[cur.format] || 'disc')} owned` : '💿 Own the disc?'}</button>`;
-document.addEventListener('click', async e => {
-  const b = e.target.closest('.discbtn'); if (!b) return;
-  const type = b.dataset.type, key = b.dataset.key;
-  let cur = null; try { cur = await L.disc.get(type, key); } catch (err) { return toast(err.message, true); }
-  const card = openModal(`<h2>Physical disc</h2><p class="muted small">Mark that the disc for this title is still on your shelf. Ripped-from-disc comes from the root's <i>From</i> setting; this is about the disc itself.</p>
-    <label>Format <select id="discFmt">${Object.entries(DISC_LABEL).map(([v, l]) => `<option value="${v}" ${(cur ? cur.format : 'bluray') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-    <label style="margin-top:8px">Note <input type="text" id="discNote" maxlength="200" placeholder="shelf, box set, lent to…" value="${esc(cur && cur.note || '')}"></label>
-    <div class="actions">${cur ? '<button id="discDrop" class="danger">No longer have it</button>' : ''}<span class="grow"></span><button id="discCancel">Cancel</button><button id="discSave" class="primary">Save</button></div>`);
-  $('#discCancel', card).onclick = closeModal;
-  const done = () => { closeModal(); toast('Saved'); route(); };
-  $('#discSave', card).onclick = async () => { try { await L.disc.set(type, key, $('#discFmt', card).value, $('#discNote', card).value); done(); } catch (err) { toast(err.message, true); } };
-  if ($('#discDrop', card)) $('#discDrop', card).onclick = async () => { try { await L.disc.remove(type, key); done(); } catch (err) { toast(err.message, true); } };
-});
 const ORIGIN_LABEL = { download: 'downloaded', disc: 'disc rip', recorded: 'recorded', other: 'other' };
 const originBadges = (s) => String(s || '').split(',').filter(Boolean).map(o => `<span class="badge origin-${esc(o)}" title="${esc(ORIGIN_LABEL[o] || o)}">${o === 'disc' ? '◎ disc' : esc(ORIGIN_LABEL[o] || o)}</span>`).join('');
 const AUDIO_LABEL = { dual: 'Dual audio', sub: 'Subbed', dub: 'Dubbed', raw: 'Raw', mixed: 'Mixed sub/dub' };

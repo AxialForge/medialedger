@@ -424,6 +424,58 @@ const MIGRATIONS = [
       );
     `,
   },
+  {
+    // v18's one-row-per-title table became releases, copies and title links. Its rows are carried over, then it goes.
+    version: 19, name: 'disc releases, copies and scans',
+    sql: `
+      CREATE TABLE IF NOT EXISTS disc_releases (
+        id INTEGER PRIMARY KEY,
+        upc TEXT UNIQUE,              -- EAN-13, NULL for a release entered by hand
+        title TEXT NOT NULL,
+        year INTEGER,
+        kind TEXT NOT NULL DEFAULT 'movie',      -- movie, tv or collection
+        format TEXT NOT NULL DEFAULT 'Blu-ray',  -- 4K UHD, Blu-ray, DVD, 3D, HD DVD or other
+        edition TEXT, region TEXT, studio TEXT,
+        discs_count INTEGER, packaging TEXT, slipcover INTEGER DEFAULT 0,
+        hdr TEXT, audio TEXT, imax_var INTEGER DEFAULT 0,
+        notes TEXT, lookup_source TEXT, created TEXT
+      );
+      CREATE TABLE IF NOT EXISTS disc_titles (
+        id INTEGER PRIMARY KEY,
+        release_id INTEGER NOT NULL REFERENCES disc_releases(id),
+        library_type TEXT NOT NULL,   -- movie, tv or anime
+        title_key TEXT NOT NULL,      -- the same keys user_ratings and title_tags use
+        title TEXT, year INTEGER, season INTEGER,
+        UNIQUE(release_id, library_type, title_key, season)
+      );
+      CREATE TABLE IF NOT EXISTS disc_copies (
+        id INTEGER PRIMARY KEY,
+        release_id INTEGER NOT NULL REFERENCES disc_releases(id),
+        status TEXT NOT NULL DEFAULT 'owned',    -- owned, wishlist, sold or loaned
+        location TEXT, condition TEXT,
+        purchase_date TEXT, price REAL, store TEXT,
+        loaned_to TEXT, digital_code TEXT NOT NULL DEFAULT 'none',  -- none, unredeemed or redeemed
+        notes TEXT, added TEXT
+      );
+      CREATE TABLE IF NOT EXISTS disc_scans (
+        id INTEGER PRIMARY KEY, upc TEXT, ts TEXT, result TEXT, release_id INTEGER, copy_id INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_disc_titles_key ON disc_titles(library_type, title_key);
+      CREATE INDEX IF NOT EXISTS idx_disc_copies_release ON disc_copies(release_id);
+      INSERT INTO disc_releases (title, year, kind, format, notes, lookup_source, created)
+        SELECT COALESCE((SELECT MIN(f.movie_title) FROM files f WHERE f.library_type='movie' AND f.group_key=d.title_key), d.title_key),
+               (SELECT MIN(f.movie_year) FROM files f WHERE f.library_type='movie' AND f.group_key=d.title_key),
+               CASE WHEN d.library_type='movie' THEN 'movie' ELSE 'tv' END,
+               CASE d.format WHEN 'uhd' THEN '4K UHD' WHEN 'dvd' THEN 'DVD' WHEN 'bluray' THEN 'Blu-ray' ELSE 'other' END,
+               d.note, 'legacy:' || d.library_type || ':' || d.title_key, d.updated
+        FROM discs d;
+      INSERT INTO disc_titles (release_id, library_type, title_key, title, year)
+        SELECT r.id, d.library_type, d.title_key, r.title, r.year FROM discs d JOIN disc_releases r ON r.lookup_source = 'legacy:' || d.library_type || ':' || d.title_key;
+      INSERT INTO disc_copies (release_id, status, added) SELECT r.id, 'owned', r.created FROM disc_releases r WHERE r.lookup_source LIKE 'legacy:%';
+      UPDATE disc_releases SET lookup_source='manual' WHERE lookup_source LIKE 'legacy:%';
+      DROP TABLE IF EXISTS discs;
+    `,
+  },
 ];
 
 class Db {
@@ -555,11 +607,6 @@ class Db {
   // ---- custom title tags ----------------------------------------------------
   tagsFor(type, user = '') { const m = new Map(); for (const r of this.all('SELECT title_key, tag FROM title_tags WHERE library_type=? AND user=? ORDER BY tag COLLATE NOCASE', type, user)) { if (!m.has(r.title_key)) m.set(r.title_key, []); m.get(r.title_key).push(r.tag); } return m; }
   tagsOf(type, key, user = '') { return this.all('SELECT tag FROM title_tags WHERE library_type=? AND title_key=? AND user=? ORDER BY tag COLLATE NOCASE', type, key, user).map(r => r.tag); }
-  // owned discs: Map title_key -> { format, note } for one library type; set/remove by title
-  discsFor(type) { return new Map(this.all('SELECT title_key, format, note FROM discs WHERE library_type=?', type).map(r => [r.title_key, { format: r.format, note: r.note }])); }
-  discOf(type, key) { return this.get('SELECT format, note, updated FROM discs WHERE library_type=? AND title_key=?', type, key) || null; }
-  setDisc(type, key, format, note) { this.run('INSERT INTO discs (library_type, title_key, format, note, updated) VALUES (?,?,?,?,?) ON CONFLICT(library_type, title_key) DO UPDATE SET format=excluded.format, note=excluded.note, updated=excluded.updated', type, key, format, note || null, new Date().toISOString()); return this.discOf(type, key); }
-  removeDisc(type, key) { this.run('DELETE FROM discs WHERE library_type=? AND title_key=?', type, key); return null; }
   allTags(user = '') { return this.all('SELECT tag, COUNT(*) n FROM title_tags WHERE user=? GROUP BY tag ORDER BY n DESC, tag COLLATE NOCASE', user).map(r => ({ tag: r.tag, n: r.n })); }
   addTag(type, key, tag, user = '') { this.run('INSERT OR IGNORE INTO title_tags (library_type, title_key, tag, created, user) VALUES (?,?,?,?,?)', type, key, tag, new Date().toISOString(), user); return this.tagsOf(type, key, user); }
   removeTag(type, key, tag, user = '') { this.run('DELETE FROM title_tags WHERE library_type=? AND title_key=? AND tag=? COLLATE NOCASE AND user=?', type, key, tag, user); return this.tagsOf(type, key, user); }

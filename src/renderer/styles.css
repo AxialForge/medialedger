@@ -495,3 +495,18 @@ body.role-kids [data-view="missing"], body.role-kids [data-view="issues"], body.
 /* Owned physical disc */
 .badge.disc { background: #142a3b; color: #7cc4ff; border-color: #255a80; }
 body:not(.cap-metadata) .cap-metadata-only { display: none; }
+body.role-guest #navDiscs, body.role-kids #navDiscs { display: none; }
+.discscan { display: grid; gap: 10px; }
+.discscan #discScanIn { font-size: 26px; padding: 14px 16px; letter-spacing: 2px; font-variant-numeric: tabular-nums; width: 100%; }
+.disclast { border-left: 4px solid var(--line); }
+.disclast.ok { border-left-color: var(--accent2); } .disclast.duplicate { border-left-color: var(--warn); } .disclast.unknown, .disclast.invalid { border-left-color: var(--bad); }
+.discq { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 12px; align-items: center; font-size: 13px; }
+.discq .mono { font-variant-numeric: tabular-nums; color: var(--muted); }
+.discsug { display: grid; gap: 2px; max-height: 180px; overflow: auto; margin-top: 4px; }
+.discsug button { text-align: left; background: transparent; border: 0; padding: 5px 8px; border-radius: 6px; }
+.discsug button:hover { background: var(--panel2, rgba(255,255,255,.06)); }
+.discform { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.discform label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+.discform label.wide { grid-column: 1 / -1; }
+.discform input, .discform select, .discform textarea { width: 100%; }
+@media (max-width: 640px) { .discform { grid-template-columns: 1fr; } }

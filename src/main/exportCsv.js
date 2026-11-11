@@ -163,6 +163,12 @@ function exportChanges(db, dir, scanId) {
   return ['changes.csv'];
 }
 
+function exportDiscs(db, dir) {
+  const { EXPORT_HEADER, exportRows } = require('./discs');
+  writeCsv(path.join(dir, 'discs.csv'), EXPORT_HEADER, exportRows(db));
+  return ['discs.csv'];
+}
+
 // The selectable sets. Keys are what Settings stores and the Export tab shows.
 const SETS = {
   tv: { label: 'TV shows', files: 'tv_episodes.csv, tv_series.csv', run: (db, dir, scanId, s) => exportEpisodes(db, 'tv', dir, 'tv', s) },
@@ -170,6 +176,7 @@ const SETS = {
   movies: { label: 'Movies', files: 'movies.csv, movies_titles.csv, movies_multiples.csv', run: (db, dir, scanId, s) => exportMovies(db, dir, s) },
   web: { label: 'Web videos', files: 'web_videos.csv', run: (db, dir, scanId, s) => exportWeb(db, dir, s) },
   changes: { label: 'Change log', files: 'changes.csv', run: (db, dir, scanId) => exportChanges(db, dir, scanId) },
+  discs: { label: 'Discs', files: 'discs.csv', run: (db, dir) => exportDiscs(db, dir) },
 };
 
 /**

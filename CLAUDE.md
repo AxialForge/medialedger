@@ -55,7 +55,7 @@ npm test               # parser + updater unit tests (plain Node)
 node test/scan.harness.js    # end-to-end threaded scan of real roots into a temp DB
 node test/metadata.live.js   # live TVmaze/AniList lookups for real series (network)
 node test/movieNamer.report.js <db> <out.csv>   # dry report of proposed movie names (read-only)
-npx electron . --profile=.devprofile   # run against a separate data folder (see Gotchas)
+npx electron . "--profile=%CD%\.devprofile"   # separate data folder; the path must be absolute (see Gotchas)
 npm run build:win      # electron-builder → dist/ (NSIS one-click installer + latest.yml)
 node tools/make-icon.js      # regenerate build/icon.ico + icon.png (no deps)
 ```
@@ -81,7 +81,8 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 | `src/main/parse.js` | Path/filename → show/season/episode or title/year/edition/group_key; `parseWeb`, `classifyAdult`, single `parseFor(rootType, rel)` dispatch |
 | `src/main/ffprobe.js` | Locate ffprobe.exe, run it, flatten streams into DB columns |
 | `src/main/ffmpegdl.js` | Download BtbN ffmpeg zip, extract with PowerShell `Expand-Archive` |
-| `src/main/exportCsv.js` | Eight CSVs per export, timestamped dir + `latest\` copy |
+| `src/main/exportCsv.js` | Nine CSVs per export (the ninth is `discs.csv`, one row per copy), timestamped dir + `latest\` copy |
+| `src/main/discs.js` | Physical discs by barcode: `normalizeUpc`, `scan`, releases / copies / title links, `discs.csv` rows. Pure, shared by both shells |
 | `src/main/scheduler.js` | In-app interval timer + `schtasks.exe` create/query/delete |
 | `src/main/watcher.js` | Optional `fs.watch` (recursive, UNC ok) per root; debounced scan trigger |
 | `src/main/metadata.js` | TVmaze / AniList lookups → `{season: count}`; `missingEpisodes()` diff with absolute-numbering guard |
@@ -101,7 +102,7 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 | `docs/RASPBERRY-PI.md` | The Pi guide; also becomes the README inside the server package |
 | `src/main/paths.js` | `absOf(rootPath, rel)`: stored `rel_path` uses `\` on every OS; join with the local separator only when touching disk |
 | `server/install.sh` | Pi installer: Node 22, ffmpeg, CIFS fstab mount at `/mnt/media`, `medialedger` system user, systemd unit, `medialedger` / `medialedger-update` commands |
-| `src/renderer/` | `index.html`, `styles.css`, and the renderer in seven plain scripts loaded in order (they share the page scope): `app-core.js` (bridge, helpers, tables, modals, posters), `views-library.js`, `views-collections.js`, `views-review.js`, `views-maintenance.js`, `views-app.js` (settings, security, shares, welcome), `app-router.js` (router and start-up) |
+| `src/renderer/` | `index.html`, `styles.css`, and the renderer in eight plain scripts loaded in order (they share the page scope): `app-core.js` (bridge, helpers, tables, modals, posters), `views-library.js`, `views-collections.js`, `views-review.js`, `views-maintenance.js`, `views-app.js` (settings, security, shares, welcome), `app-router.js` (router and start-up) |
 | `test/` | Parser + updater tests, scan harness |
 | `tools/make-icon.js` | Icon generator |
 | `electron-builder.yml` | NSIS one-click, per-user, `publish: github` (feeds the updater) |
@@ -220,7 +221,7 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   never creates a web session. Cookies ignore ports, so reusing `ml_session` would have made a portal sign-in on
   `medialedger.home:8090` a full web-app session on `:8080`. Job notes pass through `noPaths()`: the backup job's
   note names the backup file with its full path. Add a route there only if it cannot change settings or files.
-- **Renderer files.** The renderer is seven classic scripts, not modules: a top-level `const` in one is visible to the
+- **Renderer files.** The renderer is eight classic scripts, not modules: a top-level `const` in one is visible to the
   others, so names must stay unique across them, and anything run at load time may only use what an earlier script
   defined (`app-router.js` is last for that reason). Split by page group so a feature lands in one file; helpers used
   by more than one page go in `app-core.js`.
@@ -315,11 +316,32 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 - **Why not a column:** changing a root's origin would need a backfill
   over every file; the CASE applies instantly and survives rescans.
 
-### Owned discs are a household fact, not a per-user one (3.4.0)
+### Discs: releases, copies and title links (3.4.0, schema v19)
 
-- `discs` (schema v18) is keyed by `(library_type, title_key)` with **no
-  user column**, unlike `title_tags` / `user_ratings`. Owning a Blu-ray is
-  true for the whole house, so every account sees the same badge.
-- Reading is in GUEST; writing rides the *metadata* capability
-  (`CAP_CHANNELS.metadata`), not *tags*. Keep the two ideas apart:
-  "ripped from disc" = the root's `origin`; "still have the disc" = `discs`.
+- **Three tables, three ideas.** `disc_releases` is a product (one barcode),
+  `disc_copies` is one you own / want / lent / sold, `disc_titles` says which
+  library titles a release contains. None has a user column: the shelf
+  belongs to the house. All logic is in `src/main/discs.js` (pure, takes the
+  Db), the page is `src/renderer/views-discs.js`.
+- **v18 is a dead end that must stay.** v18 created a one-row-per-title
+  `discs` table and ran on the desktop database before the design changed.
+  v19 creates the real tables, carries v18's rows over and drops `discs`.
+  Do not "tidy" v18 away: a database at 18 would then skip the new tables.
+- **A scan never creates a release.** Unknown barcode -> `{ unknown }` and the
+  page opens the form. A barcode already held -> `{ duplicate }` and nothing
+  is added until the user confirms (`force`). A wishlist copy that gets
+  scanned becomes owned instead of gaining a second row.
+- **Nothing is deleted automatically.** Copies change status. Deleting a
+  release is admin-only, explicit, and refused while copies exist unless
+  forced. The scan log outlives the release.
+- **`UNIQUE(..., season)` does not dedupe NULL seasons** in SQLite, so
+  `linkTitle` looks before it inserts.
+- **Roles:** reads are in STANDARD (not GUEST or KIDS, though the list badge
+  rides on `data:movies` / `data:series` for everyone), writes ride the
+  *metadata* capability, `disc:release:delete` is the admin's.
+- Keep the two facts apart: "ripped from disc" = the root's `origin`;
+  "still have the disc" = a held copy linked through `disc_titles`.
+- **The screenshot gate must use `--profile=<absolute path>\.devprofile`.**
+  Without it the pass opens (and migrates) the real `%APPDATA%\MediaLedger`
+  database. A *relative* profile path is refused by Electron at start-up:
+  an error dialog opens, nothing is logged and the run hangs.

@@ -46,7 +46,7 @@ const DEFAULTS = {
   videoExtensions: ['mp4', 'mkv', 'avi', 'mov', 'm4v', 'wmv', 'ts', 'webm', 'flv', 'mpg', 'mpeg'],
   subtitleExtensions: ['srt', 'ass', 'ssa', 'sub', 'idx', 'vtt', 'sup'],
   ignorePatterns: ['*.crdownload', '*.part', '*.!qb', 'Thumbs.db', 'desktop.ini', '.DS_Store'],
-  export: { sets: ['tv', 'anime', 'movies', 'web', 'changes'], zip: false, zipMin: 4 }, // which CSV sets an export writes; zip them when at least zipMin files were written
+  export: { sets: ['tv', 'anime', 'movies', 'web', 'changes', 'discs'], zip: false, zipMin: 4 }, // which CSV sets an export writes; zip them when at least zipMin files were written
   csvOutputDir: '',           // empty = <userData>/exports
   backup: { enabled: false, dir: '', time: '03:30', keep: 7 },
   notify: {                   // see notify.js: a JSON webhook (Home Assistant, ntfy, Discord…) and/or plain e-mail

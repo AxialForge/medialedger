@@ -112,7 +112,7 @@ views.dashboard = async () => {
 async function seriesView(type) {
   const [rows] = await Promise.all([L.data.series(type), loadPosterIndex()]);
   const cols = [
-    { key: 'show_name', label: 'Series', cls: 'wrap ptitle', render: r => `${posterTag(type, r.show_name, r.show_name)}<span class="pname">${esc(r.show_name)}${r.origins && r.origins !== 'download' ? ' ' + originBadges(r.origins) : ''}${discBadge(r.disc_format)}</span><span class="pmeta">${r.seasons} season${r.seasons === 1 ? '' : 's'} · ${r.episodes} episode${r.episodes === 1 ? '' : 's'}</span>` },
+    { key: 'show_name', label: 'Series', cls: 'wrap ptitle', render: r => `${posterTag(type, r.show_name, r.show_name)}<span class="pname">${esc(r.show_name)}${r.origins && r.origins !== 'download' ? ' ' + originBadges(r.origins) : ''}${discBadge(r.disc_format, r.disc_location)}</span><span class="pmeta">${r.seasons} season${r.seasons === 1 ? '' : 's'} · ${r.episodes} episode${r.episodes === 1 ? '' : 's'}</span>` },
     { key: 'tags', label: 'Tags', cls: 'wrap tagcell', sortVal: r => (r.tags || []).length * 100 + (r.genres || []).length, render: tagCell },
     { key: 'seasons', label: 'Seasons', num: true, render: r => r.min_season === r.max_season ? `${r.seasons}` : `${r.seasons} <span class="muted tiny">S${r.min_season}–S${r.max_season}</span>` },
     { key: 'episodes', label: 'Episodes', num: true },
@@ -239,6 +239,7 @@ function missingGrid(m) {
 
 async function episodesView(type, show) {
   const data = await L.data.episodes(type, show);
+  const held = await L.disc.forTitle(type, show).catch(() => []);
   const rows = data.files, miss = data.missing;
   const live = rows.filter(r => !r.missing);
   const bytes = live.reduce((a, r) => a + (r.size || 0), 0), secs = live.reduce((a, r) => a + (r.duration_s || 0), 0);
@@ -259,7 +260,7 @@ async function episodesView(type, show) {
   ];
   const table = makeTable(rows, cols, { search: r => `${r.file_name} ${r.episode_title || ''} ${sxe(r)}`, defaultSort: { key: 'season' }, onRow: r => L.showItem(r.abs_path) });
   await loadPosterIndex();
-  view.innerHTML = `${posterTag(type, show, show, 'pbig')}<div class="detail-head"><span class="back" id="back">← ${typeName(type)}</span><h1>${esc(show)}</h1><span class="muted">${live.length} episodes · ${fmtBytes(bytes)} · ${fmtHours(secs)}</span>${miss && miss.expected ? (miss.missing_count ? `<span class="badge bad">${miss.missing_count} missing of ${miss.expected}</span>` : '<span class="badge ok">complete</span>') : ''}<span class="grow"></span>${discBtn(type, show, data.disc)}${colBtn(type, show)}${matchBtn(type, show)}</div>`;
+  view.innerHTML = `${posterTag(type, show, show, 'pbig')}<div class="detail-head"><span class="back" id="back">← ${typeName(type)}</span><h1>${esc(show)}</h1><span class="muted">${live.length} episodes · ${fmtBytes(bytes)} · ${fmtHours(secs)}</span>${miss && miss.expected ? (miss.missing_count ? `<span class="badge bad">${miss.missing_count} missing of ${miss.expected}</span>` : '<span class="badge ok">complete</span>') : ''}<span class="grow"></span>${discBtn(type, show, show, null, held)}${colBtn(type, show)}${matchBtn(type, show)}</div>`;
   $('#back').onclick = () => { location.hash = '#' + type; };
   view.insertAdjacentHTML('beforeend', tagStrip(type, show, { genres: data.genres || [], audio: live.length ? (rows.some(r => /jpn|\bja\b/i.test(r.audio_langs || '')) ? (live.every(r => /jpn|\bja\b/i.test(r.audio_langs || '') && /eng|\ben\b/i.test(r.audio_langs || '')) ? 'dual' : live.every(r => /jpn|\bja\b/i.test(r.audio_langs || '')) ? 'sub' : 'mixed') : (type === 'anime' && live.some(r => /eng|\ben\b/i.test(r.audio_langs || '')) ? 'dub' : null)) : null, tags: data.tags || [] })); refreshTagSuggestions();
   if (miss && miss.expected) view.insertAdjacentHTML('beforeend', missingGrid(miss));
@@ -269,7 +270,7 @@ async function episodesView(type, show) {
 views.movies = async () => {
   const [rows] = await Promise.all([L.data.movies(), loadPosterIndex()]);
   const cols = [
-    { key: 'title', label: 'Title', cls: 'wrap ptitle', render: r => `${posterTag('movie', r.group_key, r.title)}<span class="pname">${esc(r.title)}${r.year ? `<span class="pyear muted"> (${r.year})</span>` : ''}${r.files > 1 ? ` <span class="badge warn">×${r.files}</span>` : ''} ${originBadges(r.origins)}${discBadge(r.disc_format)}</span><span class="pmeta">${[fmtDur(r.seconds), (r.resolutions || '').split(',').filter(Boolean).join(' '), r.hdr && r.hdr !== 'SDR' ? r.hdr : ''].filter(Boolean).map(esc).join(' · ')}</span>` },
+    { key: 'title', label: 'Title', cls: 'wrap ptitle', render: r => `${posterTag('movie', r.group_key, r.title)}<span class="pname">${esc(r.title)}${r.year ? `<span class="pyear muted"> (${r.year})</span>` : ''}${r.files > 1 ? ` <span class="badge warn">×${r.files}</span>` : ''} ${originBadges(r.origins)}${discBadge(r.disc_format, r.disc_location)}</span><span class="pmeta">${[fmtDur(r.seconds), (r.resolutions || '').split(',').filter(Boolean).join(' '), r.hdr && r.hdr !== 'SDR' ? r.hdr : ''].filter(Boolean).map(esc).join(' · ')}</span>` },
     { key: 'year', label: 'Year', num: true },
     { key: 'tags', label: 'Tags', cls: 'wrap tagcell', sortVal: r => (r.tags || []).length * 100 + (r.genres || []).length, render: tagCell },
     { key: 'files', label: 'Files', num: true },
@@ -319,7 +320,7 @@ views.movies = async () => {
 
 async function movieFilesView(groupKey) {
   const rows = await L.data.movieFiles(groupKey);
-  const disc = await L.disc.get('movie', groupKey).catch(() => null);
+  const held = await L.disc.forTitle('movie', groupKey).catch(() => []);
   const r0 = rows[0] || {};
   const cols = [
     { key: 'file_name', label: 'File', cls: 'wrap', render: r => `<span title="${esc(r.rel_path)}">${esc(r.file_name)}</span>${r.missing ? ' <span class="badge bad">missing</span>' : ''}${r.has_override ? ' <span class="badge ok">fixed</span>' : ''}` },
@@ -339,7 +340,7 @@ async function movieFilesView(groupKey) {
   ];
   const table = makeTable(rows, cols, { onRow: r => L.showItem(r.abs_path) });
   await loadPosterIndex();
-  view.innerHTML = `${posterTag('movie', groupKey, r0.movie_title || groupKey, 'pbig')}<div class="detail-head"><span class="back" id="back">← Movies</span><h1>${esc(r0.movie_title || groupKey)}${r0.movie_year ? ` <span class="muted">(${r0.movie_year})</span>` : ''}</h1><span class="muted">${rows.length} file(s)</span><span class="grow"></span>${discBtn('movie', groupKey, disc)}${colBtn('movie', groupKey)}</div>`;
+  view.innerHTML = `${posterTag('movie', groupKey, r0.movie_title || groupKey, 'pbig')}<div class="detail-head"><span class="back" id="back">← Movies</span><h1>${esc(r0.movie_title || groupKey)}${r0.movie_year ? ` <span class="muted">(${r0.movie_year})</span>` : ''}</h1><span class="muted">${rows.length} file(s)</span><span class="grow"></span>${discBtn('movie', groupKey, r0.movie_title || groupKey, r0.movie_year, held)}${colBtn('movie', groupKey)}</div>`;
   $('#back').onclick = () => { location.hash = '#movies'; };
   const mg = (() => { try { const g = JSON.parse(rows.map(r => r.plex_genres).find(Boolean) || '[]'); return Array.isArray(g) ? g : []; } catch { return []; } })();
   const live = rows.filter(r => !r.missing); const jp = r => /jpn|\bja\b/i.test(r.audio_langs || ''), en = r => /eng|\ben\b/i.test(r.audio_langs || '');

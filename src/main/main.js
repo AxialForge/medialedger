@@ -141,7 +141,7 @@ function createWindow() {
     // An occluded window stops painting and capturePage() returns stale frames; keep it painting and in front for the run.
     win.webContents.setBackgroundThrottling(false); win.setAlwaysOnTop(true);
     const shots = [
-      ['dashboard', '#dashboard'], ['tv', '#tv'], ['anime', '#anime'], ['movies', '#movies'],
+      ['dashboard', '#dashboard'], ['discs', '#discs/owned'], ['tv', '#tv'], ['anime', '#anime'], ['movies', '#movies'],
       ['episodes', '#anime/' + encodeURIComponent('One Piece')], ['title-poster', '#anime/' + encodeURIComponent('A Certain Magical Index')], ['movie-versions', '#movies/' + encodeURIComponent('pacificrim|2013')],
       ['missing', '#missing'], ['duplicates', '#duplicates'], ['movienames', '#movienames'], ['web', '#web'], ['ratings', '#ratings'], ['quality', '#quality'], ['rename', '#rename'],
       ['changes', '#changes'], ['issues', '#issues/problems'], ['problems', '#problems'], ['requests', '#requests'], ['tonight', '#tonight'], ['watched', '#watched'], ['upgrades', '#upgrades'], ['reclaim', '#reclaim'], ['export', '#export'], ['system', '#system'], ['log', '#log'], ['family', '#family'], ['settings', '#settings'], ['about', '#about'],
