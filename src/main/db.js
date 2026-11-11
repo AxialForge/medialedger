@@ -476,6 +476,19 @@ const MIGRATIONS = [
       DROP TABLE IF EXISTS discs;
     `,
   },
+  {
+    version: 20, name: 'disc lookup cache',
+    sql: `
+      -- What an online lookup said about a barcode, kept so the same barcode never costs a second request.
+      CREATE TABLE IF NOT EXISTS disc_lookups (
+        upc TEXT PRIMARY KEY,
+        source TEXT NOT NULL,      -- upcitemdb
+        status TEXT NOT NULL,      -- found or none
+        title TEXT, brand TEXT, category TEXT, image TEXT,
+        ts TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 class Db {

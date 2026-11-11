@@ -20,7 +20,7 @@ assert.strictEqual(D.normalizeUpc(null), null);
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ml-discs-'));
 const db = new Db(path.join(dir, 't.db'));
-assert.strictEqual(db.userVersion, 19, 'a fresh database is at v19');
+assert.strictEqual(db.userVersion, 20, 'a fresh database is at the newest version');
 assert.strictEqual(db.get("SELECT COUNT(*) n FROM sqlite_master WHERE name='discs'").n, 0, 'the v18 table is gone');
 for (const t of ['disc_releases', 'disc_titles', 'disc_copies', 'disc_scans']) assert.strictEqual(db.get('SELECT COUNT(*) n FROM sqlite_master WHERE name=?', t).n, 1, t + ' exists');
 
@@ -119,7 +119,7 @@ db.close();
   raw.exec("INSERT INTO discs VALUES ('movie', 'alien|1979', 'uhd', 'steelbook', '2026-10-31T00:00:00.000Z'), ('tv', 'Andor', 'bluray', NULL, '2026-10-31T00:00:00.000Z')");
   raw.exec('PRAGMA user_version = 18'); raw.close();
   const up = new Db(file);
-  assert.strictEqual(up.userVersion, 19);
+  assert.strictEqual(up.userVersion, 20);
   assert.ok(fs.readdirSync(file + '.backups').some(f => f.includes('pre-migration-v18')), 'a backup is taken before migrating');
   assert.deepStrictEqual(up.all('SELECT title, kind, format, notes, lookup_source FROM disc_releases ORDER BY title').map(r => Object.values(r)), [['Andor', 'tv', 'Blu-ray', null, 'manual'], ['alien|1979', 'movie', '4K UHD', 'steelbook', 'manual']]);
   assert.deepStrictEqual(D.ownedByTitle(up, 'movie').get('alien|1979'), { format: '4K UHD', location: null });

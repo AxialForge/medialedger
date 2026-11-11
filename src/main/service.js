@@ -48,7 +48,7 @@ function createService({ userData, log, send, host }) {
   // Every call that can change what the library looks like bumps `dataVersion`; read-only calls do not. Expensive
   // reports (the dashboard) are answered from memory while the version stands and the answer is under a minute old.
   let dataVersion = 0;
-  const READS = /^(data:|app:|collections:(list|get|search|suggest|forTitle|export)$|dup:plan$|scan:(status|list)$|jobs:(list|overdue)$|posters:(status|index|get)$|prefs:get$|log:|roots:(last|check|listDirs)$|meta:(get|status|search)$|plex:(status|test)$|tags:(list|all|get)$|disc:(list|get|forTitle|titles:search|scans:recent|export)$|ratings:list$|requests:list$|override:(list|suggest)$|movie:(plan|batches|batchItems)$|rename:(proposals|history|dry)$|export:list$|collect:get$|db:(stats|backups|restoreList)$|sys:|schedule:(taskStatus|nextInApp)$|update:|adult:status$|settings:get$|web:|notify:test$)/;
+  const READS = /^(data:|app:|collections:(list|get|search|suggest|forTitle|export)$|dup:plan$|scan:(status|list)$|jobs:(list|overdue)$|posters:(status|index|get)$|prefs:get$|log:|roots:(last|check|listDirs)$|meta:(get|status|search)$|plex:(status|test)$|tags:(list|all|get)$|disc:(list|get|forTitle|titles:search|scans:recent|export|lookup|lookup:state|tmdbTest)$|ratings:list$|requests:list$|override:(list|suggest)$|movie:(plan|batches|batchItems)$|rename:(proposals|history|dry)$|export:list$|collect:get$|db:(stats|backups|restoreList)$|sys:|schedule:(taskStatus|nextInApp)$|update:|adult:status$|settings:get$|web:|notify:test$)/;
   const h = (ch, fn) => handlers.set(ch, READS.test(ch) ? fn : (...a) => { dataVersion++; return fn(...a); });
   const remember = (ch, ttlMs, fn) => { const memo = new Map(); h(ch, (...a) => { const key = `${scopeKey()}|${JSON.stringify(a)}`; const hit = memo.get(key); if (hit && hit.v === dataVersion && !scanner.running && Date.now() - hit.t < ttlMs) return hit.r; const r = fn(...a); if (!(r && typeof r.then === 'function')) { if (memo.size > 8) memo.clear(); memo.set(key, { v: dataVersion, t: Date.now(), r }); } return r; }); };
 
@@ -937,6 +937,11 @@ function createService({ userData, log, send, host }) {
   h('disc:title:link', (releaseId, t) => { discs.linkTitle(db, releaseId, t || {}); return discs.get(db, releaseId); });
   h('disc:title:unlink', (id) => { const t = db.get('SELECT release_id FROM disc_titles WHERE id=?', Number(id)); discs.unlinkTitle(db, id); return t ? discs.get(db, t.release_id) : null; });
   h('disc:titles:search', (q) => collections.search(q, AF()));
+  // Online lookup (src/main/discLookup.js): suggests, never saves. Made on first use because db exists only after init.
+  let discLookupApi = null; const discLookup = () => discLookupApi || (discLookupApi = require('./discLookup').createDiscLookup({ db, settings, log }));
+  h('disc:lookup', (upc, opts) => discLookup().lookup(upc, { refresh: !!(opts && opts.refresh), adultFilter: AF() }));
+  h('disc:lookup:state', () => discLookup().state());
+  h('disc:tmdbTest', (key) => require('./tmdb').test(key || (settings.get().tmdb || {}).key));
   h('disc:scans:recent', (limit) => discs.recentScans(db, limit));
   h('disc:export', () => discs.exportCsvText(db));
   h('tags:list', (type) => Object.fromEntries(db.tagsFor(type, scope.user)));

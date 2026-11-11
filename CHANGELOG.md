@@ -8,6 +8,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [3.5.0] - 2026-11-11
+
+### Added
+
+- **Barcode lookup.** An unknown barcode is now looked up while the *New
+  disc* form opens: the title, format, edition, year and studio are filled
+  in from UPCitemdb (free, no account) and the matching library title is
+  linked when there is exactly one. It is only a suggestion: nothing is
+  saved until you press Save, what you type always wins, and a release you
+  already described is never asked about again. A barcode that is not a
+  disc is called out instead of filled in.
+- Every answer is remembered (`disc_lookups`, schema v20), so a barcode
+  costs one request ever. When the free service says to slow down (6 a
+  minute, 100 a day) lookups rest until its reset time and scanning carries
+  on by hand. Bulk scanning shows what each waiting barcode looks like.
+- Settings → Discs: a switch for the lookup, and an optional TMDB key. With
+  a key, disc titles are tidied to the film's proper name and year, and
+  films Plex has no poster for get one from TMDB.
+
 ## [3.4.0] - 2026-11-11
 
 ### Added

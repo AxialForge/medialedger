@@ -83,6 +83,8 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 | `src/main/ffmpegdl.js` | Download BtbN ffmpeg zip, extract with PowerShell `Expand-Archive` |
 | `src/main/exportCsv.js` | Nine CSVs per export (the ninth is `discs.csv`, one row per copy), timestamped dir + `latest\` copy |
 | `src/main/discs.js` | Physical discs by barcode: `normalizeUpc`, `scan`, releases / copies / title links, `discs.csv` rows. Pure, shared by both shells |
+| `src/main/discLookup.js` | What is this barcode: own releases, the lookup cache, UPCitemdb; `parseProduct` turns a shop listing into title / format / edition; rate-limit rest |
+| `src/main/tmdb.js` | Optional TMDB search (movie / tv) and poster URL, used by the disc lookup and as a movie poster fallback |
 | `src/main/scheduler.js` | In-app interval timer + `schtasks.exe` create/query/delete |
 | `src/main/watcher.js` | Optional `fs.watch` (recursive, UNC ok) per root; debounced scan trigger |
 | `src/main/metadata.js` | TVmaze / AniList lookups → `{season: count}`; `missingEpisodes()` diff with absolute-numbering guard |
@@ -339,6 +341,22 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 - **Roles:** reads are in STANDARD (not GUEST or KIDS, though the list badge
   rides on `data:movies` / `data:series` for everyone), writes ride the
   *metadata* capability, `disc:release:delete` is the admin's.
+- **A lookup suggests, it never saves** (`src/main/discLookup.js`, 3.5.0).
+  Order: your own release, the `disc_lookups` cache (v20), then UPCitemdb's
+  keyless trial endpoint. Verified 2026-11-11: `items[0].title/brand/category`,
+  `total: 0` for unknown, headers `X-RateLimit-Remaining/Limit/Reset` (Reset
+  is a Unix time), and TWO limits: 100 a day and 6 a minute, the second
+  answering `code: TOO_FAST`. On either, `pausedUntil` is set from Reset
+  and no request is made until then. `lookup()` never throws.
+- **UPCitemdb's `category` is unreliable** (a Blu-ray came back as "DVD &
+  Blu-ray Players"), so `parseProduct` trusts format words in the title and
+  uses the category only to decide whether a bare "4K" is a disc or a
+  television. A year counts only inside brackets, so "Blade Runner 2049"
+  keeps its name.
+- **TMDB is optional** (`src/main/tmdb.js`, `settings.tmdb.key`, redacted
+  for non-admins like the Plex token). It was built against the documented
+  v3 API with a pretend server and has NOT been run against the real
+  service: no key was available. The Settings *Test* button is the check.
 - Keep the two facts apart: "ripped from disc" = the root's `origin`;
   "still have the disc" = a held copy linked through `disc_titles`.
 - **The screenshot gate must use `--profile=<absolute path>\.devprofile`.**

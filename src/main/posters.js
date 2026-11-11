@@ -65,6 +65,7 @@ async function fromTvmaze(id) {
   return url ? getImage(String(url).replace(/^http:\/\//, 'https://')) : null;
 }
 
+const tmdb = require('./tmdb');
 function createPosters({ db, settings, userData, log = () => {}, send = () => {} }) {
   const cfg = () => ({ enabled: true, dir: '', width: 300, online: true, ...(settings.get().posters || {}) });
   const dir = () => { const d = String(cfg().dir || '').trim(); return d || path.join(userData, 'posters'); };
@@ -72,7 +73,7 @@ function createPosters({ db, settings, userData, log = () => {}, send = () => {}
 
   /** Every title that should have a poster. Adult titles are left out on purpose. */
   function titles() {
-    const movies = db.all(`SELECT 'movie' type, group_key key, MIN(movie_title) title, MAX(plex_rating_key) plex FROM files WHERE library_type='movie' AND missing=0 AND ignored=0 AND adult=0 AND group_key IS NOT NULL GROUP BY group_key`);
+    const movies = db.all(`SELECT 'movie' type, group_key key, MIN(movie_title) title, MIN(movie_year) year, MAX(plex_rating_key) plex FROM files WHERE library_type='movie' AND missing=0 AND ignored=0 AND adult=0 AND group_key IS NOT NULL GROUP BY group_key`);
     const series = db.all(`SELECT library_type type, show_name key, show_name title, MAX(plex_show_key) plex FROM files WHERE library_type IN ('tv','anime') AND missing=0 AND ignored=0 AND adult=0 AND show_name IS NOT NULL GROUP BY library_type, show_name`);
     return [...movies, ...series];
   }
@@ -101,6 +102,11 @@ function createPosters({ db, settings, userData, log = () => {}, send = () => {}
         await sleep(700); // the online services ask for about one request a second
         try { img = m.source === 'anilist' ? await fromAniList(m.source_id) : await fromTvmaze(m.source_id); if (img) source = m.source; } catch (e) { if (e.retryAfter) throw e; note = `${m.source}: ${e.message}`; }
       }
+    }
+    const tmdbKey = String((settings.get().tmdb || {}).key || '').trim();
+    if (!img && c.online && t.type === 'movie' && tmdbKey && t.title) {
+      await sleep(300);
+      try { const m = await tmdb.searchMovie(tmdbKey, t.title, t.year); const url = m && tmdb.posterUrl(m.poster_path, c.width); if (url) { img = await getImage(url); if (img) source = 'tmdb'; } } catch (e) { if (e.retryAfter) throw e; note = 'tmdb: ' + e.message; }
     }
     if (img) { store(t, img, source); return 'ok'; }
     remember(t, { status: note ? 'error' : 'none', note });

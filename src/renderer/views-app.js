@@ -90,7 +90,7 @@ const SETTINGS_GROUPS = [
   ['Library', 'Where the files are and how they are read', ['Library roots', 'Network shares', 'Scanning', 'ffprobe', 'Folder watch', 'Adult content']],
   ['Episodes and quality', 'What counts as complete and as good enough', ['Expected episodes', 'Quality thresholds', 'Subtitles', 'Posters']],
   ['Automation', 'What runs by itself and what it tells you', ['Schedules', 'Notifications', 'Updates']],
-  ['Connections', 'Other programs MediaLedger talks to', ['Plex', 'CSV export', 'Desktop']],
+  ['Connections', 'Other programs MediaLedger talks to', ['Plex', 'Discs', 'CSV export', 'Desktop']],
   ['Renaming', 'Changes to file names on the share', ['Renaming']],
   ['Backup and data', 'The database, its backups and restore', ['Data']],
   ['Appearance', 'How this device shows MediaLedger', ['Appearance']],
@@ -175,6 +175,10 @@ views.settings = async () => {
 
       ${!L.isWeb || L.isDesktopClient ? `<h2>Desktop</h2>
       <div class="field"><label>Use a server instead</label><div id="clientBox"><p class="muted">Loading…</p></div><div class="hint">The desktop application can show a MediaLedger server's pages instead of keeping its own library: one database, one set of fixes, and the desktop still opens folders in Explorer through a path mapping. Switching restarts the application. The server's certificate is remembered on first contact.</div></div>` : ''}
+
+      <h2>Discs</h2>
+      <div class="field"><label>Barcode lookup</label><div class="inline"><label class="inline"><input type="checkbox" id="dkLookup" ${!s.discs || s.discs.lookup !== false ? 'checked' : ''}> ask UPCitemdb what an unknown barcode is</label></div><div class="hint">Free and needs no account: 100 lookups a day, 6 a minute. Only the barcode is sent. The answer fills in the <i>New disc</i> form for you to check; nothing is saved until you press Save, and every answer is remembered so a barcode is only asked once. <span id="dkState"></span></div></div>
+      <div class="field"><label>TMDB key (optional)</label><div class="inline"><input type="password" id="tmdbKey" style="flex:1" value="${esc((s.tmdb && s.tmdb.key) || '')}" autocomplete="off" placeholder="leave empty to do without"><button class="small" id="tmdbTest">Test</button></div><div class="hint" id="tmdbMsg">A free key from themoviedb.org (Settings → API). With one, disc titles are tidied to the film's proper name and year, and films Plex has no poster for get one. Either the short API key or the long read access token works.</div></div>
 
       <h2>CSV export</h2>
       <div class="field"><label>Output folder</label><div class="inline"><input type="text" id="csvDir" style="flex:1" placeholder="${esc(info.exportDir)}" value="${esc(s.csvOutputDir)}"><button class="small" id="pickCsv">Browse…</button><button class="small" id="openCsv">Open</button></div></div>
@@ -306,6 +310,7 @@ views.settings = async () => {
       watchFolders: $('#watchOn').checked, rootCheckMinutes: Number($('#rootCheckMin').value) || 0, watchSettleSeconds: Number($('#watchSettle').value) || 90,
       renaming: { ...s.renaming, enabled: $('#renOn').checked },
       subtitles: { wanted: $('#subWanted').value.trim() || 'eng' },
+      discs: { ...(s.discs || {}), lookup: $('#dkLookup').checked }, tmdb: { key: $('#tmdbKey').value.trim() },
       adult: { exportCsv: $('#adultCsv').checked, defaultSubtype: $('#adultDefault').value },
       quality: { minKbps: Object.fromEntries([...document.querySelectorAll('#thr input[data-res]')].map(i => [i.dataset.res, Number(i.value) || 0])) },
       plex: { enabled: $('#plexOn').checked, everyHours: Math.max(0, Number($('#plexEvery').value) || 0), baseUrl: $('#plexUrl').value.trim(), token: $('#plexToken').value.trim(), pathMap: [...document.querySelectorAll('#plexMap .inline')].map(r => ({ plex: $('.pm-plex', r).value.trim(), local: $('.pm-local', r).value.trim() })).filter(m => m.plex && m.local) },
@@ -335,6 +340,8 @@ views.settings = async () => {
   $('#installTask').onclick = async () => { await L.settings.replace(collect()); const r = await L.schedule.installTask(); toast(r.message || (r.ok ? 'Task installed' : 'Failed'), !r.ok); refreshTask(); };
   $('#removeTask').onclick = async () => { const r = await L.schedule.removeTask(); toast(r.message || 'Task removed', !r.ok); refreshTask(); };
   $('#runTask').onclick = async () => { const r = await L.schedule.runTaskNow(); toast(r.message || 'Task started', !r.ok); setTimeout(refreshTask, 2000); };
+  $('#tmdbTest').onclick = async () => { $('#tmdbMsg').textContent = 'Testing…'; try { const r = await L.disc.tmdbTest($('#tmdbKey').value.trim()); $('#tmdbMsg').textContent = r.message; $('#tmdbMsg').className = 'hint ' + (r.ok ? 'ok' : 'bad'); } catch (e) { $('#tmdbMsg').textContent = e.message; } };
+  L.disc.lookupState().then(st => { $('#dkState').textContent = st.remaining != null ? `${st.remaining} of ${st.limit} left in the current window. ${st.cached} barcode${st.cached === 1 ? '' : 's'} remembered.` : st.cached ? `${st.cached} barcode${st.cached === 1 ? '' : 's'} remembered.` : ''; }).catch(() => {});
   $('#plexTest').onclick = async () => { $('#plexMsg').textContent = 'Testing…'; const r = await L.plexTest({ baseUrl: $('#plexUrl').value.trim(), token: $('#plexToken').value.trim() }); $('#plexMsg').textContent = r.message; $('#plexMsg').className = 'hint ' + (r.ok ? 'ok' : 'bad'); };
   const mapBox = $('#plexMap');
   const mapRow = (m) => el(`<div class="inline" style="margin-bottom:4px"><input class="pm-plex" placeholder="/media" value="${esc(m.plex || '')}" style="width:220px"> <span class="muted">→</span> <input class="pm-local" placeholder="\\\\nas\\share" value="${esc(m.local || '')}" style="flex:1"> <button class="small pm-del">✕</button></div>`);

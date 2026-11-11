@@ -52,9 +52,10 @@ function discTypeahead(input, box, onPick) {
 // ---------- forms -----------------------------------------------------------------------------
 /** A new release with its first copy. `o`: { upc, title, year, kind, link, location, status }. */
 function discReleaseForm(o = {}, onSaved) {
-  let link = o.link || null;
+  let link = o.link || null, extra = {}, touched = false;
   const card = openModal(`<h2>New disc</h2>
     <p class="muted small">${o.upc ? `Barcode <b class="mono">${esc(o.upc)}</b> is not known yet. Say what it is once and every later scan of it is recognised.` : 'A disc entered by hand. Add its barcode later by editing the release.'}</p>
+    <div id="drLook" class="disclook" hidden></div>
     <div class="discform">
       <label class="wide">Title <input type="text" id="drTitle" value="${esc(o.title || '')}" placeholder="Start typing: titles from your library appear below" autocomplete="off"><div class="discsug" id="drSug"></div></label>
       <label class="wide" id="drLinkRow"></label>
@@ -69,10 +70,33 @@ function discReleaseForm(o = {}, onSaved) {
   const paintLink = () => { $('#drLinkRow', card).innerHTML = link ? `Library title <span><span class="badge ${esc(link.library_type)}">${typeName(link.library_type)}</span> ${esc(link.title || link.title_key)} <button type="button" class="small" id="drUnlink">not this one</button></span>` : '<span class="muted">Not linked to a library title. Pick one from the suggestions to show the disc badge on its page.</span>'; if ($('#drUnlink', card)) $('#drUnlink', card).onclick = () => { link = null; paintLink(); }; };
   paintLink();
   discTypeahead($('#drTitle', card), $('#drSug', card), (r) => { link = { library_type: r.library_type, title_key: r.title_key, title: r.title, year: r.year }; $('#drTitle', card).value = r.title; if (r.year) $('#drYear', card).value = r.year; $('#drKind', card).value = r.library_type === 'movie' ? 'movie' : 'tv'; paintLink(); });
+  $('#drTitle', card).addEventListener('input', () => { touched = true; });
+  // An unknown barcode is looked up while the form is already open. The answer fills the form unless you have
+  // started typing, and it is only a suggestion: nothing is saved until Save.
+  if (o.upc) {
+    const look = $('#drLook', card); look.hidden = false; look.className = 'disclook'; look.textContent = 'Looking the barcode up…';
+    const when = (iso) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    L.disc.lookup(o.upc).then(r => {
+      if (!card.isConnected || !$('#drLook', card)) return;
+      if (r.status === 'found' && r.isDisc) {
+        look.className = 'disclook ok'; look.innerHTML = `Looks like <b>${esc(r.raw_title)}</b> <span class="muted">· from UPCitemdb${r.tmdb ? ' and TMDB' : ''}. Check it, then save.</span>`;
+        if (!touched) {
+          const f = r.release; $('#drTitle', card).value = f.title || ''; $('#drYear', card).value = f.year || ''; $('#drKind', card).value = f.kind || 'movie'; if (f.format) $('#drFormat', card).value = f.format; $('#drEdition', card).value = f.edition || '';
+          extra = { discs_count: f.discs_count, studio: f.studio, lookup_source: r.source };
+          if (r.link && !link) { link = r.link; paintLink(); }
+        }
+      } else if (r.status === 'found') { look.className = 'disclook bad'; look.innerHTML = `This barcode is <b>${esc(r.raw_title)}</b>${r.category ? ` <span class="muted">(${esc(r.category)})</span>` : ''}, which does not look like a disc. Nothing was filled in.`; }
+      else if (r.status === 'none') look.textContent = 'The online database does not know this barcode. Type it in once and it is remembered.';
+      else if (r.status === 'limited') look.textContent = `Online lookup is resting until ${when(r.retryAt)} (the free service allows 6 a minute and 100 a day). Type it in, or try again later.`;
+      else if (r.status === 'off') look.textContent = 'Online lookup is switched off in Settings → Discs.';
+      else if (r.status === 'local') look.textContent = 'This barcode is already a release.';
+      else look.textContent = (r.message || 'The lookup did not work') + '. Type it in.';
+    }).catch(() => { if ($('#drLook', card)) look.hidden = true; });
+  }
   $('#drCancel', card).onclick = closeModal;
   $('#drSave', card).onclick = async () => {
     try {
-      const saved = await L.disc.saveRelease({ upc: o.upc || null, title: $('#drTitle', card).value, year: $('#drYear', card).value, kind: $('#drKind', card).value, format: $('#drFormat', card).value, edition: $('#drEdition', card).value, link, copy: { status: $('#drStatus', card).value, location: $('#drLoc', card).value } });
+      const saved = await L.disc.saveRelease({ ...extra, upc: o.upc || null, title: $('#drTitle', card).value, year: $('#drYear', card).value, kind: $('#drKind', card).value, format: $('#drFormat', card).value, edition: $('#drEdition', card).value, link, copy: { status: $('#drStatus', card).value, location: $('#drLoc', card).value } });
       closeModal(); toast(`Saved ${saved.release.title}`); if (onSaved) onSaved(saved);
     } catch (e) { toast(e.message, true); }
   };
@@ -193,14 +217,16 @@ async function discSubmit(code, force = false) {
   const entry = { kind, code: r.upc || String(code).trim(), release: r.release || null, at: new Date().toISOString(), second: r.ok && r.duplicate, wished: !!r.fromWishlist };
   if (!force || kind !== 'ok') discQueue.unshift(entry); else { const q = discQueue.find(x => x.kind === 'duplicate' && x.code === entry.code); if (q) Object.assign(q, entry); else discQueue.unshift(entry); }
   discPaintLast(entry); discPaintQueue(); discPaintRecent();
-  if (kind === 'unknown' && !($('#discBulk') && $('#discBulk').checked)) discDescribe(entry);
+  if (kind !== 'unknown') return;
+  if (!($('#discBulk') && $('#discBulk').checked)) return discDescribe(entry);
+  L.disc.lookup(entry.code).then(l => { entry.hint = l.status === 'found' ? (l.isDisc ? `Looks like ${l.release.title}${l.release.format ? ` (${l.release.format})` : ''}.` : `Not a disc: ${l.raw_title}.`) : l.status === 'limited' ? 'Lookup resting (free limit).' : l.status === 'none' ? 'Not in the online database.' : ''; discPaintQueue(); if (discQueue[0] === entry) discPaintLast(entry); }).catch(() => {});
 }
 // An unknown barcode becomes a release: the form opens with the barcode filled in.
 function discDescribe(entry) {
   discReleaseForm({ upc: entry.code, location: discLocGet() }, (saved) => { entry.kind = 'ok'; entry.release = saved.release; discBeep('ok'); discPaintLast(entry); discPaintQueue(); discPaintRecent(); const i = $('#discScanIn'); if (i) i.focus(); });
 }
 const discLine = (q) => q.kind === 'invalid' ? 'Not a barcode: the check digit does not match. Scan it again.'
-  : q.kind === 'unknown' ? 'Not known yet.'
+  : q.kind === 'unknown' ? `Not known yet.${q.hint ? ' ' + esc(q.hint) : ''}`
   : q.kind === 'duplicate' ? `You already have ${esc(q.release.title)} (${esc(q.release.format)}). Nothing was added.`
   : `${q.wished ? 'Off the wishlist: ' : q.second ? 'Another copy of ' : 'Added '}${esc(q.release.title)}${q.release.year ? ` (${q.release.year})` : ''} · ${esc(q.release.format)}`;
 function discPaintLast(q) {

@@ -71,7 +71,7 @@ const portal = createPortal({ svc, dataDir, log, audit: (...a) => sec.audit(...a
 // What a guest (no account) may call: read-only library statistics, plus filing a media request.
 const GUEST = new Set(['collections:list', 'collections:get', 'collections:forTitle', 'collections:export', 'posters:index', 'app:info', 'security:me', 'data:dashboard', 'data:series', 'data:episodes', 'data:movies', 'data:movieFiles', 'data:search', 'web:channels', 'web:videos', 'ratings:list', 'meta:get', 'scan:status', 'scan:list', 'update:status', 'adult:status', 'requests:list', 'requests:add', 'roots:last', 'tags:list', 'tags:all', 'tags:get', 'data:tonight', 'data:storage', 'data:airing', 'prefs:get', 'data:snapshots']);
 // A standard user: everything a guest may, plus the review pages, own ratings, the adult switch for their own session.
-const STANDARD = new Set([...GUEST, 'data:watched', 'data:reclaim', 'data:nextUp', 'data:continue', 'data:subtitles', 'data:problems', 'data:duplicates', 'data:missing', 'data:quality', 'data:changes', 'data:changeStats', 'movie:plan', 'movie:batches', 'movie:batchItems', 'rename:proposals', 'rename:history', 'export:list', 'override:list', 'override:suggest', 'meta:status', 'plex:status', 'watch:status', 'schedule:nextInApp', 'db:stats', 'settings:get', 'adult:toggle', 'ratings:setUser', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'tags:add', 'tags:remove', 'data:upgrades', 'rename:dry', 'prefs:set', 'disc:list', 'disc:get', 'disc:forTitle', 'disc:titles:search', 'disc:scans:recent', 'disc:export']);
+const STANDARD = new Set([...GUEST, 'data:watched', 'data:reclaim', 'data:nextUp', 'data:continue', 'data:subtitles', 'data:problems', 'data:duplicates', 'data:missing', 'data:quality', 'data:changes', 'data:changeStats', 'movie:plan', 'movie:batches', 'movie:batchItems', 'rename:proposals', 'rename:history', 'export:list', 'override:list', 'override:suggest', 'meta:status', 'plex:status', 'watch:status', 'schedule:nextInApp', 'db:stats', 'settings:get', 'adult:toggle', 'ratings:setUser', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'tags:add', 'tags:remove', 'data:upgrades', 'rename:dry', 'prefs:set', 'disc:list', 'disc:get', 'disc:forTitle', 'disc:titles:search', 'disc:scans:recent', 'disc:export', 'disc:lookup:state']);
 // Admins: every channel. Actions that write to the share or throw data away also need a fresh password (re-auth).
 const SENSITIVE = new Set(['dup:moveDiscards', 'shares:add', 'shares:remove', 'portal:set', 'portal:invite', 'portal:renew', 'db:restoreStage', 'security:tlsEnable', 'security:tlsDisable', 'status:rotate', 'plex:webhookSet', 'movie:run', 'movie:undo', 'rename:apply', 'data:purgeMissing', 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'security:setOptions', 'security:revokeOthers', 'security:addUser', 'security:setRole', 'security:resetPassword', 'security:deleteUser', 'security:setPerms']);
 const isSensitive = (ch, args) => ch === 'movie:run' ? !!(args[1] && args[1].live) : SENSITIVE.has(ch);
@@ -81,7 +81,7 @@ const CAP_CHANNELS = {
   requests: ['requests:update', 'requests:delete'],
   collections: ['collections:save', 'collections:delete', 'collections:addItem', 'collections:removeItem', 'collections:setNote', 'collections:reorder', 'collections:sortByRelease', 'collections:setCover', 'collections:suggest', 'collections:createFromSuggestion', 'collections:search'],
   fixes: ['override:save', 'override:delete', 'override:suggest', 'override:bulkSource', 'dup:keep', 'dup:clear', 'dup:keepBest', 'dup:plan'],
-  metadata: ['meta:search', 'meta:setMatch', 'meta:setManual', 'meta:setNone', 'meta:unlock', 'collect:get', 'collect:set', 'meta:refresh', 'disc:scan', 'disc:release:save', 'disc:copy:add', 'disc:copy:save', 'disc:copy:status', 'disc:title:link', 'disc:title:unlink'],
+  metadata: ['meta:search', 'meta:setMatch', 'meta:setManual', 'meta:setNone', 'meta:unlock', 'collect:get', 'collect:set', 'meta:refresh', 'disc:lookup', 'disc:scan', 'disc:release:save', 'disc:copy:add', 'disc:copy:save', 'disc:copy:status', 'disc:title:link', 'disc:title:unlink'],
   tags: ['tags:add', 'tags:remove'],
 };
 const KIDS = new Set([...GUEST, 'security:changePassword', 'security:totpSetup', 'security:totpEnable', 'security:totpDisable', 'prefs:set', 'data:continue', 'data:nextUp']);
@@ -95,7 +95,7 @@ const allowed = (role, ch, perms) => {
   return Object.entries(CAP_CHANNELS).some(([cap, chans]) => can[cap] && chans.includes(ch));
 };
 // Settings hold secrets (Plex token, GitHub token); a standard user sees them blanked.
-const redactSettings = (s) => ({ ...s, plex: { ...(s.plex || {}), token: s.plex && s.plex.token ? '••••' : '' }, githubToken: s.githubToken ? '••••' : '' });
+const redactSettings = (s) => ({ ...s, plex: { ...(s.plex || {}), token: s.plex && s.plex.token ? '••••' : '' }, githubToken: s.githubToken ? '••••' : '', tmdb: { key: s.tmdb && s.tmdb.key ? '••••' : '' } });
 
 // Shell-specific handlers the desktop app implements with Electron dialogs / shell / updater, plus security and per-session state.
 // Handlers listed in CTX_HANDLERS receive { session, ip, role } as their first argument.
