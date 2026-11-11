@@ -500,6 +500,17 @@ body.role-guest #navDiscs, body.role-kids #navDiscs { display: none; }
 .discscan #discScanIn { font-size: 26px; padding: 14px 16px; letter-spacing: 2px; font-variant-numeric: tabular-nums; width: 100%; }
 .disclast { border-left: 4px solid var(--line); }
 .disclast.ok { border-left-color: var(--accent2); } .disclast.duplicate { border-left-color: var(--warn); } .disclast.unknown, .disclast.invalid { border-left-color: var(--bad); }
+.disclabs { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.disclab { text-align: center; font-size: 12px; } .disclab .qrbox { padding: 5px; margin-bottom: 4px; }
+.tilelink { cursor: pointer; display: block; }
+#printSheet { display: none; }
+@media print {
+  body.print-labels > *:not(#printSheet) { display: none !important; }
+  body.print-labels { background: #fff !important; }
+  body.print-labels #printSheet { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6mm; padding: 6mm; color: #000; }
+  .plabel { border: 1px dashed #999; padding: 4mm; text-align: center; break-inside: avoid; font: 600 12pt/1.3 Arial, sans-serif; }
+  .plabel svg { width: 40mm; height: 40mm; display: block; margin: 0 auto 2mm; }
+}
 .disclook { padding: 8px 10px; border-radius: 8px; border-left: 4px solid var(--line); background: rgba(127,127,127,.08); margin-bottom: 10px; font-size: 13px; }
 .disclook.ok { border-left-color: var(--accent2); } .disclook.bad { border-left-color: var(--warn); }
 .discq { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 12px; align-items: center; font-size: 13px; }

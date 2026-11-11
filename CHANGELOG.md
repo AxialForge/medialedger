@@ -8,6 +8,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [3.6.0] - 2026-11-11
+
+### Added
+
+- **Discs → Gaps.** Where the shelf and the library disagree, in five
+  lists: discs you hold whose film is not in the library (or not linked
+  yet, with a one-click *Link* when exactly one title has that name), discs
+  you own whose library copy is not a rip, titles ripped from a disc with
+  no disc recorded, titles that have both a rip and a download, and
+  everything in the library with no disc. The rip lists use each root's
+  *From* setting.
+- **Shelf labels.** The Scan tab prints a QR label for each place you keep
+  discs. Scan a label and the scans that follow are filed there. The label
+  reads `ml:loc:<name>` and needs a scanner that reads QR codes; typing
+  the same text works too.
+
 ## [3.5.0] - 2026-11-11
 
 ### Added

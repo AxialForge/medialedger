@@ -357,6 +357,17 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   for non-admins like the Plex token). It was built against the documented
   v3 API with a pretend server and has NOT been run against the real
   service: no key was available. The Settings *Test* button is the check.
+- **Gaps are computed, not stored** (3.6.0). `disc:gaps` in service.js builds
+  the library's titles with `ORIGIN()` and `AF()` and hands them to the pure
+  `discs.gaps(db, titles)`. The rip lists are empty until some root has an
+  `origin`; the page says so rather than showing zeros without a reason.
+- **A shelf label is a scan that never reaches the server.** `ml:loc:<name>`
+  is caught at the top of `discSubmit` and only changes the sticky location
+  (localStorage). The keystroke-burst handler therefore buffers any printable
+  key, not just digits, and treats Shift as part of typing.
+- **Printing** uses one `#printSheet` element and `body.print-labels` with
+  an `@media print` rule that hides everything else. Do not use
+  `href="javascript:..."` for clickable tiles: the CSP blocks it.
 - Keep the two facts apart: "ripped from disc" = the root's `origin`;
   "still have the disc" = a held copy linked through `disc_titles`.
 - **The screenshot gate must use `--profile=<absolute path>\.devprofile`.**

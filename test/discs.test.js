@@ -78,6 +78,27 @@ D.setCopyStatus(db, D.get(db, dvd).copies[0].id, 'sold');
 assert.strictEqual(D.forTitle(db, 'movie', 'examplefilm|2019').length, 2, 'a sold copy is no longer held');
 assert.throws(() => D.linkTitle(db, rid, { library_type: 'web', title_key: 'x' }), /Unknown library/);
 
+// ---- gaps: the shelf against the library
+{
+  const lib = [
+    { library_type: 'movie', title_key: 'examplefilm|2019', title: 'Example Film', year: 2019, origins: 'download' },   // disc held, only a download
+    { library_type: 'movie', title_key: 'heat|1995', title: 'Heat', year: 1995, origins: 'disc' },                       // ripped, no disc recorded
+    { library_type: 'movie', title_key: 'dune|2021', title: 'Dune', year: 2021, origins: 'disc,download' },              // both
+    { library_type: 'movie', title_key: 'wantedfilm|2001', title: 'Wanted Film', year: 2001, origins: null },            // held but not linked yet
+    { library_type: 'tv', title_key: 'Andor', title: 'Andor', year: null, origins: null },
+  ];
+  const ghost = D.createRelease(db, { title: 'Gone From The Library', format: 'Blu-ray' });
+  D.addCopy(db, ghost, {}); D.linkTitle(db, ghost, { library_type: 'movie', title_key: 'gone|2000' });
+  const g = D.gaps(db, lib);
+  assert.deepStrictEqual(g.discNotRipped.map(t => [t.title, t.disc_format, t.disc_location]), [['Example Film', '4K UHD', 'Shelf A']]);
+  assert.deepStrictEqual(g.ripNoDisc.map(t => t.title), ['Heat', 'Dune'], 'a title with a rip counts even when it also has a download');
+  assert.deepStrictEqual(g.both.map(t => t.title), ['Dune']);
+  assert.deepStrictEqual(g.noDisc.map(t => t.title), ['Heat', 'Dune', 'Wanted Film', 'Andor']);
+  assert.deepStrictEqual(g.discOnly.map(r => [r.title, r.reason, r.candidate && r.candidate.title_key]), [['Gone From The Library', 'absent', null], ['Wanted Film', 'unlinked', 'wantedfilm|2001']], 'an unlinked disc names the one title it could be');
+  D.deleteRelease(db, ghost, { force: true });
+  assert.deepStrictEqual(D.locations(db), [{ location: 'Shelf A', copies: 1 }, { location: 'Shelf B', copies: 1 }]);
+}
+
 // ---- lists and counts
 assert.deepStrictEqual(D.list(db).rows.map(r => [r.title, r.copies]), [['Example Film', 2], ['Wanted Film', 1]]);
 assert.deepStrictEqual(D.list(db, { status: 'sold' }).rows.map(r => r.format), ['DVD']);

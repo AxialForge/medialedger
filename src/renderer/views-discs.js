@@ -152,14 +152,15 @@ const discLocSet = (v) => { try { localStorage.setItem('medialedger.discLocation
 
 views.discs = async (arg) => {
   if (arg && /^\d+$/.test(arg)) return discReleaseView(Number(arg));
-  const tab = ['scan', 'owned', 'wishlist'].includes(arg) ? arg : (canEditDiscs() ? 'scan' : 'owned');
+  const tab = ['scan', 'owned', 'wishlist', 'gaps'].includes(arg) ? arg : (canEditDiscs() ? 'scan' : 'owned');
   const { rows, counts } = await L.disc.list({ status: tab === 'wishlist' ? 'wishlist' : 'owned' });
   view.innerHTML = `<h1>Discs</h1>
-    <div class="toolbar" style="margin:-6px 0 12px">${canEditDiscs() ? `<button class="${tab === 'scan' ? 'primary' : ''}" data-tab="scan">Scan</button>` : ''}<button class="${tab === 'owned' ? 'primary' : ''}" data-tab="owned">Owned</button><button class="${tab === 'wishlist' ? 'primary' : ''}" data-tab="wishlist">Wishlist</button><span class="muted tiny">The physical discs you have, by barcode. A film can be ripped, owned on disc, or both.</span></div>
+    <div class="toolbar" style="margin:-6px 0 12px">${canEditDiscs() ? `<button class="${tab === 'scan' ? 'primary' : ''}" data-tab="scan">Scan</button>` : ''}<button class="${tab === 'owned' ? 'primary' : ''}" data-tab="owned">Owned</button><button class="${tab === 'wishlist' ? 'primary' : ''}" data-tab="wishlist">Wishlist</button><button class="${tab === 'gaps' ? 'primary' : ''}" data-tab="gaps">Gaps</button><span class="muted tiny">The physical discs you have, by barcode. A film can be ripped, owned on disc, or both.</span></div>
     <div class="tiles compact">${tile('', 'On the shelf', counts.owned + counts.loaned, `${counts.releases} release${counts.releases === 1 ? '' : 's'} known`)}${tile(counts.loaned ? 'warnt' : '', 'Lent out', counts.loaned)}${tile('', 'Wishlist', counts.wishlist)}${tile(counts.unredeemed ? 'warnt' : '', 'Digital codes', counts.unredeemed, 'not redeemed yet')}</div>
     <div id="discBody"></div>`;
   view.querySelectorAll('[data-tab]').forEach(b => { b.onclick = () => { location.hash = '#discs/' + b.dataset.tab; }; });
   if (tab === 'scan') return discScanTab();
+  if (tab === 'gaps') return discGapsTab();
   discListTab(tab, rows);
 };
 
@@ -190,13 +191,16 @@ async function discScanTab() {
     </div>
     <div id="discLast"></div>
     <div class="card" style="margin-top:12px"><h3>This session <span class="right muted tiny" id="discQn"></span></h3><div id="discQ"></div></div>
-    <div class="card" style="margin-top:12px"><h3>Recent scans</h3><div id="discRecent" class="muted">Loading…</div></div>`;
+    <div class="card" style="margin-top:12px"><h3>Recent scans</h3><div id="discRecent" class="muted">Loading…</div></div>
+    <div class="card" style="margin-top:12px"><h3>Shelf labels</h3><p class="muted small">Print a code for each place you keep discs and stick it on the shelf or box. Scan the label, then the discs that live there: the label sets the location for the scans that follow. This needs a scanner that reads QR codes (a 2D scanner); a laser-line scanner reads only barcodes.</p>
+      <div class="inline" style="align-items:flex-start;gap:14px;flex-wrap:wrap"><textarea id="discLabNames" rows="5" style="min-width:260px;flex:1" placeholder="One place per line: Shelf A, Box 3, Binder 1…"></textarea><div><button id="discLabPrint" class="primary">Print labels</button><div class="muted tiny" style="margin-top:6px" id="discLabNote"></div></div></div>
+      <div class="disclabs" id="discLabPrev"></div></div>`;
   const inp = $('#discScanIn');
   $('#discLoc').oninput = (e) => discLocSet(e.target.value.trim());
   inp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); const code = inp.value; inp.value = ''; if (code.trim()) discSubmit(code); } };
   // Always ready for the scanner: focus comes back unless you are typing somewhere else on purpose.
   inp.onblur = () => setTimeout(() => { const a = document.activeElement; if ($('#discScanIn') === inp && $('#modal').hidden && !(a && /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(a.tagName))) inp.focus(); }, 150);
-  discPaintQueue(); discPaintRecent();
+  discPaintQueue(); discPaintRecent(); discLabels();
   inp.focus();
 }
 // A scanner is a keyboard. If the box lost focus, a burst of digits that ends in Enter is still a scan.
@@ -204,12 +208,41 @@ document.addEventListener('keydown', (e) => {
   const inp = $('#discScanIn'); if (!inp || e.target === inp || !$('#modal').hidden) return;
   if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
   const now = Date.now(); if (now - discBurstAt > 400) discBurst = ''; discBurstAt = now;
-  if (/^\d$/.test(e.key)) discBurst += e.key;
-  else if (e.key === 'Enter' && discBurst.length >= 8) { e.preventDefault(); const code = discBurst; discBurst = ''; inp.focus(); discSubmit(code); }
+  if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) discBurst += e.key;
+  else if (e.key === 'Shift') { /* part of typing ":" and capitals */ }
+  else if (e.key === 'Enter' && (/^\d{8,}$/.test(discBurst) || DISC_LOC.test(discBurst))) { e.preventDefault(); const code = discBurst; discBurst = ''; inp.focus(); discSubmit(code); }
   else discBurst = '';
 });
 
+// A shelf label: "ml:loc:Shelf A". Scanning one changes where the next discs are filed; nothing is sent anywhere.
+const DISC_LOC = /^\s*ml:loc:(.+?)\s*$/i;
+const discLabelText = (name) => 'ml:loc:' + String(name).trim().slice(0, 80);
+function discSetLocation(name) {
+  name = String(name).trim().slice(0, 120); discLocSet(name); if ($('#discLoc')) $('#discLoc').value = name;
+  discBeep('ok');
+  const box = $('#discLast'); if (box) box.innerHTML = `<div class="card disclast ok" style="margin-top:12px">Location is now <b>${esc(name)}</b>. The discs you scan next are filed there.</div>`;
+}
+async function discLabels() {
+  const ta = $('#discLabNames'); if (!ta) return;
+  let known = []; try { known = await L.disc.locations(); } catch { /* start empty */ }
+  if (!$('#discLabNames')) return;
+  if (!ta.value) ta.value = known.map(k => k.location).join('\n');
+  const names = () => [...new Set(ta.value.split('\n').map(s => s.trim()).filter(Boolean))].slice(0, 60);
+  const paint = () => { const n = names(); $('#discLabPrev').innerHTML = n.slice(0, 8).map(x => `<div class="disclab"><div class="qrbox">${qrSvg(discLabelText(x), { size: 96, label: 'Shelf label ' + x })}</div><div>${esc(x)}</div></div>`).join(''); $('#discLabNote').textContent = n.length ? `${n.length} label${n.length === 1 ? '' : 's'}${n.length > 8 ? ', first 8 shown' : ''}` : 'Type a place to make its label.'; };
+  ta.oninput = paint; paint();
+  $('#discLabPrint').onclick = () => {
+    const n = names(); if (!n.length) return toast('Type at least one place', true);
+    let sheet = $('#printSheet'); if (!sheet) { sheet = el('<div id="printSheet"></div>'); document.body.append(sheet); }
+    sheet.innerHTML = n.map(x => `<div class="plabel">${qrSvg(discLabelText(x), { size: 150, label: 'Shelf label ' + x })}<div>${esc(x)}</div></div>`).join('');
+    document.body.classList.add('print-labels');
+    const done = () => { document.body.classList.remove('print-labels'); sheet.remove(); window.removeEventListener('afterprint', done); };
+    window.addEventListener('afterprint', done);
+    window.print();
+  };
+}
+
 async function discSubmit(code, force = false) {
+  const loc = DISC_LOC.exec(String(code)); if (loc) return discSetLocation(loc[1]);
   const location = ($('#discLoc') ? $('#discLoc').value : discLocGet()).trim();
   let r; try { r = await L.disc.scan(code, { location, force }); } catch (e) { toast(e.message, true); return; }
   const kind = r.invalid ? 'invalid' : r.unknown ? 'unknown' : r.duplicate && !r.ok ? 'duplicate' : 'ok';
@@ -290,4 +323,55 @@ async function discReleaseView(id) {
     $('#ddCancel', card).onclick = closeModal;
     $('#ddGo', card).onclick = async () => { try { await L.disc.deleteRelease(id, { force: true }); closeModal(); toast('Deleted'); location.hash = '#discs/owned'; } catch (e) { toast(e.message, true); } };
   };
+}
+
+// ---------- gaps: where the shelf and the library disagree ----------------------------------------
+let discGapPick = 'discOnly';
+const DISC_GAPS = [
+  ['discOnly', 'On disc, not in the library', 'Discs you hold whose film is missing from the library, or not linked to it yet. Rip these, or link them.'],
+  ['discNotRipped', 'Disc owned, library copy is not a rip', 'You hold the disc, but the file in the library did not come from one. Ripping your own disc usually beats it.'],
+  ['ripNoDisc', 'Ripped, no disc recorded', 'The file came from a disc, but no disc is on the list. Record the disc, or note that it is gone.'],
+  ['both', 'A rip and a download', 'The library has the same title from a disc and from a download. One of them can usually go.'],
+  ['noDisc', 'In the library, no disc', 'Everything in the library you do not hold on disc.'],
+];
+async function discGapsTab() {
+  const body = $('#discBody');
+  body.innerHTML = '<div class="empty">Comparing the shelf with the library…</div>';
+  const g = await L.disc.gaps();
+  if (!$('#discBody')) return;
+  const edit = canEditDiscs();
+  const paint = () => {
+    const [key, , blurb] = DISC_GAPS.find(d => d[0] === discGapPick) || DISC_GAPS[0];
+    const rows = g[key];
+    body.innerHTML = `<div class="tiles compact">${DISC_GAPS.map(([k, label]) => `<div class="tilelink" role="button" tabindex="0" data-gap="${k}">${tile(k === key ? 'okt' : '', label, g[k].length)}</div>`).join('')}</div>
+      ${!g.originsSet ? '<div class="card" style="margin-bottom:12px"><b>No root says where its files came from yet.</b> <span class="muted">The rip-or-download lists stay empty until you set <i>From</i> on your roots in Settings → Library roots (for example <i>ripped from disc</i> on Movies_Rip).</span></div>' : ''}
+      <p class="lead" style="margin:4px 0 10px">${blurb}</p><div id="discGapTable"></div>`;
+    body.querySelectorAll('[data-gap]').forEach(a => { a.onclick = () => { discGapPick = a.dataset.gap; paint(); }; });
+    const box = $('#discGapTable');
+    if (!rows.length) { box.append(el('<div class="empty">Nothing here.</div>')); return; }
+    const cols = key === 'discOnly' ? [
+      { key: 'title', label: 'Disc', cls: 'wrap', render: r => esc(r.title) + (r.edition ? ` <span class="muted">${esc(r.edition)}</span>` : '') },
+      { key: 'year', label: 'Year', num: true, render: r => r.year || '' },
+      { key: 'format', label: 'Format', render: r => `<span class="badge disc">${esc(r.format)}</span>` },
+      { key: 'locations', label: 'Location', cls: 'wrap', render: r => esc((r.locations || '').split(',').join(', ')) },
+      { key: 'reason', label: 'Why', cls: 'wrap', render: r => r.reason === 'unlinked' ? (r.candidate ? `not linked: looks like <b>${esc(r.candidate.title)}</b>${r.candidate.year ? ` (${r.candidate.year})` : ''} in the library` : 'not linked to a library title, and nothing in the library has this name') : r.reason === 'absent' ? 'the linked title is not in the library any more' : `${r.missing} of its ${r.linked} titles are not in the library` },
+      ...(edit ? [{ key: 'id', label: '', cls: 'rowacts', render: r => r.candidate ? `<button class="small gapLink" data-id="${r.id}">Link</button>` : '' }] : []),
+    ] : [
+      { key: 'library_type', label: 'Type', render: r => `<span class="badge ${esc(r.library_type)}">${typeName(r.library_type)}</span>` },
+      { key: 'title', label: 'Title', cls: 'wrap', render: r => esc(r.title) },
+      { key: 'year', label: 'Year', num: true, render: r => r.year || '' },
+      { key: 'origins', label: 'Files from', render: r => originBadges(r.origins) || '<span class="muted">not set</span>' },
+      ...(key === 'noDisc' || key === 'ripNoDisc' ? [] : [{ key: 'disc_format', label: 'Disc', render: r => r.disc_format ? discBadge(r.disc_format, r.disc_location) + (r.disc_location ? ` <span class="muted">${esc(r.disc_location)}</span>` : '') : '<span class="muted">none</span>' }]),
+    ];
+    const tb = el('<div class="toolbar"><input type="search" placeholder="Filter…"><span class="grow"></span><span class="muted tiny">' + rows.length + ' title' + (rows.length === 1 ? '' : 's') + '</span></div>');
+    const t = makeTable(rows, cols, { search: r => `${r.title} ${r.edition || ''} ${r.locations || ''}`, defaultSort: { key: 'title' }, onRow: r => { location.hash = key === 'discOnly' ? '#discs/' + r.id : discTitleHref(r).slice(0); } });
+    $('input', tb).oninput = (e) => t.setQuery(e.target.value);
+    box.append(tb, t.node);
+    box.addEventListener('click', async (e) => {
+      const b = e.target.closest('.gapLink'); if (!b) return; e.stopPropagation();
+      const r = rows.find(x => x.id === Number(b.dataset.id)); if (!r || !r.candidate) return;
+      try { await L.disc.linkTitle(r.id, r.candidate); toast(`Linked to ${r.candidate.title}`); discGapsTab(); } catch (err) { toast(err.message, true); }
+    }, true);
+  };
+  paint();
 }

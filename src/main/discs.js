@@ -180,6 +180,54 @@ function ownedByTitle(db, type) {
   return m;
 }
 
+// ---- gaps: where the shelf and the library disagree ------------------------------------------------
+const squash = (s) => String(s || '').toLowerCase().replace(/&/g, 'and').replace(/^(the|a|an)\s+/, '').replace(/[^a-z0-9]+/g, '');
+/**
+ * `titles`: every library title as { library_type, title_key, title, year, origins } where origins is the
+ * comma-joined origin of its files' roots ('disc', 'download', ...). The caller builds it (it knows the adult
+ * filter and the roots); this compares it with the discs held and returns five lists:
+ *   discOnly       a disc you hold whose film is not in the library (or is not linked to it yet)
+ *   discNotRipped  you hold the disc, the library copy did not come from a disc
+ *   ripNoDisc      ripped from a disc, but no disc is recorded
+ *   both           the library has a rip and a download of the same title
+ *   noDisc         in the library with no disc at all (includes ripNoDisc)
+ */
+function gaps(db, titles) {
+  const held = { movie: ownedByTitle(db, 'movie'), tv: ownedByTitle(db, 'tv'), anime: ownedByTitle(db, 'anime') };
+  const byKey = new Map(titles.map(t => [t.library_type + '|' + t.title_key, t]));
+  const from = (t, o) => String(t.origins || '').split(',').includes(o);
+  const disc = (t) => (held[t.library_type] ? held[t.library_type].get(t.title_key) : null) || null;
+  const noDisc = [], ripNoDisc = [], discNotRipped = [], both = [];
+  for (const t of titles) {
+    const d = disc(t);
+    if (!d) { noDisc.push(t); if (from(t, 'disc')) ripNoDisc.push(t); }
+    else if (!from(t, 'disc')) discNotRipped.push({ ...t, disc_format: d.format, disc_location: d.location });
+    if (from(t, 'disc') && from(t, 'download')) both.push({ ...t, disc_format: d ? d.format : null, disc_location: d ? d.location : null });
+  }
+  // For a disc that is not linked: the one library title with the same name (and year, when both have one), if any.
+  const byName = new Map();
+  for (const t of titles) { const k = squash(t.title); if (!byName.has(k)) byName.set(k, []); byName.get(k).push(t); }
+  const candidate = (r) => {
+    let hits = (byName.get(squash(r.title)) || []).filter(t => r.kind === 'tv' ? t.library_type !== 'movie' : r.kind === 'movie' ? t.library_type === 'movie' : true);
+    if (hits.length > 1 && r.year) hits = hits.filter(t => t.year === r.year);
+    return hits.length === 1 ? { library_type: hits[0].library_type, title_key: hits[0].title_key, title: hits[0].title, year: hits[0].year } : null;
+  };
+  const links = new Map();
+  for (const l of db.all('SELECT release_id, library_type, title_key FROM disc_titles')) { if (!links.has(l.release_id)) links.set(l.release_id, []); links.get(l.release_id).push(l); }
+  const discOnly = [];
+  for (const r of db.all(`SELECT r.id, r.title, r.year, r.kind, r.format, r.edition, (SELECT GROUP_CONCAT(DISTINCT c.location) FROM disc_copies c WHERE c.release_id=r.id AND c.status IN ${HELD} AND c.location IS NOT NULL) locations FROM disc_releases r WHERE EXISTS (SELECT 1 FROM disc_copies c WHERE c.release_id=r.id AND c.status IN ${HELD}) ORDER BY r.title COLLATE NOCASE`)) {
+    const ls = links.get(r.id) || [];
+    const missing = ls.filter(l => !byKey.has(l.library_type + '|' + l.title_key)).length;
+    if (!ls.length) discOnly.push({ ...r, reason: 'unlinked', candidate: candidate(r) });
+    else if (missing) discOnly.push({ ...r, reason: missing === ls.length ? 'absent' : 'partial', missing, linked: ls.length, candidate: null });
+  }
+  return { discOnly, discNotRipped, ripNoDisc, both, noDisc };
+}
+/** The places discs are kept, most used first: for the location box and for printing shelf labels. */
+function locations(db) {
+  return db.all("SELECT location, COUNT(*) n FROM disc_copies WHERE location IS NOT NULL AND location<>'' AND status<>'sold' GROUP BY location ORDER BY n DESC, location COLLATE NOCASE").map(r => ({ location: r.location, copies: r.n }));
+}
+
 // ---- scanning --------------------------------------------------------------------------------
 const logScan = (db, upc, result, releaseId = null, copyId = null) => { db.run('INSERT INTO disc_scans (upc, ts, result, release_id, copy_id) VALUES (?,?,?,?,?)', upc, now(), result, releaseId, copyId); };
 /**
@@ -227,4 +275,4 @@ function exportCsvText(db) {
   return { filename: 'discs.csv', rows: rows.length, csv: [EXPORT_HEADER.join(','), ...rows.map(r => EXPORT_HEADER.map(h => q(r[h])).join(','))].join('\r\n') + '\r\n' };
 }
 
-module.exports = { FORMATS, KINDS, STATUSES, CODES, EXPORT_HEADER, normalizeUpc, createRelease, updateRelease, deleteRelease, addCopy, updateCopy, setCopyStatus, linkTitle, unlinkTitle, get, list, counts, forTitle, ownedByTitle, scan, recentScans, exportRows, exportCsvText };
+module.exports = { FORMATS, KINDS, STATUSES, CODES, EXPORT_HEADER, normalizeUpc, createRelease, updateRelease, deleteRelease, addCopy, updateCopy, setCopyStatus, linkTitle, unlinkTitle, get, list, counts, forTitle, ownedByTitle, gaps, locations, scan, recentScans, exportRows, exportCsvText };

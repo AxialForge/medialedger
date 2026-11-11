@@ -48,7 +48,7 @@ function createService({ userData, log, send, host }) {
   // Every call that can change what the library looks like bumps `dataVersion`; read-only calls do not. Expensive
   // reports (the dashboard) are answered from memory while the version stands and the answer is under a minute old.
   let dataVersion = 0;
-  const READS = /^(data:|app:|collections:(list|get|search|suggest|forTitle|export)$|dup:plan$|scan:(status|list)$|jobs:(list|overdue)$|posters:(status|index|get)$|prefs:get$|log:|roots:(last|check|listDirs)$|meta:(get|status|search)$|plex:(status|test)$|tags:(list|all|get)$|disc:(list|get|forTitle|titles:search|scans:recent|export|lookup|lookup:state|tmdbTest)$|ratings:list$|requests:list$|override:(list|suggest)$|movie:(plan|batches|batchItems)$|rename:(proposals|history|dry)$|export:list$|collect:get$|db:(stats|backups|restoreList)$|sys:|schedule:(taskStatus|nextInApp)$|update:|adult:status$|settings:get$|web:|notify:test$)/;
+  const READS = /^(data:|app:|collections:(list|get|search|suggest|forTitle|export)$|dup:plan$|scan:(status|list)$|jobs:(list|overdue)$|posters:(status|index|get)$|prefs:get$|log:|roots:(last|check|listDirs)$|meta:(get|status|search)$|plex:(status|test)$|tags:(list|all|get)$|disc:(list|get|forTitle|titles:search|scans:recent|export|lookup|lookup:state|tmdbTest|gaps|locations)$|ratings:list$|requests:list$|override:(list|suggest)$|movie:(plan|batches|batchItems)$|rename:(proposals|history|dry)$|export:list$|collect:get$|db:(stats|backups|restoreList)$|sys:|schedule:(taskStatus|nextInApp)$|update:|adult:status$|settings:get$|web:|notify:test$)/;
   const h = (ch, fn) => handlers.set(ch, READS.test(ch) ? fn : (...a) => { dataVersion++; return fn(...a); });
   const remember = (ch, ttlMs, fn) => { const memo = new Map(); h(ch, (...a) => { const key = `${scopeKey()}|${JSON.stringify(a)}`; const hit = memo.get(key); if (hit && hit.v === dataVersion && !scanner.running && Date.now() - hit.t < ttlMs) return hit.r; const r = fn(...a); if (!(r && typeof r.then === 'function')) { if (memo.size > 8) memo.clear(); memo.set(key, { v: dataVersion, t: Date.now(), r }); } return r; }); };
 
@@ -942,6 +942,15 @@ function createService({ userData, log, send, host }) {
   h('disc:lookup', (upc, opts) => discLookup().lookup(upc, { refresh: !!(opts && opts.refresh), adultFilter: AF() }));
   h('disc:lookup:state', () => discLookup().state());
   h('disc:tmdbTest', (key) => require('./tmdb').test(key || (settings.get().tmdb || {}).key));
+  // Gaps: the library's titles with where their files came from, compared with the discs held.
+  h('disc:gaps', () => {
+    const titles = [
+      ...db.all(`SELECT 'movie' library_type, group_key title_key, MIN(movie_title) title, MIN(movie_year) year, GROUP_CONCAT(DISTINCT ${ORIGIN()}) origins FROM files WHERE library_type='movie' AND missing=0 AND ignored=0 AND group_key IS NOT NULL${AF()} GROUP BY group_key`),
+      ...db.all(`SELECT library_type, show_name title_key, show_name title, NULL year, GROUP_CONCAT(DISTINCT ${ORIGIN()}) origins FROM files WHERE library_type IN ('tv','anime') AND missing=0 AND ignored=0 AND show_name IS NOT NULL${AF()} GROUP BY library_type, show_name`),
+    ];
+    return { ...discs.gaps(db, titles), originsSet: (settings.get().roots || []).some(r => r.origin), titles: titles.length };
+  });
+  h('disc:locations', () => discs.locations(db));
   h('disc:scans:recent', (limit) => discs.recentScans(db, limit));
   h('disc:export', () => discs.exportCsvText(db));
   h('tags:list', (type) => Object.fromEntries(db.tagsFor(type, scope.user)));
