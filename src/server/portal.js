@@ -66,6 +66,8 @@ const projectVersion = (f) => ({ resolution: f.resolution || null, codec: f.vide
 const projectTonight = (showRatings) => (t) => ({ kind: t.kind === 'movie' ? 'movie' : 'series', type: String(t.type), key: String(t.key), title: String(t.title), year: num(t.year), episodes: num(t.episodes), minutes: num(t.minutes), unwatched: num(t.unwatched), complete: t.complete == null ? null : !!t.complete, genres: arr(t.genres), tags: arr(t.tags), audio_type: t.audio_type || null, best: t.resolution || null, online_rating: num(t.online_rating), my_rating: showRatings ? num(t.my_rating) : null, added: t.last_added ? String(t.last_added).slice(0, 10) : null });
 const projectCollection = (c) => ({ id: c.id, cover: c.cover ? { type: String(c.cover.library_type), key: String(c.cover.title_key) } : null, name: String(c.name), note: c.note ? String(c.note) : null, items: num(c.items), present: num(c.present), missing: num(c.missing), minutes: c.seconds ? Math.round(c.seconds / 60) : null, types: arr(c.types), preview: (c.preview || []).map(p => ({ type: String(p.library_type), key: String(p.title_key), title: String(p.title) })) });
 const projectCollectionItem = (i) => ({ position: num(i.position), type: String(i.library_type), key: i.present ? String(i.title_key) : null, title: String(i.title || ''), year: num(i.year), present: !!i.present, episodes: num(i.episodes), minutes: i.seconds ? Math.round(i.seconds / 60) : null, best: bestRes(i.resolutions), hdr: i.hdr && i.hdr !== 'SDR' ? String(i.hdr) : null, rated: i.rated ? String(i.rated) : null, released: i.released ? String(i.released).slice(0, 10) : null, note: i.note ? String(i.note) : null });
+// The shelf, for family: what there is and whether it is out. Never where it is kept, what it cost or who has it.
+const projectDisc = (d) => ({ id: num(d.id), title: String(d.title || ''), year: num(d.year), kind: String(d.kind || 'movie'), format: String(d.format || ''), edition: d.edition ? String(d.edition) : null, copies: num(d.copies) || 0, lent: (num(d.loaned) || 0) >= (num(d.copies) || 0) && (num(d.copies) || 0) > 0, linked: (num(d.titles) || 0) > 0 });
 const projectRequest = (r) => ({ id: r.id, title: String(r.title), year: num(r.year), kind: String(r.kind), note: r.note ? String(r.note) : null, status: String(r.status), reply: r.admin_note ? String(r.admin_note) : null, created: r.created, updated: r.updated });
 // Job notes can name a file ("Backup copied to \\nas\Pool\x.db"): only the file's own name leaves the portal.
 // A path starts with a drive, a UNC prefix or a root slash (never the // of a URL) and runs to the end of its
@@ -90,7 +92,7 @@ async function lookupTitles(kind, text) {
 function createPortal({ svc, dataDir, log, audit, version, notify, sec }) {
   const file = path.join(dataDir, 'portal.json');
   const staticDir = path.join(__dirname, '..', 'portal');
-  let state = { enabled: false, port: 8090, bind: '127.0.0.1', publicUrl: '', homeUrl: '', showRatings: true, checkMinutes: 15, admin: false, invites: {}, devices: {}, adminSessions: {} };
+  let state = { enabled: false, port: 8090, bind: '127.0.0.1', publicUrl: '', homeUrl: '', showRatings: true, showDiscs: true, checkMinutes: 15, admin: false, invites: {}, devices: {}, adminSessions: {} };
   const instance = rand(9); // /health echoes it, so a check knows it reached THIS portal and not something else on that name
   try { state = { ...state, ...JSON.parse(fs.readFileSync(file, 'utf8')) }; } catch { /* first run */ }
   const save = () => { fs.writeFileSync(file, JSON.stringify(state, null, 2), { mode: 0o600 }); try { fs.chmodSync(file, 0o600); } catch { /* windows */ } };
@@ -131,6 +133,7 @@ function createPortal({ svc, dataDir, log, audit, version, notify, sec }) {
     if (o.bind != null) { if (!['127.0.0.1', '0.0.0.0'].includes(o.bind)) throw new Error('Bind must be 127.0.0.1 or 0.0.0.0'); state.bind = o.bind; }
     for (const k of ['publicUrl', 'homeUrl']) if (o[k] != null) { const v = String(o[k]).trim(); if (v && !/^https?:\/\/[a-z0-9.-]+(:\d+)?\/?$/i.test(v)) throw new Error(`${k === 'publicUrl' ? 'Public' : 'Home'} address must look like https://name.example`); state[k] = v.replace(/\/+$/, ''); }
     if (typeof o.showRatings === 'boolean') state.showRatings = o.showRatings;
+    if (typeof o.showDiscs === 'boolean') state.showDiscs = o.showDiscs;
     if (typeof o.admin === 'boolean') { if (o.admin && !sec) throw new Error('Admin sign-in needs the web server'); if (state.admin && !o.admin) state.adminSessions = {}; state.admin = o.admin; }
     if (o.checkMinutes != null) { const m = Number(o.checkMinutes); if (!(m === 0 || (m >= 1 && m <= 1440))) throw new Error('Check interval must be 0 (off) or 1 to 1440 minutes'); state.checkMinutes = m; }
     save(); audit('portal_options', ip, `enabled=${state.enabled} port=${state.port}`, by);
@@ -138,7 +141,7 @@ function createPortal({ svc, dataDir, log, audit, version, notify, sec }) {
     armChecks(); setTimeout(() => checkNow().catch(() => {}), 1500);
     return status();
   }
-  const status = () => ({ available: true, enabled: state.enabled, port: state.port, bind: state.bind, publicUrl: state.publicUrl, homeUrl: state.homeUrl, showRatings: state.showRatings, checkMinutes: state.checkMinutes, admin: !!state.admin, adminSessions: Object.values(state.adminSessions).filter(adminLive).length, totp: !!(sec && sec.totpEnabled && sec.totpEnabled()), checks: { public: checks.public, home: checks.home, next: nextCheck }, listening, error: lastError, lastVisit, invites: Object.entries(state.invites).map(publicInvite).sort((a, b) => a.name.localeCompare(b.name)) });
+  const status = () => ({ available: true, enabled: state.enabled, port: state.port, bind: state.bind, publicUrl: state.publicUrl, homeUrl: state.homeUrl, showRatings: state.showRatings, showDiscs: state.showDiscs !== false, checkMinutes: state.checkMinutes, admin: !!state.admin, adminSessions: Object.values(state.adminSessions).filter(adminLive).length, totp: !!(sec && sec.totpEnabled && sec.totpEnabled()), checks: { public: checks.public, home: checks.home, next: nextCheck }, listening, error: lastError, lastVisit, invites: Object.entries(state.invites).map(publicInvite).sort((a, b) => a.name.localeCompare(b.name)) });
 
   // ---- visitors -------------------------------------------------------------------------------------
   const cookieOf = (req) => { const m = /(?:^|;\s*)mlp=([A-Za-z0-9_-]{20,})/.exec(req.headers.cookie || ''); return m ? m[1] : null; };
@@ -277,7 +280,7 @@ function createPortal({ svc, dataDir, log, audit, version, notify, sec }) {
             res.writeHead(200, { 'content-type': f.mime, 'cache-control': 'private, max-age=604800', etag: `"${f.stamp}"` });
             return fs.createReadStream(f.abs).pipe(res);
           }
-          if (name === 'me') return json(res, 200, { ok: true, result: { name: v.name, perms: v.perms, showRatings: !!state.showRatings, app: 'MediaLedger', version } });
+          if (name === 'me') return json(res, 200, { ok: true, result: { name: v.name, perms: v.perms, showRatings: !!state.showRatings, showDiscs: state.showDiscs !== false, app: 'MediaLedger', version } });
           if (name === 'library') {
             need('browse');
             const type = q.get('type');
@@ -309,6 +312,7 @@ function createPortal({ svc, dataDir, log, audit, version, notify, sec }) {
           }
           if (name === 'collections') { need('browse'); return json(res, 200, { ok: true, result: (await core('collections:list')).map(projectCollection) }); }
           if (name === 'collection') { need('browse'); const c = await core('collections:get', Number(q.get('id'))); if (!c) return json(res, 404, { ok: false, error: 'No such collection' }); return json(res, 200, { ok: true, result: { ...projectCollection({ ...c, items: c.items.length, present: c.items.filter(i => i.present).length, missing: c.items.filter(i => !i.present).length, seconds: c.items.reduce((a, i) => a + (i.seconds || 0), 0), types: [...new Set(c.items.map(i => i.library_type))], preview: [] }), list: c.items.map(projectCollectionItem) } }); }
+          if (name === 'discs') { need('browse'); if (state.showDiscs === false) return json(res, 404, { ok: false, error: 'not found' }); return json(res, 200, { ok: true, result: ((await core('disc:list', { status: 'owned' })).rows || []).map(projectDisc) }); }
           if (name === 'tonight') { need('tonight'); return json(res, 200, { ok: true, result: (await core('data:tonight')).map(projectTonight(state.showRatings)) }); }
           if (name === 'requests') { need('request'); return json(res, 200, { ok: true, result: (await core('requests:list')).filter(r => r.requested_by === who(v)).map(projectRequest) }); }
           return json(res, 404, { ok: false, error: 'not found' });

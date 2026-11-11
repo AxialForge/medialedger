@@ -20,7 +20,7 @@ assert.strictEqual(D.normalizeUpc(null), null);
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ml-discs-'));
 const db = new Db(path.join(dir, 't.db'));
-assert.strictEqual(db.userVersion, 20, 'a fresh database is at the newest version');
+assert.strictEqual(db.userVersion, 21, 'a fresh database is at the newest version');
 assert.strictEqual(db.get("SELECT COUNT(*) n FROM sqlite_master WHERE name='discs'").n, 0, 'the v18 table is gone');
 for (const t of ['disc_releases', 'disc_titles', 'disc_copies', 'disc_scans']) assert.strictEqual(db.get('SELECT COUNT(*) n FROM sqlite_master WHERE name=?', t).n, 1, t + ' exists');
 
@@ -65,6 +65,31 @@ assert.strictEqual(D.get(db, rid).copies[0].price, 19.99);
 assert.strictEqual(D.get(db, rid).copies[0].location, 'Shelf A', 'fields not sent are kept');
 assert.throws(() => D.updateCopy(db, c1.id, { status: 'burned' }), /Unknown status/);
 assert.throws(() => D.addCopy(db, 9999, {}), /No such release/);
+
+// ---- loans carry a date, codes can be listed, a wish can arrive
+{
+  const today = new Date().toISOString().slice(0, 10);
+  D.setCopyStatus(db, c2.id, 'loaned', { loaned_to: 'Sam' });
+  assert.strictEqual(D.get(db, rid).copies[1].loaned_on, today, 'lending stamps the day');
+  D.updateCopy(db, c2.id, { notes: 'asked twice' });
+  assert.strictEqual(D.get(db, rid).copies[1].loaned_on, today, 'an edit while it is out keeps the day');
+  D.updateCopy(db, c2.id, { status: 'loaned', loaned_to: 'Sam', loaned_on: '2026-01-05' });
+  assert.deepStrictEqual(D.copies(db, { status: 'loaned' }).map(c => [c.title, c.loaned_to, c.loaned_on]), [['Example Film', 'Sam', '2026-01-05']]);
+  D.setCopyStatus(db, c2.id, 'owned');
+  assert.strictEqual(D.get(db, rid).copies[1].loaned_on, null, 'coming back clears the day');
+  assert.deepStrictEqual(D.copies(db, { code: 'unredeemed' }).map(c => c.id), [c1.id]);
+  assert.strictEqual(D.copies(db, { code: 'any' }).length, 1);
+  const wish = D.createRelease(db, { title: 'Some Day', format: 'DVD', imax_var: true });
+  D.addCopy(db, wish, { status: 'wishlist' });
+  assert.ok(D.list(db, { status: 'wishlist' }).rows[0].since, 'the wishlist knows since when');
+  D.gotIt(db, wish, 'Shelf C');
+  assert.deepStrictEqual(D.get(db, wish).copies.map(c => [c.status, c.location]), [['owned', 'Shelf C']]);
+  assert.throws(() => D.gotIt(db, wish), /not on the wishlist/);
+  assert.deepStrictEqual(D.imaxTitles(db), []);
+  D.linkTitle(db, wish, { library_type: 'movie', title_key: 'someday|2020' });
+  assert.deepStrictEqual(D.imaxTitles(db).map(t => t.title_key), ['someday|2020']);
+  D.deleteRelease(db, wish, { force: true });
+}
 
 // ---- links to library titles, and what the lists read
 const l1 = D.linkTitle(db, rid, { library_type: 'movie', title_key: 'examplefilm|2019', title: 'Example Film', year: 2019 });
@@ -140,7 +165,7 @@ db.close();
   raw.exec("INSERT INTO discs VALUES ('movie', 'alien|1979', 'uhd', 'steelbook', '2026-10-31T00:00:00.000Z'), ('tv', 'Andor', 'bluray', NULL, '2026-10-31T00:00:00.000Z')");
   raw.exec('PRAGMA user_version = 18'); raw.close();
   const up = new Db(file);
-  assert.strictEqual(up.userVersion, 20);
+  assert.strictEqual(up.userVersion, 21);
   assert.ok(fs.readdirSync(file + '.backups').some(f => f.includes('pre-migration-v18')), 'a backup is taken before migrating');
   assert.deepStrictEqual(up.all('SELECT title, kind, format, notes, lookup_source FROM disc_releases ORDER BY title').map(r => Object.values(r)), [['Andor', 'tv', 'Blu-ray', null, 'manual'], ['alien|1979', 'movie', '4K UHD', 'steelbook', 'manual']]);
   assert.deepStrictEqual(D.ownedByTitle(up, 'movie').get('alien|1979'), { format: '4K UHD', location: null });

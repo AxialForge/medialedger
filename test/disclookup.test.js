@@ -33,7 +33,7 @@ assert.strictEqual(P('').title, '');
 // ---- lookup, against a pretend service
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ml-lookup-'));
 const db = new Db(path.join(dir, 't.db'));
-assert.strictEqual(db.userVersion, 20);
+assert.strictEqual(db.userVersion, 21);
 const cfg = { discs: { lookup: true }, tmdb: { key: '' } };
 const settings = { get: () => cfg };
 let calls = [], next = null, time = Date.parse('2026-11-11T12:00:00Z');

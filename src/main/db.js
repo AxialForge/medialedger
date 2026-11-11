@@ -489,6 +489,12 @@ const MIGRATIONS = [
       );
     `,
   },
+  {
+    version: 21, name: 'disc loan date',
+    sql: `
+      ALTER TABLE disc_copies ADD COLUMN loaned_on TEXT;  -- the day a copy went out, cleared when it comes back
+    `,
+  },
 ];
 
 class Db {

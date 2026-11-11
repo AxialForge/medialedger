@@ -8,6 +8,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [3.7.0] - 2026-11-11
+
+### Added
+
+- **Lent out.** Setting a copy to *Loaned* asks who has it and stamps the
+  day. A *Lent out* tab lists what is out of the house, longest first, with
+  a one-click *Returned*. Schema v21 adds the loan date.
+- **Codes.** A tab of the digital copy codes that came in the case, the
+  unredeemed ones first, with *Mark redeemed*.
+- **Wishlist.** Shows since when each disc has been wanted and gets a *Got
+  it* button that moves it to the shelf and asks where it lives.
+- **IMAX ratio tag.** A release marked *IMAX scenes change aspect ratio*
+  puts the tag `imax ratio` on the library titles it holds, so the tag
+  filter on the lists finds them. Tags are only ever added by this.
+- **Family portal: Discs.** A read-only tab of the discs on the shelf with
+  a search and a format filter. It shows titles, formats, editions and
+  whether a disc is lent out, never where it is kept, what it cost, its
+  barcode or who has it. Switch it off under Family → *Show the disc shelf*.
+- `discs.csv` gains a `loaned_on` column.
+
 ## [3.6.0] - 2026-11-11
 
 ### Added

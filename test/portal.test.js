@@ -26,6 +26,7 @@ fs.writeFileSync(path.join(dir, 'portal.json'), JSON.stringify({ enabled: true, 
 const adultCalls = []; const added = []; const audits = [];
 const SECRET = '\\\\192.168.1.204\\Apocrypha_Media_Pool\\Movies\\Alien (1979)\\Alien.mkv';
 const handlers = new Map([
+  ['disc:list', () => ({ rows: [{ id: 4, upc: '0032886892905', title: 'Alien', year: 1979, kind: 'movie', format: '4K UHD', edition: 'Steelbook', copies: 2, loaned: 1, titles: 1, locations: 'Shelf A', notes: SECRET, studio: 'Fox' }, { id: 5, title: 'Heat', year: 1995, kind: 'movie', format: 'DVD', edition: null, copies: 1, loaned: 1, titles: 0, locations: 'Box 3' }], counts: {} })],
   ['data:movies', () => [{ group_key: 'alien|1979', title: 'Alien', year: 1979, files: 1, bytes: 9e9, seconds: 7020, resolutions: '1080p,4K', codecs: 'hevc', hdr: 'HDR10', genres: ['Horror'], tags: ['classics'], my_rating: 5, online_rating: 8.5, plex_user: 9, plex_linked: 1, watched_count: 3, abs_path: SECRET }]],
   ['data:series', (type) => [{ show_name: type === 'tv' ? 'Andor' : 'Frieren', episodes: 12, seasons: 1, resolutions: '1080p', audio_type: 'sub', genres: ['Drama'], tags: [], expected: 12, missing_count: 2, meta_status: 'Ended', online_rating: 8.4, my_rating: 4, seconds: 12 * 1500, plex_show_key: '55', watched: 7, last_seen: 'x' }]],
   ['data:episodes', () => ({ tags: [], genres: ['Drama'], files: [{ id: 7, root_id: 'tv', rel_path: 'Andor\\S01E02.mkv', abs_path: SECRET, file_name: 'S01E02.mkv', season: 1, episode: 2, episode_title: 'Two', resolution: '1080p', duration_s: 1500, audio_langs: 'eng', sub_langs: 'eng', plex_rating_key: '901', plex_view_count: 4, missing: 0 }, { id: 8, abs_path: SECRET, file_name: 'gone.mkv', season: 1, episode: 9, missing: 1 }], missing: { show_name: 'Andor', missing_count: 2, missing: [{ season: 1, missing: [1, 3], expected: 12 }] } })],
@@ -104,6 +105,9 @@ const call = (method, p, { cookie, body, headers } = {}) => new Promise((resolve
   assert.deepStrictEqual(ep.json.result.missing, [{ season: 1, episodes: [1, 3] }]);
   assert.deepStrictEqual(ep.json.result.episodes.map(x => x.episode), [2], 'files that vanished from the share are not listed');
   const film = await call('GET', '/p/title?type=movie&key=' + encodeURIComponent('alien|1979'), { cookie });
+  const shelf = await call('GET', '/p/discs', { cookie });
+  assert.deepStrictEqual(shelf.json.result, [{ id: 4, title: 'Alien', year: 1979, kind: 'movie', format: '4K UHD', edition: 'Steelbook', copies: 2, lent: false, linked: true }, { id: 5, title: 'Heat', year: 1995, kind: 'movie', format: 'DVD', edition: null, copies: 1, lent: true, linked: false }], 'the shelf shows what there is, never where, what it cost or the barcode');
+  assert.ok(!JSON.stringify(shelf.json).includes('Shelf A') && !JSON.stringify(shelf.json).includes('Apocrypha'));
   const tonight = await call('GET', '/p/tonight', { cookie });
   for (const r of [movies, series, ep, film, tonight]) {
     assert.strictEqual(r.status, 200);

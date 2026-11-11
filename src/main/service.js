@@ -48,7 +48,7 @@ function createService({ userData, log, send, host }) {
   // Every call that can change what the library looks like bumps `dataVersion`; read-only calls do not. Expensive
   // reports (the dashboard) are answered from memory while the version stands and the answer is under a minute old.
   let dataVersion = 0;
-  const READS = /^(data:|app:|collections:(list|get|search|suggest|forTitle|export)$|dup:plan$|scan:(status|list)$|jobs:(list|overdue)$|posters:(status|index|get)$|prefs:get$|log:|roots:(last|check|listDirs)$|meta:(get|status|search)$|plex:(status|test)$|tags:(list|all|get)$|disc:(list|get|forTitle|titles:search|scans:recent|export|lookup|lookup:state|tmdbTest|gaps|locations)$|ratings:list$|requests:list$|override:(list|suggest)$|movie:(plan|batches|batchItems)$|rename:(proposals|history|dry)$|export:list$|collect:get$|db:(stats|backups|restoreList)$|sys:|schedule:(taskStatus|nextInApp)$|update:|adult:status$|settings:get$|web:|notify:test$)/;
+  const READS = /^(data:|app:|collections:(list|get|search|suggest|forTitle|export)$|dup:plan$|scan:(status|list)$|jobs:(list|overdue)$|posters:(status|index|get)$|prefs:get$|log:|roots:(last|check|listDirs)$|meta:(get|status|search)$|plex:(status|test)$|tags:(list|all|get)$|disc:(list|get|forTitle|titles:search|scans:recent|export|lookup|lookup:state|tmdbTest|gaps|locations|copies)$|ratings:list$|requests:list$|override:(list|suggest)$|movie:(plan|batches|batchItems)$|rename:(proposals|history|dry)$|export:list$|collect:get$|db:(stats|backups|restoreList)$|sys:|schedule:(taskStatus|nextInApp)$|update:|adult:status$|settings:get$|web:|notify:test$)/;
   const h = (ch, fn) => handlers.set(ch, READS.test(ch) ? fn : (...a) => { dataVersion++; return fn(...a); });
   const remember = (ch, ttlMs, fn) => { const memo = new Map(); h(ch, (...a) => { const key = `${scopeKey()}|${JSON.stringify(a)}`; const hit = memo.get(key); if (hit && hit.v === dataVersion && !scanner.running && Date.now() - hit.t < ttlMs) return hit.r; const r = fn(...a); if (!(r && typeof r.then === 'function')) { if (memo.size > 8) memo.clear(); memo.set(key, { v: dataVersion, t: Date.now(), r }); } return r; }); };
 
@@ -922,19 +922,26 @@ function createService({ userData, log, send, host }) {
   h('disc:get', (id) => discs.get(db, id));
   h('disc:forTitle', (type, key) => discs.forTitle(db, type, key));
   // A new release may come with its first copy and the library title it is: the scan page saves all three at once.
+  // A release whose IMAX scenes change shape puts the tag "imax ratio" on the library titles it holds (the owner's
+  // tag set). Tags are only ever added here: one you typed yourself, or one for a disc since sold, is yours to remove.
+  const IMAX_TAG = 'imax ratio';
+  const tagImax = () => { for (const t of discs.imaxTitles(db)) db.addTag(t.library_type, t.title_key, IMAX_TAG, ''); };
   h('disc:release:save', (o) => db.transaction(() => {
     o = o || {};
-    if (o.id) return discs.get(db, discs.updateRelease(db, o.id, o));
+    if (o.id) { const id = discs.updateRelease(db, o.id, o); tagImax(); return discs.get(db, id); }
     const id = discs.createRelease(db, o);
     if (o.copy) discs.addCopy(db, id, o.copy);
     if (o.link && o.link.title_key) discs.linkTitle(db, id, o.link);
+    tagImax();
     return discs.get(db, id);
   }));
   h('disc:release:delete', (id, opts) => db.transaction(() => discs.deleteRelease(db, id, opts || {})));
   h('disc:copy:add', (releaseId, o) => { discs.addCopy(db, releaseId, o || {}); return discs.get(db, releaseId); });
   h('disc:copy:save', (id, o) => { const c = db.get('SELECT release_id FROM disc_copies WHERE id=?', Number(id)); discs.updateCopy(db, id, o || {}); return discs.get(db, c.release_id); });
   h('disc:copy:status', (id, status, extra) => { const c = db.get('SELECT release_id FROM disc_copies WHERE id=?', Number(id)); discs.setCopyStatus(db, id, status, extra || {}); return discs.get(db, c.release_id); });
-  h('disc:title:link', (releaseId, t) => { discs.linkTitle(db, releaseId, t || {}); return discs.get(db, releaseId); });
+  h('disc:title:link', (releaseId, t) => { discs.linkTitle(db, releaseId, t || {}); tagImax(); return discs.get(db, releaseId); });
+  h('disc:copies', (opts) => discs.copies(db, opts || {}));
+  h('disc:wishlist:got', (releaseId, location) => { discs.gotIt(db, releaseId, location); return discs.get(db, releaseId); });
   h('disc:title:unlink', (id) => { const t = db.get('SELECT release_id FROM disc_titles WHERE id=?', Number(id)); discs.unlinkTitle(db, id); return t ? discs.get(db, t.release_id) : null; });
   h('disc:titles:search', (q) => collections.search(q, AF()));
   // Online lookup (src/main/discLookup.js): suggests, never saves. Made on first use because db exists only after init.

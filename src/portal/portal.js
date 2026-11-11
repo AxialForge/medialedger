@@ -95,6 +95,22 @@
       }).join('') + (me.perms.request && totalGone ? `<p class="muted tiny">Something missing you want? <a href="#requests">Send a request</a>.</p>` : '');
   }
 
+  // ---- Discs: what is on the shelf at home, read-only ---------------------------------------------
+  async function discs() {
+    let rows; try { rows = await cached('discs'); } catch (e) { if (e.message !== 'invite') view.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+    const formats = [...new Set(rows.map(r => r.format))];
+    view.innerHTML = `<h1>Discs</h1><p class="muted tiny">The physical discs on the shelf at home. Ask to borrow one.</p>
+      <div class="bar"><input type="search" id="dQ" placeholder="Search…"><select id="dF"><option value="">any format</option>${formats.map(f => `<option>${esc(f)}</option>`).join('')}</select></div>
+      <p class="muted tiny" id="dN"></p><div class="list" id="dList"></div>`;
+    const paint = () => {
+      const q = $('#dQ').value.trim().toLowerCase(), f = $('#dF').value;
+      const shown = rows.filter(r => (!f || r.format === f) && (!q || (r.title + ' ' + (r.edition || '')).toLowerCase().includes(q)));
+      $('#dN').textContent = `${shown.length} of ${rows.length}`;
+      $('#dList').innerHTML = shown.slice(0, 400).map(r => `<div class="row" style="cursor:default"><div class="t">${esc(r.title)}${r.year ? ` <span class="muted">(${r.year})</span>` : ''}</div><div class="s"><span class="badge">${esc(r.format)}</span>${r.edition ? `<span>${esc(r.edition)}</span>` : ''}${r.copies > 1 ? `<span>${r.copies} copies</span>` : ''}${r.lent ? '<span class="badge warn">lent out</span>' : ''}</div></div>`).join('') || '<div class="empty">Nothing matches.</div>';
+    };
+    $('#dQ').oninput = paint; $('#dF').onchange = paint; paint();
+  }
+
   // ---- Collections: sets across the libraries, read-only here -----------------------------------
   async function collections(id) {
     view.innerHTML = '<div class="empty">Loading…</div>';
@@ -184,18 +200,18 @@
     $('#mTheme').onchange = () => { const v = $('#mTheme').value; if (v) document.documentElement.dataset.theme = v; else delete document.documentElement.dataset.theme; try { v ? localStorage.setItem('medialedger.theme', v) : localStorage.removeItem('medialedger.theme'); } catch { /* ignore */ } };
     $('#mLeave').onclick = async () => { if (!confirm('Forget this device?')) return; try { await api('leave', {}); } catch { /* gone either way */ } noInvite(); };
   }
-  const TABS = [['library', '▤', 'Library', 'browse'], ['collections', '❖', 'Sets', 'browse'], ['tonight', '▷', 'Tonight', 'tonight'], ['requests', '✚', 'Requests', 'request']];
+  const TABS = [['library', '▤', 'Library', 'browse'], ['collections', '❖', 'Sets', 'browse'], ['discs', '◎', 'Discs', 'browse'], ['tonight', '▷', 'Tonight', 'tonight'], ['requests', '✚', 'Requests', 'request']];
   function route() {
     if (!me) return;
     const parts = location.hash.replace(/^#/, '').split('/');
-    const tabs = TABS.filter(t => me.perms[t[3]]);
+    const tabs = TABS.filter(t => me.perms[t[3]] && (t[0] !== 'discs' || me.showDiscs));
     let tab = parts[0] || store.get('tab', tabs[0] ? tabs[0][0] : 'library');
     if (tab === 'title' && me.perms.browse) { drawTabs(tabs, 'library'); return title(parts[1], decodeURIComponent(parts.slice(2).join('/'))); }
     if (tab === 'menu') { drawTabs(tabs, ''); return menu(); }
     if (!tabs.some(t => t[0] === tab)) tab = tabs[0] ? tabs[0][0] : '';
     drawTabs(tabs, tab); if (tab) store.set('tab', tab);
     window.scrollTo(0, 0);
-    if (tab === 'library') return library(); if (tab === 'collections') return collections(parts[1]); if (tab === 'tonight') return tonight(); if (tab === 'requests') return requests();
+    if (tab === 'library') return library(); if (tab === 'collections') return collections(parts[1]); if (tab === 'discs') return discs(); if (tab === 'tonight') return tonight(); if (tab === 'requests') return requests();
     view.innerHTML = '<div class="empty">Your invite does not include anything yet.</div>';
   }
   const drawTabs = (tabs, on) => { $('#tabs').innerHTML = tabs.map(([id, icon, label]) => `<a href="#${id}" class="${id === on ? 'on' : ''}"><i>${icon}</i>${label}</a>`).join(''); };

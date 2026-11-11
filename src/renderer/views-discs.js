@@ -152,15 +152,17 @@ const discLocSet = (v) => { try { localStorage.setItem('medialedger.discLocation
 
 views.discs = async (arg) => {
   if (arg && /^\d+$/.test(arg)) return discReleaseView(Number(arg));
-  const tab = ['scan', 'owned', 'wishlist', 'gaps'].includes(arg) ? arg : (canEditDiscs() ? 'scan' : 'owned');
+  const tab = ['scan', 'owned', 'wishlist', 'gaps', 'loans', 'codes'].includes(arg) ? arg : (canEditDiscs() ? 'scan' : 'owned');
   const { rows, counts } = await L.disc.list({ status: tab === 'wishlist' ? 'wishlist' : 'owned' });
   view.innerHTML = `<h1>Discs</h1>
-    <div class="toolbar" style="margin:-6px 0 12px">${canEditDiscs() ? `<button class="${tab === 'scan' ? 'primary' : ''}" data-tab="scan">Scan</button>` : ''}<button class="${tab === 'owned' ? 'primary' : ''}" data-tab="owned">Owned</button><button class="${tab === 'wishlist' ? 'primary' : ''}" data-tab="wishlist">Wishlist</button><button class="${tab === 'gaps' ? 'primary' : ''}" data-tab="gaps">Gaps</button><span class="muted tiny">The physical discs you have, by barcode. A film can be ripped, owned on disc, or both.</span></div>
+    <div class="toolbar" style="margin:-6px 0 12px">${canEditDiscs() ? `<button class="${tab === 'scan' ? 'primary' : ''}" data-tab="scan">Scan</button>` : ''}<button class="${tab === 'owned' ? 'primary' : ''}" data-tab="owned">Owned</button><button class="${tab === 'wishlist' ? 'primary' : ''}" data-tab="wishlist">Wishlist</button><button class="${tab === 'gaps' ? 'primary' : ''}" data-tab="gaps">Gaps</button><button class="${tab === 'loans' ? 'primary' : ''}" data-tab="loans">Lent out${counts.loaned ? ` <span class="pill">${counts.loaned}</span>` : ''}</button><button class="${tab === 'codes' ? 'primary' : ''}" data-tab="codes">Codes${counts.unredeemed ? ` <span class="pill">${counts.unredeemed}</span>` : ''}</button><span class="muted tiny">The physical discs you have, by barcode. A film can be ripped, owned on disc, or both.</span></div>
     <div class="tiles compact">${tile('', 'On the shelf', counts.owned + counts.loaned, `${counts.releases} release${counts.releases === 1 ? '' : 's'} known`)}${tile(counts.loaned ? 'warnt' : '', 'Lent out', counts.loaned)}${tile('', 'Wishlist', counts.wishlist)}${tile(counts.unredeemed ? 'warnt' : '', 'Digital codes', counts.unredeemed, 'not redeemed yet')}</div>
     <div id="discBody"></div>`;
   view.querySelectorAll('[data-tab]').forEach(b => { b.onclick = () => { location.hash = '#discs/' + b.dataset.tab; }; });
   if (tab === 'scan') return discScanTab();
   if (tab === 'gaps') return discGapsTab();
+  if (tab === 'loans') return discLoansTab();
+  if (tab === 'codes') return discCodesTab();
   discListTab(tab, rows);
 };
 
@@ -174,12 +176,21 @@ function discListTab(tab, rows) {
     { key: 'locations', label: 'Location', cls: 'wrap', render: r => esc((r.locations || '').split(',').join(', ')) },
     { key: 'copies', label: 'Copies', num: true },
     { key: 'titles', label: 'In library', num: true, render: r => r.titles ? `${r.titles} linked` : '<span class="muted">not linked</span>' },
+    ...(tab === 'wishlist' ? [{ key: 'since', label: 'Wanted since', render: r => r.since ? esc(String(r.since).slice(0, 10)) : '' }] : []),
+    ...(tab === 'wishlist' && canEditDiscs() ? [{ key: 'id', label: '', cls: 'rowacts', render: r => `<button class="small primary discGot" data-id="${r.id}">Got it</button>` }] : []),
   ];
   const tb = el(`<div class="toolbar"><input type="search" placeholder="Filter by title, edition or barcode…">${canEditDiscs() ? '<button id="discNew" class="primary">New disc</button>' : ''}<button id="discCsv">Export CSV</button><span class="grow"></span><span class="muted tiny">${rows.length} release${rows.length === 1 ? '' : 's'}</span></div>`);
   const t = makeTable(rows, cols, { search: r => `${r.title} ${r.edition || ''} ${r.upc || ''} ${r.locations || ''}`, defaultSort: { key: 'title' }, onRow: r => { location.hash = '#discs/' + r.id; } });
   $('input', tb).oninput = (e) => t.setQuery(e.target.value);
   if ($('#discNew', tb)) $('#discNew', tb).onclick = () => discReleaseForm({ status: tab === 'wishlist' ? 'wishlist' : 'owned' }, () => route());
   $('#discCsv', tb).onclick = async () => { try { const r = await L.disc.exportCsv(); downloadText(r.filename, r.csv, 'text/csv'); } catch (e) { toast(e.message, true); } };
+  if (tab === 'wishlist') t.node.addEventListener('click', (e) => {
+    const b = e.target.closest('.discGot'); if (!b) return; e.stopPropagation();
+    const r = rows.find(x => x.id === Number(b.dataset.id));
+    const card = openModal(`<h2>Got it</h2><p>${esc(r.title)} · ${esc(r.format)} moves from the wishlist to the shelf.</p><div class="discform"><label class="wide">Where does it live? <input type="text" id="dgLoc" value="${esc(discLocGet())}" placeholder="shelf, box, binder"></label></div><div class="actions"><span class="grow"></span><button id="dgCancel">Cancel</button><button id="dgGo" class="primary">On the shelf</button></div>`);
+    $('#dgCancel', card).onclick = closeModal;
+    $('#dgGo', card).onclick = async () => { try { await L.disc.gotIt(r.id, $('#dgLoc', card).value); closeModal(); toast(`${r.title} is on the shelf`); route(); } catch (err) { toast(err.message, true); } };
+  }, true);
   body.append(tb, rows.length ? t.node : el(`<div class="empty">${tab === 'wishlist' ? 'Nothing on the wishlist. Add a disc and mark its copy as "on my wishlist".' : 'No discs yet. Scan a barcode on the Scan tab, or add one by hand.'}</div>`));
 }
 
@@ -301,7 +312,7 @@ async function discReleaseView(id) {
     { key: 'status', label: 'Status', render: c => edit ? `<select class="small dcSt" data-id="${c.id}">${discOpts(DISC_STATUS, c.status)}</select>` : esc(DISC_STATUS[c.status] || c.status) },
     { key: 'location', label: 'Location', cls: 'wrap', render: c => esc(c.location || '') },
     { key: 'condition', label: 'Condition', render: c => esc(c.condition || '') },
-    { key: 'loaned_to', label: 'Lent to', render: c => esc(c.loaned_to || '') },
+    { key: 'loaned_to', label: 'Lent to', render: c => esc(c.loaned_to || '') + (c.status === 'loaned' && c.loaned_on ? ` <span class="muted tiny">since ${esc(c.loaned_on)}</span>` : '') },
     { key: 'purchase_date', label: 'Bought', render: c => esc(c.purchase_date || '') },
     { key: 'price', label: 'Price', num: true, render: c => c.price == null ? '' : Number(c.price).toFixed(2) },
     { key: 'store', label: 'Store', render: c => esc(c.store || '') },
@@ -310,7 +321,7 @@ async function discReleaseView(id) {
     ...(edit ? [{ key: 'id', label: '', cls: 'rowacts', render: c => `<button class="small dcEdit" data-id="${c.id}">Edit</button>` }] : []),
   ];
   $('#drCopies').append(d.copies.length ? makeTable(d.copies, copyCols, { short: true }).node : el('<div class="empty">No copies. This release is known, but you do not have one: add a copy, or put it on the wishlist.</div>'));
-  view.querySelectorAll('.dcSt').forEach(s => { s.onclick = e => e.stopPropagation(); s.onchange = async () => { try { await L.disc.setCopyStatus(Number(s.dataset.id), s.value); toast('Saved'); repaint(); } catch (e) { toast(e.message, true); } }; });
+  view.querySelectorAll('.dcSt').forEach(s => { s.onclick = e => e.stopPropagation(); s.onchange = async () => { if (s.value === 'loaned') return discLend(Number(s.dataset.id), r.title, repaint, repaint); try { await L.disc.setCopyStatus(Number(s.dataset.id), s.value); toast('Saved'); repaint(); } catch (e) { toast(e.message, true); } }; });
   view.querySelectorAll('.dcEdit').forEach(b => { b.onclick = (e) => { e.stopPropagation(); discCopyForm(id, d.copies.find(c => c.id === Number(b.dataset.id)), repaint); }; });
   view.querySelectorAll('[data-unlink]').forEach(b => { b.onclick = async () => { try { await L.disc.unlinkTitle(Number(b.dataset.unlink)); repaint(); } catch (e) { toast(e.message, true); } }; });
   if (edit) {
@@ -374,4 +385,54 @@ async function discGapsTab() {
     }, true);
   };
   paint();
+}
+
+// ---------- loans and digital codes ---------------------------------------------------------------
+/** Who is borrowing it? Lending always records a name and the day. */
+function discLend(copyId, title, onDone, onCancel) {
+  const card = openModal(`<h2>Lend ${esc(title)}</h2><div class="discform"><label>Who is borrowing it? <input type="text" id="dlWho" maxlength="120" placeholder="name"></label><label>On <input type="date" id="dlDay" value="${new Date().toISOString().slice(0, 10)}"></label></div><div class="actions"><span class="grow"></span><button id="dlCancel">Cancel</button><button id="dlGo" class="primary">Lend</button></div>`);
+  $('#dlCancel', card).onclick = () => { closeModal(); if (onCancel) onCancel(); };
+  $('#dlGo', card).onclick = async () => {
+    const who = $('#dlWho', card).value.trim(); if (!who) return toast('Say who has it, so you can ask for it back', true);
+    try { await L.disc.saveCopy(copyId, { status: 'loaned', loaned_to: who, loaned_on: $('#dlDay', card).value }); closeModal(); toast(`Lent to ${who}`); onDone(); } catch (e) { toast(e.message, true); }
+  };
+  setTimeout(() => $('#dlWho', card).focus(), 30);
+}
+const discDaysSince = (day) => { const d = Math.floor((Date.now() - new Date(day + 'T00:00:00').getTime()) / 86400000); return Number.isFinite(d) ? d : null; };
+async function discLoansTab() {
+  const body = $('#discBody'); const edit = canEditDiscs();
+  const rows = await L.disc.copies({ status: 'loaned' });
+  if (!$('#discBody')) return;
+  body.innerHTML = '<p class="lead" style="margin:4px 0 10px">Discs that are out of the house, longest first. To lend one, open the disc and set its copy to <i>Loaned</i>.</p>';
+  if (!rows.length) { body.append(el('<div class="empty">Nothing is lent out.</div>')); return; }
+  const cols = [
+    { key: 'title', label: 'Disc', cls: 'wrap', render: c => esc(c.title) + (c.year ? ` <span class="muted">(${c.year})</span>` : '') },
+    { key: 'format', label: 'Format', render: c => `<span class="badge disc">${esc(c.format)}</span>` },
+    { key: 'loaned_to', label: 'Lent to', render: c => esc(c.loaned_to || '') || '<span class="muted">not recorded</span>' },
+    { key: 'loaned_on', label: 'Since', render: c => { if (!c.loaned_on) return '<span class="muted">date not recorded</span>'; const d = discDaysSince(c.loaned_on); return `${esc(c.loaned_on)}${d != null ? ` <span class="badge ${d > 60 ? 'warn' : ''}">${d === 0 ? 'today' : d + ' day' + (d === 1 ? '' : 's')}</span>` : ''}`; } },
+    { key: 'location', label: 'Goes back to', cls: 'wrap', render: c => esc(c.location || '') },
+    ...(edit ? [{ key: 'id', label: '', cls: 'rowacts', render: c => `<button class="small primary discBack" data-id="${c.id}">Returned</button>` }] : []),
+  ];
+  const t = makeTable(rows, cols, { onRow: c => { location.hash = '#discs/' + c.release_id; } });
+  t.node.addEventListener('click', async (e) => { const b = e.target.closest('.discBack'); if (!b) return; e.stopPropagation(); try { await L.disc.setCopyStatus(Number(b.dataset.id), 'owned'); toast('Back on the shelf'); route(); } catch (err) { toast(err.message, true); } }, true);
+  body.append(t.node);
+}
+async function discCodesTab() {
+  const body = $('#discBody'); const edit = canEditDiscs();
+  const rows = await L.disc.copies({ code: 'any' });
+  if (!$('#discBody')) return;
+  const waiting = rows.filter(c => c.digital_code === 'unredeemed').length;
+  body.innerHTML = `<p class="lead" style="margin:4px 0 10px">Digital copy codes that came in the case. ${waiting ? `${waiting} still to redeem: codes expire, so these are worth doing.` : 'None waiting.'} Set a copy's code state by editing the copy on its disc page.</p>`;
+  if (!rows.length) { body.append(el('<div class="empty">No copy has a digital code recorded.</div>')); return; }
+  const cols = [
+    { key: 'digital_code', label: 'Code', render: c => `<span class="badge ${c.digital_code === 'unredeemed' ? 'warn' : 'ok'}">${esc(DISC_CODES[c.digital_code])}</span>` },
+    { key: 'title', label: 'Disc', cls: 'wrap', render: c => esc(c.title) + (c.year ? ` <span class="muted">(${c.year})</span>` : '') },
+    { key: 'format', label: 'Format', render: c => `<span class="badge disc">${esc(c.format)}</span>` },
+    { key: 'purchase_date', label: 'Bought', render: c => esc(c.purchase_date || '') },
+    { key: 'location', label: 'Location', cls: 'wrap', render: c => esc(c.location || '') },
+    ...(edit ? [{ key: 'id', label: '', cls: 'rowacts', render: c => c.digital_code === 'unredeemed' ? `<button class="small primary discRedeem" data-id="${c.id}">Mark redeemed</button>` : '' }] : []),
+  ];
+  const t = makeTable(rows, cols, { defaultSort: { key: 'digital_code', asc: false }, onRow: c => { location.hash = '#discs/' + c.release_id; } });
+  t.node.addEventListener('click', async (e) => { const b = e.target.closest('.discRedeem'); if (!b) return; e.stopPropagation(); try { await L.disc.saveCopy(Number(b.dataset.id), { digital_code: 'redeemed' }); toast('Marked redeemed'); route(); } catch (err) { toast(err.message, true); } }, true);
+  body.append(t.node);
 }

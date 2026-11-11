@@ -93,19 +93,25 @@ function copyFields(o, cur = {}) {
     loaned_to: pick('loaned_to', v => str(v, 120)), digital_code: oneOf(pick('digital_code', v => v || 'none'), CODES, 'digital code state'), notes: pick('notes', v => str(v, 2000)),
   };
 }
-const C_COLS = ['status', 'location', 'condition', 'purchase_date', 'price', 'store', 'loaned_to', 'digital_code', 'notes'];
+// The loan date follows the status: set the day a copy goes out (unless one is given), kept while it is out, cleared when it is back.
+function copyRow(o, cur = {}) {
+  const f = copyFields(o, cur);
+  f.loaned_on = f.status !== 'loaned' ? null : str(o.loaned_on, 10) || (cur.status === 'loaned' && cur.loaned_on) || now().slice(0, 10);
+  return f;
+}
+const C_COLS = ['status', 'location', 'condition', 'purchase_date', 'price', 'store', 'loaned_to', 'loaned_on', 'digital_code', 'notes'];
 
 function addCopy(db, releaseId, o = {}) {
   releaseId = Number(releaseId);
   if (!db.get('SELECT id FROM disc_releases WHERE id=?', releaseId)) throw new Error('No such release');
-  const f = copyFields(o);
+  const f = copyRow(o);
   const r = db.run(`INSERT INTO disc_copies (release_id, ${C_COLS.join(', ')}, added) VALUES (?, ${C_COLS.map(() => '?').join(',')}, ?)`, releaseId, ...C_COLS.map(c => f[c]), now());
   return Number(r.lastInsertRowid);
 }
 function updateCopy(db, id, o = {}) {
   const cur = db.get('SELECT * FROM disc_copies WHERE id=?', Number(id));
   if (!cur) throw new Error('No such copy');
-  const f = copyFields(o, cur);
+  const f = copyRow(o, cur);
   db.run(`UPDATE disc_copies SET ${C_COLS.map(c => c + '=?').join(', ')} WHERE id=?`, ...C_COLS.map(c => f[c]), cur.id);
   return cur.id;
 }
@@ -114,6 +120,25 @@ function setCopyStatus(db, id, status, extra = {}) {
   if ('loaned_to' in extra) o.loaned_to = extra.loaned_to;
   if (status !== 'loaned' && !('loaned_to' in extra)) o.loaned_to = null;   // back on the shelf, sold or wished for: nobody has it
   return updateCopy(db, id, o);
+}
+
+/** Copies with their release, for the Lent out and Codes pages. `status` and `code` narrow it. */
+function copies(db, { status = null, code = null } = {}) {
+  const where = [], args = [];
+  if (status) { where.push('c.status=?'); args.push(oneOf(status, STATUSES, 'status')); }
+  if (code === 'any') where.push("c.digital_code<>'none'"); else if (code) { where.push('c.digital_code=?'); args.push(oneOf(code, CODES, 'digital code state')); }
+  return db.all(`SELECT c.*, r.title, r.year, r.format, r.edition FROM disc_copies c JOIN disc_releases r ON r.id=c.release_id ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY ${status === 'loaned' ? 'c.loaned_on, ' : ''}r.title COLLATE NOCASE, c.id`, ...args);
+}
+/** A wished-for release arrived: its wishlist copy becomes owned (and gets a place), rather than gaining a second row. */
+function gotIt(db, releaseId, location) {
+  const w = db.get("SELECT id FROM disc_copies WHERE release_id=? AND status='wishlist' ORDER BY id LIMIT 1", Number(releaseId));
+  if (!w) throw new Error('That release is not on the wishlist');
+  const loc = str(location, 120);
+  return updateCopy(db, w.id, loc ? { status: 'owned', location: loc } : { status: 'owned' });
+}
+/** Library titles on a release whose IMAX scenes change shape: the service tags them so the lists can filter on it. */
+function imaxTitles(db) {
+  return db.all('SELECT DISTINCT t.library_type, t.title_key FROM disc_titles t JOIN disc_releases r ON r.id=t.release_id WHERE r.imax_var=1');
 }
 
 // ---- which library titles a release contains ---------------------------------------------------
@@ -152,6 +177,7 @@ function list(db, { status = 'owned', q = '' } = {}) {
       (SELECT COUNT(*) FROM disc_copies c WHERE c.release_id=r.id ${inSet}) copies,
       (SELECT GROUP_CONCAT(DISTINCT c.location) FROM disc_copies c WHERE c.release_id=r.id ${inSet} AND c.location IS NOT NULL) locations,
       (SELECT COUNT(*) FROM disc_copies c WHERE c.release_id=r.id AND c.status='loaned') loaned,
+      (SELECT MIN(c.added) FROM disc_copies c WHERE c.release_id=r.id ${inSet}) since,
       (SELECT COUNT(*) FROM disc_titles t WHERE t.release_id=r.id) titles
     FROM disc_releases r
     WHERE (r.title LIKE ? OR COALESCE(r.edition,'') LIKE ? OR COALESCE(r.upc,'') LIKE ?)
@@ -262,11 +288,11 @@ function recentScans(db, limit = 50) {
 }
 
 // ---- export: one row per copy ------------------------------------------------------------------
-const EXPORT_HEADER = ['title', 'year', 'kind', 'format', 'edition', 'upc', 'region', 'studio', 'discs_count', 'packaging', 'slipcover', 'hdr', 'audio', 'imax_var', 'status', 'location', 'condition', 'purchase_date', 'price', 'store', 'loaned_to', 'digital_code', 'library_titles', 'release_notes', 'copy_notes', 'added'];
+const EXPORT_HEADER = ['title', 'year', 'kind', 'format', 'edition', 'upc', 'region', 'studio', 'discs_count', 'packaging', 'slipcover', 'hdr', 'audio', 'imax_var', 'status', 'location', 'condition', 'purchase_date', 'price', 'store', 'loaned_to', 'loaned_on', 'digital_code', 'library_titles', 'release_notes', 'copy_notes', 'added'];
 function exportRows(db) {
   const linked = new Map();
   for (const t of db.all('SELECT release_id, title, title_key, season FROM disc_titles ORDER BY title COLLATE NOCASE, season')) { if (!linked.has(t.release_id)) linked.set(t.release_id, []); linked.get(t.release_id).push((t.title || t.title_key) + (t.season != null ? ` S${t.season}` : '')); }
-  return db.all('SELECT r.*, c.status, c.location, c.condition, c.purchase_date, c.price, c.store, c.loaned_to, c.digital_code, c.notes copy_notes, c.added FROM disc_copies c JOIN disc_releases r ON r.id=c.release_id ORDER BY r.title COLLATE NOCASE, r.year, c.id')
+  return db.all('SELECT r.*, c.status, c.location, c.condition, c.purchase_date, c.price, c.store, c.loaned_to, c.loaned_on, c.digital_code, c.notes copy_notes, c.added FROM disc_copies c JOIN disc_releases r ON r.id=c.release_id ORDER BY r.title COLLATE NOCASE, r.year, c.id')
     .map(r => ({ ...r, slipcover: r.slipcover ? 'yes' : '', imax_var: r.imax_var ? 'yes' : '', release_notes: r.notes, library_titles: (linked.get(r.id) || []).join('; ') }));
 }
 function exportCsvText(db) {
@@ -275,4 +301,4 @@ function exportCsvText(db) {
   return { filename: 'discs.csv', rows: rows.length, csv: [EXPORT_HEADER.join(','), ...rows.map(r => EXPORT_HEADER.map(h => q(r[h])).join(','))].join('\r\n') + '\r\n' };
 }
 
-module.exports = { FORMATS, KINDS, STATUSES, CODES, EXPORT_HEADER, normalizeUpc, createRelease, updateRelease, deleteRelease, addCopy, updateCopy, setCopyStatus, linkTitle, unlinkTitle, get, list, counts, forTitle, ownedByTitle, gaps, locations, scan, recentScans, exportRows, exportCsvText };
+module.exports = { FORMATS, KINDS, STATUSES, CODES, EXPORT_HEADER, normalizeUpc, createRelease, updateRelease, deleteRelease, addCopy, updateCopy, setCopyStatus, copies, gotIt, imaxTitles, linkTitle, unlinkTitle, get, list, counts, forTitle, ownedByTitle, gaps, locations, scan, recentScans, exportRows, exportCsvText };

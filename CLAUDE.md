@@ -368,6 +368,18 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 - **Printing** uses one `#printSheet` element and `body.print-labels` with
   an `@media print` rule that hides everything else. Do not use
   `href="javascript:..."` for clickable tiles: the CSP blocks it.
+- **The loan date follows the status** (3.7.0, v21 `loaned_on`). `copyRow()`
+  sets it the day a copy becomes `loaned`, keeps it while it stays out and
+  clears it on any other status. Do not write `loaned_on` anywhere else.
+- **The `imax ratio` tag is add-only.** `tagImax()` in service.js runs after
+  a release is saved or linked and adds the tag (owner's set, user `''`) to
+  the titles of releases with `imax_var=1`. It never removes one: a tag the
+  user typed, or one for a disc since sold, is theirs. Other accounts have
+  their own tag sets and do not see it.
+- **Portal `/p/discs` projects through `projectDisc`**: id, title, year,
+  kind, format, edition, copies, lent, linked. No location, price, store,
+  barcode, notes or borrower. `test/portal.test.js` pins the exact fields.
+  `state.showDiscs` (default on) hides the tab and makes the route 404.
 - Keep the two facts apart: "ripped from disc" = the root's `origin`;
   "still have the disc" = a held copy linked through `disc_titles`.
 - **The screenshot gate must use `--profile=<absolute path>\.devprofile`.**
