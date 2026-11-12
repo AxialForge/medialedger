@@ -8,6 +8,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+## [3.8.0] - 2026-11-11
+
+### Added
+
+- **Add a list of barcodes.** The Scan tab takes a pasted list or a text
+  file of barcodes. Each is looked up at the pace the free service allows,
+  shown in a table where the title, year and format can be corrected, and
+  added only when you press *Add the ticked discs*. Barcodes already on
+  the shelf, on the wishlist, unknown or not a barcode are each marked. A
+  default format covers listings that do not state one.
+
+### Fixed
+
+- Disc titles read from online listings, checked against 22 real ones: a
+  studio in front of the name ("Universal Studios - Oblivion") is dropped,
+  a genre after the format ("Interstellar [UHD] Science Fiction") no longer
+  joins the title, a lost apostrophe ("Charlie s Angels") is put back, and
+  "(4K/UHD)" alone is recognised as a 4K disc even when the shop filed it
+  under televisions.
+
 ## [3.7.1] - 2026-11-11
 
 ### Fixed

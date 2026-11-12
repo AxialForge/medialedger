@@ -358,6 +358,17 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   `confidence()` is 'disc' when a format word was found, 'no' only when the
   category is present and not media, otherwise 'maybe': the form fills the
   title and asks for the format.
+- **`parseProduct` is tuned on real listings** (3.8.0): the 22 in
+  `test/disclookup.test.js` are the owner's own discs as UPCitemdb returns
+  them. Rules that came from them: everything after the first bracket is
+  shop notes; a "Studio - " prefix matching the brand is dropped; the
+  category cannot separate a 4K disc from a television (discs are filed
+  under "Televisions"), so gadget words in the title decide instead. Add
+  any listing that parses badly to that table before changing a rule.
+- **The list import paces itself in the renderer** (`discImport`): 10.5 s
+  after each answer that was a real request, none after a cached or local
+  one, and it waits out `limited` using `retryAt`. It saves nothing until
+  the user presses Add.
 - **TMDB is optional** (`src/main/tmdb.js`, `settings.tmdb.key`, redacted
   for non-admins like the Plex token). It was built against the documented
   v3 API with a pretend server and has NOT been run against the real

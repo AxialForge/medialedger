@@ -203,6 +203,10 @@ async function discScanTab() {
     <div id="discLast"></div>
     <div class="card" style="margin-top:12px"><h3>This session <span class="right muted tiny" id="discQn"></span></h3><div id="discQ"></div></div>
     <div class="card" style="margin-top:12px"><h3>Recent scans</h3><div id="discRecent" class="muted">Loading…</div></div>
+    <div class="card" style="margin-top:12px"><h3>Add a list of barcodes</h3><p class="muted small">Already have the numbers in a file or a note? Paste them here, one per line, or open a text file. Each is looked up, you check the list, and nothing is added until you say so. The free lookup allows 6 a minute, so a long list takes a while: about ten seconds a barcode the first time, instant after that.</p>
+      <div class="inline" style="align-items:flex-start;gap:14px;flex-wrap:wrap"><textarea id="discImpText" rows="5" style="min-width:260px;flex:1" placeholder="843501650837&#10;025192360398&#10;…" spellcheck="false"></textarea>
+        <div style="display:grid;gap:8px"><label class="muted tiny">When a listing does not say the format<br><select id="discImpFmt">${discOpts(DISC_FORMATS, '4K UHD')}</select></label><div class="inline"><button id="discImpFile">Open a file…</button><input type="file" id="discImpPick" accept=".txt,.csv,text/plain" hidden><button id="discImpGo" class="primary">Look them up</button></div></div></div>
+      <div id="discImpOut"></div></div>
     <div class="card" style="margin-top:12px"><h3>Shelf labels</h3><p class="muted small">Print a code for each place you keep discs and stick it on the shelf or box. Scan the label, then the discs that live there: the label sets the location for the scans that follow. This needs a scanner that reads QR codes (a 2D scanner); a laser-line scanner reads only barcodes.</p>
       <div class="inline" style="align-items:flex-start;gap:14px;flex-wrap:wrap"><textarea id="discLabNames" rows="5" style="min-width:260px;flex:1" placeholder="One place per line: Shelf A, Box 3, Binder 1…"></textarea><div><button id="discLabPrint" class="primary">Print labels</button><div class="muted tiny" style="margin-top:6px" id="discLabNote"></div></div></div>
       <div class="disclabs" id="discLabPrev"></div></div>`;
@@ -211,7 +215,7 @@ async function discScanTab() {
   inp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); const code = inp.value; inp.value = ''; if (code.trim()) discSubmit(code); } };
   // Always ready for the scanner: focus comes back unless you are typing somewhere else on purpose.
   inp.onblur = () => setTimeout(() => { const a = document.activeElement; if ($('#discScanIn') === inp && $('#modal').hidden && !(a && /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(a.tagName))) inp.focus(); }, 150);
-  discPaintQueue(); discPaintRecent(); discLabels();
+  discPaintQueue(); discPaintRecent(); discLabels(); discImportWire();
   inp.focus();
 }
 // A scanner is a keyboard. If the box lost focus, a burst of digits that ends in Enter is still a scan.
@@ -435,4 +439,90 @@ async function discCodesTab() {
   const t = makeTable(rows, cols, { defaultSort: { key: 'digital_code', asc: false }, onRow: c => { location.hash = '#discs/' + c.release_id; } });
   t.node.addEventListener('click', async (e) => { const b = e.target.closest('.discRedeem'); if (!b) return; e.stopPropagation(); try { await L.disc.saveCopy(Number(b.dataset.id), { digital_code: 'redeemed' }); toast('Marked redeemed'); route(); } catch (err) { toast(err.message, true); } }, true);
   body.append(t.node);
+}
+
+// ---------- a list of barcodes: look each up, review, then add ---------------------------------------
+let discImpRun = 0;   // a newer run (or leaving the page) stops an older one
+function discImportWire() {
+  const ta = $('#discImpText'); if (!ta) return;
+  $('#discImpFile').onclick = () => $('#discImpPick').click();
+  $('#discImpPick').onchange = async (e) => { const f = e.target.files[0]; if (!f) return; if (f.size > 500000) return toast('That file is too large for a list of barcodes', true); ta.value = await f.text(); e.target.value = ''; };
+  $('#discImpGo').onclick = () => discImport();
+}
+async function discImport() {
+  const out = $('#discImpOut'); const run = ++discImpRun;
+  const alive = () => run === discImpRun && $('#discImpOut') === out;
+  const codes = [...new Set($('#discImpText').value.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean))].slice(0, 500);
+  if (!codes.length) return toast('Paste at least one barcode', true);
+  const fallback = $('#discImpFmt').value, wait = ms => new Promise(r => setTimeout(r, ms));
+  const rows = codes.map(code => ({ code, state: 'waiting' }));
+  out.innerHTML = '<div class="status-line" id="discImpLine" style="margin-top:10px"></div><div id="discImpTable"></div>';
+  const say = (t) => { if ($('#discImpLine')) $('#discImpLine').textContent = t; };
+  const word = { waiting: 'waiting', new: 'new', owned: 'already on the shelf', wishlist: 'on your wishlist', none: 'not in the online database', notdisc: 'does not look like a disc', invalid: 'not a barcode', error: 'lookup failed' };
+  const paint = (done) => {
+    if (!alive()) return;
+    const box = $('#discImpTable');
+    box.innerHTML = `<div class="table-wrap short"><table><thead><tr><th></th><th>Barcode</th><th>Title</th><th>Year</th><th>Format</th><th>In library</th><th>What happens</th></tr></thead><tbody>${rows.map((r, i) => `<tr data-i="${i}" class="${r.state === 'waiting' ? 'muted' : ''}">
+      <td>${['new', 'none', 'notdisc', 'error', 'wishlist'].includes(r.state) ? `<input type="checkbox" class="diOn" ${r.on ? 'checked' : ''}>` : ''}</td><td class="mono">${esc(r.upc || r.code)}</td>
+      <td>${['new', 'none', 'notdisc', 'error'].includes(r.state) ? `<input type="text" class="diTitle" value="${esc(r.title || '')}" placeholder="${r.state === 'new' ? '' : 'type the title to add it anyway'}" style="min-width:240px">` : esc(r.title || '')}</td>
+      <td>${['new', 'none', 'notdisc', 'error'].includes(r.state) ? `<input type="number" class="diYear" value="${esc(r.year || '')}" style="width:76px">` : esc(r.year || '')}</td>
+      <td>${['new', 'none', 'notdisc', 'error'].includes(r.state) ? `<select class="diFmt small">${discOpts(DISC_FORMATS, r.format || fallback)}</select>${r.state === 'new' && !r.stated ? ' <span class="muted tiny" title="The listing did not say, so your default was used">assumed</span>' : ''}` : esc(r.format || '')}</td>
+      <td>${r.link ? `<span class="badge ${esc(r.link.library_type)}">${typeName(r.link.library_type)}</span> ${esc(r.link.title)}` : ''}</td>
+      <td class="muted small">${r.state === 'notdisc' ? `${word.notdisc}: ${esc(r.raw || '')}` : r.state === 'wishlist' ? 'on your wishlist: tick to move it to the shelf' : word[r.state] || ''}${r.note ? ' · ' + esc(r.note) : ''}</td></tr>`).join('')}</tbody></table></div>
+      ${done ? `<div class="inline" style="margin-top:10px"><button id="discImpAdd" class="primary">Add the ticked discs</button><span class="muted tiny">They go to <b>${esc(discLocGet() || 'no location')}</b> (the location box at the top). Titles, years and formats can be changed here first.</span></div>` : ''}`;
+    box.querySelectorAll('tr[data-i]').forEach(tr => {
+      const r = rows[Number(tr.dataset.i)], q = (c) => tr.querySelector(c);
+      if (q('.diOn')) q('.diOn').onchange = (e) => { r.on = e.target.checked; };
+      if (q('.diTitle')) q('.diTitle').oninput = (e) => { r.title = e.target.value; if (r.state !== 'new' && e.target.value.trim() && !r.on) { r.on = true; q('.diOn').checked = true; } };
+      if (q('.diYear')) q('.diYear').oninput = (e) => { r.year = e.target.value; };
+      if (q('.diFmt')) q('.diFmt').onchange = (e) => { r.format = e.target.value; r.stated = true; };
+    });
+    if (done) $('#discImpAdd').onclick = () => discImportAdd(rows, fallback, out);
+  };
+  paint(false);
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i]; if (!alive()) return;
+    say(`Looking up ${i + 1} of ${rows.length}…`);
+    let l = null;
+    for (let tries = 0; tries < 6 && alive(); tries++) {
+      try { l = await L.disc.lookup(r.code); } catch (e) { l = { status: 'error', message: e.message }; }
+      if (l.status !== 'limited') break;
+      const ms = Math.max(2000, Math.min(120000, new Date(l.retryAt).getTime() - Date.now() + 1500));
+      say(`The free lookup asked for a pause. Carrying on in ${Math.ceil(ms / 1000)} seconds (${i} of ${rows.length} done)…`);
+      await wait(ms);
+    }
+    if (!alive()) return;
+    r.upc = l.upc || null;
+    if (l.status === 'invalid') r.state = 'invalid';
+    else if (l.status === 'local') { const held = await L.disc.get(l.release.id).catch(() => null); const cs = held ? held.copies : []; r.title = l.release.title; r.year = l.release.year; r.format = l.release.format; r.releaseId = l.release.id; r.state = cs.some(c => c.status === 'owned' || c.status === 'loaned') ? 'owned' : cs.some(c => c.status === 'wishlist') ? 'wishlist' : 'new'; if (r.state === 'new') { r.existing = true; r.on = true; r.stated = true; } }
+    else if (l.status === 'found' && (l.isDisc || l.maybe)) { const f = l.release; Object.assign(r, { state: 'new', on: true, title: f.title, year: f.year, format: f.format || fallback, stated: !!f.format, kind: f.kind, edition: f.edition, studio: f.studio, discs_count: f.discs_count, link: l.link, source: l.source }); }
+    else if (l.status === 'found') Object.assign(r, { state: 'notdisc', raw: l.raw_title, on: false });
+    else if (l.status === 'none' || l.status === 'off') { r.state = 'none'; if (l.status === 'off') r.note = 'online lookup is switched off'; }
+    else { r.state = 'error'; r.note = l.status === 'limited' ? 'the free lookup is still resting: try this one later' : l.message || ''; }
+    paint(false);
+    // Only a real request to the service needs spacing out. An answer from the cache or from your own releases does not.
+    if (i < rows.length - 1 && (l.status === 'found' || l.status === 'none') && !l.cached) await wait(10500);
+  }
+  const fresh = rows.filter(r => r.state === 'new').length;
+  say(`${fresh} to add, ${rows.filter(r => r.state === 'owned').length} already on the shelf, ${rows.filter(r => ['none', 'notdisc', 'invalid', 'error'].includes(r.state)).length} need a look.`);
+  paint(true);
+}
+async function discImportAdd(rows, fallback, out) {
+  const picked = rows.filter(r => r.on && ['new', 'none', 'notdisc', 'error', 'wishlist'].includes(r.state));
+  if (!picked.length) return toast('Nothing is ticked', true);
+  const missing = picked.find(r => r.state !== 'wishlist' && !String(r.title || '').trim());
+  if (missing) return toast(`Barcode ${missing.upc || missing.code} needs a title`, true);
+  const location = discLocGet(); let added = 0; const failed = [];
+  $('#discImpAdd').disabled = true;
+  for (const r of picked) {
+    try {
+      if (r.state === 'wishlist') await L.disc.gotIt(r.releaseId, location);
+      else if (r.existing) await L.disc.addCopy(r.releaseId, { status: 'owned', location });
+      else await L.disc.saveRelease({ upc: r.upc || r.code, title: r.title, year: r.year, kind: r.kind || 'movie', format: r.format || fallback, edition: r.edition, studio: r.studio, discs_count: r.discs_count, lookup_source: r.source || 'manual', link: r.link || null, copy: { status: 'owned', location } });
+      r.state = 'owned'; r.on = false; added++;
+    } catch (e) { failed.push(`${r.title || r.code}: ${e.message}`); }
+  }
+  toast(failed.length ? `${added} added, ${failed.length} failed` : `${added} disc${added === 1 ? '' : 's'} added`, failed.length > 0);
+  if ($('#discImpOut') === out) out.innerHTML = `<div class="status-line" style="margin-top:10px">${added} disc${added === 1 ? '' : 's'} added${location ? ` to ${esc(location)}` : ''}. <a href="#discs/owned">See the shelf</a>${failed.length ? `<br>${failed.map(esc).join('<br>')}` : ''}</div>`;
+  discPaintRecent();
 }

@@ -42,13 +42,16 @@ const norm = (s) => String(s || '').toLowerCase().replace(/&/g, 'and').replace(/
  * Conservative on purpose: a year only counts inside brackets ("(2010)", "(Blu-ray, 2010)"), so "Blade Runner 2049"
  * keeps its name, and when nothing sensible is left the raw string is returned as the title for the user to fix.
  */
-function parseProduct(raw, category = '') {
+function parseProduct(raw, category = '', brand = '') {
   const src = String(raw || '').replace(/\s+/g, ' ').trim();
-  const low = src.toLowerCase(), cat = String(category || '').toLowerCase();
+  const low = src.toLowerCase();
   const has = (re) => re.test(low);
-  const discWord = has(/blu[\s-]?ray|\bdvd\b|\bdis[ck]s?\b/), mediaCat = /dvd|blu-?ray|movies|media|video/.test(cat);
+  const discWord = has(/blu[\s-]?ray|\bdvd\b|\bdis[ck]s?\b/);
   let format = null;
-  if (has(/\b4k\b|ultra[\s-]?hd|\buhd\b/) && (discWord || mediaCat)) format = '4K UHD';   // "4K" alone is also a television
+  // Shops file 4K discs under "Televisions" as often as under media, so the category cannot tell a disc from a
+  // screen. The words can: a television, monitor or player says so, or gives its size.
+  const gadget = has(/\b(tv|television|monitor|projector|camera|camcorder|display|streaming|soundbar)\b|\d+\s*("|''|-?\s?inch)/);
+  if (has(/\b4k\b|ultra[\s-]?hd|\buhd\b/) && (discWord || !gadget)) format = '4K UHD';
   else if (has(/hd[\s-]?dvd/)) format = 'HD DVD';
   else if (has(/blu[\s-]?ray/) && has(/\b3d\b/)) format = '3D';
   else if (has(/blu[\s-]?ray/)) format = 'Blu-ray';
@@ -64,7 +67,15 @@ function parseProduct(raw, category = '') {
   const editions = [];
   for (const [re, name] of EDITIONS) { const m = src.match(re); if (m) editions.push(typeof name === 'function' ? name(m) : name); }
 
-  let title = src.replace(/\s*[([][^)\]]*[)\]]/g, ' ').replace(/\s+/g, ' ').trim();   // bracketed notes go
+  // Real listings (2026-11, 22 of the owner's discs): "Universal Studios - Oblivion [ULTRA HD]",
+  // "Interstellar [UHD]  Science Fiction", "Charlie s Angels (4K Ultra HD Blu-ray + )", "Dune (4K/UHD)".
+  // What follows the first bracket is the shop's notes (format, genre), never more of the name.
+  const firstBracket = src.search(/[([]/);
+  let title = (firstBracket > 0 ? src.slice(0, firstBracket) : src.replace(/\s*[([][^)\]]*[)\]]/g, ' ')).replace(/\s+/g, ' ').trim();
+  // "Studio - Title": the part before the dash is the brand again, in the shop's spelling ("Lions Gate" for Lionsgate).
+  const dash = title.indexOf(' - ');
+  if (dash > 0 && brand) { const left = norm(title.slice(0, dash)), b = norm(brand); if (left.length > 2 && (b.startsWith(left) || left.startsWith(b))) title = title.slice(dash + 3).trim(); }
+  title = title.replace(/\b([A-Za-z]{2,}) s\b/g, "$1's");   // an apostrophe the listing lost: "Charlie s Angels"
   title = (' ' + title).replace(NOISE, '').trim() || title;
   title = title.replace(/\s*[:\-–,]?\s*(the )?complete (series|collection|(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth) season)\b.*$/i, '').replace(/\s*[:\-–,]?\s*\bseasons? \d+.*$/i, '');
   for (const [re] of EDITIONS) title = title.replace(new RegExp(`\\s*[:\\-–,]\\s*(the )?${re.source}\\s*$`, 'i'), '');
@@ -103,7 +114,7 @@ function createDiscLookup({ db, settings, log = () => {}, fetchFn = (...a) => fe
   }
 
   async function suggestion(row, cached, adultFilter) {
-    const p = parseProduct(row.title, row.category);
+    const p = parseProduct(row.title, row.category, row.brand);
     const conf = confidence(p, row.category), likely = conf !== 'no';
     const t = await refine(p, likely);
     if (t) { p.title = t.title; if (t.year && p.kind !== 'tv') p.year = t.year; }

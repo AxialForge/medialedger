@@ -32,6 +32,24 @@ assert.strictEqual(P('Jaws 45th Anniversary Limited Edition (4K Ultra HD + Blu-r
   assert.strictEqual(confidence(P('THHN Wire'), 'Hardware > Electrical'), 'no');
   assert.strictEqual(confidence(P('Corn Chips'), 'Food, Beverages & Tobacco'), 'no');
 }
+// the owner's own shelf, as UPCitemdb lists it (looked up 2026-11-11)
+for (const [raw, brand, cat, title, year, format] of [
+  ['Universal Studios - Oblivion [ULTRA HD]', 'Universal Studios', 'Media > DVDs & Videos', 'Oblivion', null, '4K UHD'],
+  ['Lions Gate - The Hunger Games [ULTRA HD]', 'Lionsgate Home Entertainment', 'Electronics > Video > Televisions', 'The Hunger Games', null, '4K UHD'],
+  ['Interstellar [UHD]  Science Fiction', 'Paramount Home Video', 'Electronics > Video > Televisions', 'Interstellar', null, '4K UHD'],
+  ['Charlie s Angels (4K Ultra HD Blu-ray + )', 'Sony Pictures Entertainment', 'Electronics > Video > Televisions', "Charlie's Angels", null, '4K UHD'],
+  ['Dune (4K/UHD)', 'Warner Home Video', 'Business & Industrial > Film & Television', 'Dune', null, '4K UHD'],
+  ['Planet Earth II [UHD]', 'SDS', 'Electronics > Video > Televisions', 'Planet Earth II', null, '4K UHD'],
+  ['Warm Bodies [Includes Digital Copy] [4K Ultra HD Blu-ray/Blu-ray] [2013]', 'LIONSGATE', 'Media > DVDs & Videos', 'Warm Bodies', 2013, '4K UHD'],
+  ["Ender's Game [4K Ultra HD Blu-ray/Blu-ray] [Includes Digital Copy] [2 Discs] [2013]", 'Fox Home Entertainment', 'Media > DVDs & Videos', "Ender's Game", 2013, '4K UHD'],
+  ['The Hunger Games: Catching Fire (4K Ultra HD + Blu-ray)', 'Lionsgate Home Entertainment', 'Electronics > Video > Televisions', 'The Hunger Games: Catching Fire', null, '4K UHD'],
+  ['Earth: One Amazing Day (4K Ultra HD + Blu-ray)', 'Warner Bros.', 'Media > DVDs & Videos', 'Earth: One Amazing Day', null, '4K UHD'],
+  ['Guardians of the Galaxy Vol. 2', 'Disney', 'Electronics > Video > Televisions', 'Guardians of the Galaxy Vol. 2', null, null],
+  ['Spider-Man - Homecoming (Blu-ray)', 'Sony', '', 'Spider-Man - Homecoming', null, 'Blu-ray'],
+]) { const p = parseProduct(raw, cat, brand); assert.deepStrictEqual([p.title, p.year, p.format], [title, year, format], raw); }
+assert.strictEqual(P("Ender's Game [4K Ultra HD Blu-ray/Blu-ray] [Includes Digital Copy] [2 Discs] [2013]").discs_count, 2);
+assert.strictEqual(P('LG 27" UltraFine UHD Monitor').isDisc, false);
+
 // not discs
 assert.strictEqual(P('Southwire 22965858 500 ft. 12 White Stranded CU THHN Wire', 'Hardware > Power & Electrical Supplies').isDisc, false);
 assert.strictEqual(P('Samsung 55" Class 4K Smart TV', 'Electronics > Televisions').isDisc, false, '"4K" alone is not a disc');
