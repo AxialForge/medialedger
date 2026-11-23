@@ -1,0 +1,1110 @@
+{
+ "rules": [
+  [
+   "Fate",
+   "^fate(?! of the)|lord el-melloi"
+  ],
+  [
+   "Star Wars",
+   "star wars|mandalorian|ahsoka|andor\\b|obi-wan kenobi|clone wars|tales of the (empire|jedi)|book of boba|bad batch|skeleton crew|rebels|visions|solo:? a star|rogue one|acolyte"
+  ],
+  [
+   "Dune",
+   "\\bdune\\b"
+  ],
+  [
+   "Marvel (MCU & Marvel)",
+   "marvel|avengers|iron man|thor\\b|captain america|guardians of the galaxy|ant-man|black panther|doctor strange|shang-chi|eternals|black widow|hulk|wandavision|loki\\b|hawkeye|moon knight|ms\\. marvel|she-hulk|daredevil|jessica jones|luke cage|punisher|defenders|agents of s\\.?h\\.?i\\.?e\\.?l\\.?d|agent carter|deadpool|wolverine|x-men|logan\\b|fantastic (four|4)|spider-man|spider-verse|venom|morbius|madame web|kraven|what if\\.\\.\\.|captain marvel|the marvels|secret invasion|echo\\b|ironheart|werewolf by night|eyes of wakanda|blade\\b(?! runner)|runaways|cloak (&|and) dagger|inhumans|new mutants|dark phoenix|ghost rider|iron fist|helstrom|i am groot|thunderbolts|brave new world|your friendly neighborhood|x-men '97|first class"
+  ],
+  [
+   "DC",
+   "reign of the supermen|justice society|\\bdc\\b|batman|superman|wonder woman|justice league|aquaman|flash\\b|green lantern|shazam|suicide squad|joker|harley quinn|birds of prey|black adam|blue beetle|teen titans|titans\\b|arrow\\b|supergirl|legends of tomorrow|constantine|smallville|lois (&|and) clark|gotham|pennyworth|doom patrol|peacemaker|watchmen|v for vendetta|swamp thing|lucifer|sandman|creature commandos|the penguin|batwoman|superman & lois|young justice|kamandi|catwoman|steel\\b|man of steel|dawn of justice|green arrow|krypto|dark knight|batman beyond|zack snyder"
+  ],
+  [
+   "Wizarding World",
+   "harry potter|fantastic beasts|wizarding"
+  ],
+  [
+   "Middle-earth",
+   "lord of the rings|the hobbit|rings of power"
+  ],
+  [
+   "MonsterVerse / Godzilla",
+   "godzilla|kong\\b|monarch|kaiju|pacific rim|mothra"
+  ],
+  [
+   "Fast & Furious",
+   "fast (&|and) furious|fast five|furious 7|hobbs|2 fast|tokyo drift"
+  ],
+  [
+   "James Bond",
+   "james bond|007|skyfall|spectre|casino royale|quantum of solace|tomorrow never dies|world is not enough|die another day|no time to die|goldeneye|goldfinger|thunderball|moonraker|octopussy|live and let die|dr\\.? no|from russia|man with the golden gun|spy who loved|license to kill|living daylights|view to a kill|diamonds are forever|for your eyes|you only live twice|on her majesty"
+  ],
+  [
+   "Mission: Impossible",
+   "mission:? impossible"
+  ],
+  [
+   "Jurassic Park / World",
+   "jurassic|camp cretaceous"
+  ],
+  [
+   "Alien / Predator",
+   "^(predator|alien\\b(?! in)|aliens$|prey$)"
+  ],
+  [
+   "Terminator",
+   "terminator"
+  ],
+  [
+   "The Matrix",
+   "matrix\\b|animatrix"
+  ],
+  [
+   "Indiana Jones",
+   "indiana jones|raiders of the lost ark|temple of doom|last crusade|kingdom of the crystal|dial of destiny"
+  ],
+  [
+   "Pirates of the Caribbean",
+   "pirates of the caribbean"
+  ],
+  [
+   "John Wick",
+   "john wick|ballerina|continental"
+  ],
+  [
+   "Transformers",
+   "transformers|bumblebee|beast wars"
+  ],
+  [
+   "Star Trek",
+   "star trek|picard|lower decks|strange new worlds|prodigy|discovery\\b|enterprise\\b"
+  ],
+  [
+   "Resident Evil",
+   "resident evil"
+  ],
+  [
+   "Evangelion / Rebuild",
+   "evangelion|\\beva\\b"
+  ],
+  [
+   "Gundam",
+   "gundam|gunpla|zeta|turn a|witch from mercury|iron-blooded|g-?reco"
+  ],
+  [
+   "Code Geass",
+   "code geass"
+  ],
+  [
+   "Dragon Ball",
+   "dragon ball"
+  ],
+  [
+   "Naruto / Boruto",
+   "naruto|boruto"
+  ],
+  [
+   "One Piece",
+   "one piece"
+  ],
+  [
+   "Attack on Titan",
+   "attack on titan|shingeki"
+  ],
+  [
+   "My Hero Academia",
+   "my hero academia|boku no hero"
+  ],
+  [
+   "Demon Slayer",
+   "demon slayer|kimetsu"
+  ],
+  [
+   "Jujutsu Kaisen",
+   "jujutsu"
+  ],
+  [
+   "Ghost in the Shell",
+   "ghost in the shell|stand alone complex"
+  ],
+  [
+   "Monogatari",
+   "monogatari"
+  ],
+  [
+   "Sword Art Online",
+   "sword art online"
+  ],
+  [
+   "Re:Zero",
+   "re:?\\s?zero"
+  ],
+  [
+   "KonoSuba",
+   "konosuba"
+  ],
+  [
+   "Made in Abyss",
+   "made in abyss"
+  ],
+  [
+   "Kingsman",
+   "kingsman"
+  ],
+  [
+   "Hunger Games",
+   "hunger games|ballad of songbirds"
+  ],
+  [
+   "Planet of the Apes",
+   "planet of the apes|apes"
+  ],
+  [
+   "Avatar (Cameron)",
+   "^avatar$|^avatar:? ?-? ?(the way|fire)|^avatar \\(20"
+  ],
+  [
+   "Avatar: The Last Airbender",
+   "last airbender|legend of korra"
+  ],
+  [
+   "Toy Story",
+   "toy story|buzz lightyear|lightyear"
+  ],
+  [
+   "Shrek",
+   "shrek|puss in boots"
+  ],
+  [
+   "Despicable Me / Minions",
+   "despicable|minions"
+  ],
+  [
+   "How to Train Your Dragon",
+   "train your dragon|dragons:"
+  ],
+  [
+   "Kung Fu Panda",
+   "kung fu panda"
+  ],
+  [
+   "Spider-Verse",
+   "spider-verse"
+  ],
+  [
+   "Rocky / Creed",
+   "^rocky|^creed\\b"
+  ],
+  [
+   "Assassin's Creed",
+   "assassin'?s creed"
+  ],
+  [
+   "Rambo",
+   "rambo|first blood"
+  ],
+  [
+   "Die Hard",
+   "die hard"
+  ],
+  [
+   "Back to the Future",
+   "back to the future"
+  ],
+  [
+   "Ocean's",
+   "ocean'?s"
+  ],
+  [
+   "Bourne",
+   "bourne"
+  ],
+  [
+   "Sherlock Holmes",
+   "sherlock"
+  ],
+  [
+   "Scream",
+   "scream\\b"
+  ],
+  [
+   "Saw",
+   "^saw\\b"
+  ],
+  [
+   "Conjuring Universe",
+   "conjuring|annabelle|nun\\b"
+  ],
+  [
+   "Lethal Weapon",
+   "lethal weapon"
+  ],
+  [
+   "Men in Black",
+   "men in black"
+  ],
+  [
+   "Mad Max",
+   "mad max|furiosa"
+  ],
+  [
+   "Ice Age",
+   "ice age"
+  ],
+  [
+   "Hotel Transylvania",
+   "hotel transylvania"
+  ],
+  [
+   "Monty Python",
+   "monty python"
+  ],
+  [
+   "Pokémon",
+   "pok[eé]mon"
+  ],
+  [
+   "Digimon",
+   "digimon"
+  ],
+  [
+   "Studio Ghibli (collection)",
+   "ghibli|totoro|spirited away|princess mononoke|howl'?s|kiki|ponyo|castle in the sky|nausica"
+  ],
+  [
+   "Tomb Raider",
+   "tomb raider"
+  ],
+  [
+   "Kill Bill / Tarantino",
+   "kill bill"
+  ],
+  [
+   "Underworld / Blade",
+   "underworld"
+  ],
+  [
+   "Percy Jackson",
+   "percy jackson|lightning thief|sea of monsters"
+  ],
+  [
+   "Chronicles of Narnia",
+   "narnia"
+  ],
+  [
+   "Divergent",
+   "divergent|insurgent|allegiant"
+  ],
+  [
+   "Maze Runner",
+   "maze runner"
+  ],
+  [
+   "National Treasure",
+   "national treasure"
+  ],
+  [
+   "Sonic",
+   "sonic the hedgehog"
+  ],
+  [
+   "Zombieland",
+   "zombieland"
+  ],
+  [
+   "Rush Hour",
+   "rush hour"
+  ],
+  [
+   "Bad Boys",
+   "bad boys"
+  ],
+  [
+   "Taken",
+   "^taken\\b"
+  ],
+  [
+   "Equalizer",
+   "equalizer"
+  ],
+  [
+   "Expendables",
+   "expendables"
+  ],
+  [
+   "Transporter",
+   "transporter"
+  ],
+  [
+   "Final Destination",
+   "final destination"
+  ],
+  [
+   "Evil Dead",
+   "evil dead|ash vs"
+  ],
+  [
+   "Jack Reacher",
+   "jack reacher|reacher\\b"
+  ],
+  [
+   "Ghostbusters",
+   "ghostbusters"
+  ],
+  [
+   "Legally Blonde",
+   "legally blonde"
+  ],
+  [
+   "Hangover",
+   "hangover"
+  ],
+  [
+   "Pitch Perfect",
+   "pitch perfect"
+  ],
+  [
+   "Austin Powers",
+   "austin powers"
+  ],
+  [
+   "Mummy",
+   "the mummy|scorpion king"
+  ],
+  [
+   "Cars",
+   "^cars\\b"
+  ],
+  [
+   "Incredibles",
+   "incredibles"
+  ],
+  [
+   "Frozen",
+   "^frozen\\b"
+  ],
+  [
+   "Lilo & Stitch",
+   "lilo"
+  ],
+  [
+   "The Boys",
+   "the boys\\b"
+  ],
+  [
+   "Walking Dead",
+   "walking dead|fear the|world beyond"
+  ],
+  [
+   "Stargate",
+   "stargate"
+  ],
+  [
+   "Battlestar",
+   "battlestar|galactica"
+  ],
+  [
+   "Doctor Who",
+   "doctor who|torchwood"
+  ],
+  [
+   "Game of Thrones",
+   "game of thrones|house of the dragon|knight of the seven"
+  ],
+  [
+   "Mortal Kombat",
+   "mortal kombat"
+  ],
+  [
+   "Street Fighter",
+   "street fighter"
+  ],
+  [
+   "Arcane / League",
+   "arcane"
+  ],
+  [
+   "Castlevania",
+   "castlevania"
+  ],
+  [
+   "Witcher",
+   "witcher"
+  ],
+  [
+   "Cyberpunk",
+   "cyberpunk"
+  ],
+  [
+   "Fallout",
+   "fallout"
+  ],
+  [
+   "Halo",
+   "halo\\b"
+  ],
+  [
+   "Assassin's Creed",
+   "assassin'?s creed"
+  ],
+  [
+   "Dragon Age / Dragon's Dogma",
+   "dragon'?s dogma"
+  ],
+  [
+   "Blue Lock / Haikyuu / Sports anime",
+   "haikyu|blue lock|kuroko"
+  ],
+  [
+   "Spy x Family",
+   "spy.?x.?family"
+  ],
+  [
+   "Fullmetal Alchemist",
+   "fullmetal"
+  ],
+  [
+   "Bleach",
+   "bleach"
+  ],
+  [
+   "Hunter x Hunter",
+   "hunter.?x.?hunter"
+  ],
+  [
+   "Death Note",
+   "death note"
+  ],
+  [
+   "Toaru / Index",
+   "index\\b|railgun|accelerator"
+  ],
+  [
+   "Overlord",
+   "overlord"
+  ],
+  [
+   "That Time I Got Reincarnated as a Slime",
+   "reincarnated as a slime|slime"
+  ],
+  [
+   "Macross",
+   "macross|robotech"
+  ],
+  [
+   "Lupin III",
+   "lupin"
+  ],
+  [
+   "Detective Conan",
+   "conan\\b|detective conan"
+  ],
+  [
+   "Black Clover",
+   "black clover"
+  ],
+  [
+   "Fairy Tail",
+   "fairy tail"
+  ],
+  [
+   "Yu-Gi-Oh!",
+   "yu-?gi-?oh"
+  ],
+  [
+   "Gintama",
+   "gintama"
+  ],
+  [
+   "Love Live",
+   "love live"
+  ],
+  [
+   "Precure / Magical Girl",
+   "madoka|precure|sailor moon"
+  ],
+  [
+   "Mushoku / Isekai",
+   "mushoku"
+  ],
+  [
+   "Ranma / Urusei Yatsura",
+   "ranma|urusei"
+  ],
+  [
+   "Cowboy Bebop",
+   "cowboy bebop"
+  ],
+  [
+   "No Game No Life",
+   "no game no life"
+  ],
+  [
+   "Steins;Gate",
+   "steins.?gate"
+  ],
+  [
+   "Full Metal Panic",
+   "full metal panic"
+  ],
+  [
+   "Irregular at Magic High School",
+   "irregular at magic"
+  ],
+  [
+   "Knights of Sidonia",
+   "knights of sidonia"
+  ],
+  [
+   "Legend of the Galactic Heroes",
+   "galactic heroes"
+  ],
+  [
+   "Space Battleship Yamato",
+   "yamato"
+  ],
+  [
+   "Phineas and Ferb",
+   "phineas"
+  ],
+  [
+   "Rick and Morty",
+   "rick and morty"
+  ],
+  [
+   "Masters of the Universe",
+   "masters of the universe"
+  ],
+  [
+   "Doctor Who",
+   "dr\\.? who"
+  ],
+  [
+   "Jack Ryan",
+   "jack ryan"
+  ],
+  [
+   "Starship Troopers",
+   "starship troopers"
+  ],
+  [
+   "American Pie",
+   "american pie"
+  ],
+  [
+   "Air Bud",
+   "air bud"
+  ],
+  [
+   "Spy Kids",
+   "spy kids"
+  ],
+  [
+   "High School Musical",
+   "^high school musical"
+  ],
+  [
+   "The Lion King",
+   "lion king"
+  ],
+  [
+   "Madagascar",
+   "madagascar"
+  ],
+  [
+   "Scary Movie",
+   "scary movie"
+  ],
+  [
+   "Rio",
+   "^rio\\b"
+  ],
+  [
+   "Zootopia",
+   "zootopia"
+  ],
+  [
+   "Moana",
+   "^moana"
+  ],
+  [
+   "Inside Out",
+   "^inside out"
+  ],
+  [
+   "The Lego Movie",
+   "lego movie"
+  ],
+  [
+   "Night at the Museum",
+   "night at the museum"
+  ],
+  [
+   "Cloudy with a Chance of Meatballs",
+   "cloudy with a chance"
+  ],
+  [
+   "Now You See Me",
+   "now you see me"
+  ],
+  [
+   "A Quiet Place",
+   "quiet place"
+  ],
+  [
+   "The Kissing Booth",
+   "kissing booth"
+  ],
+  [
+   "Independence Day",
+   "independence day"
+  ],
+  [
+   "Peanuts / Charlie Brown",
+   "charlie brown"
+  ],
+  [
+   "Wallace & Gromit",
+   "wallace & gromit"
+  ],
+  [
+   "Scooby-Doo",
+   "scooby"
+  ],
+  [
+   "Rebel Moon",
+   "rebel moon"
+  ],
+  [
+   "101 Dalmatians",
+   "101 dalmatians"
+  ],
+  [
+   "Agent Cody Banks",
+   "agent cody banks"
+  ],
+  [
+   "The Bad Guys",
+   "^the bad guys"
+  ],
+  [
+   "The Christmas Chronicles",
+   "christmas chronicles"
+  ],
+  [
+   "Code 8",
+   "^code 8"
+  ],
+  [
+   "Devil Wears Prada",
+   "devil wears prada"
+  ],
+  [
+   "G.I. Joe",
+   "g i joe"
+  ],
+  [
+   "Grown Ups",
+   "grown ups"
+  ],
+  [
+   "Grinch",
+   "grinch"
+  ],
+  [
+   "The Old Guard",
+   "old guard"
+  ],
+  [
+   "Paul Blart",
+   "paul blart"
+  ],
+  [
+   "Practical Magic",
+   "practical magic"
+  ],
+  [
+   "The Princess Switch",
+   "princess switch"
+  ],
+  [
+   "R.I.P.D.",
+   "r i p d"
+  ],
+  [
+   "Ready or Not",
+   "ready or not"
+  ],
+  [
+   "Short Circuit",
+   "short circuit"
+  ],
+  [
+   "Sin City",
+   "sin city"
+  ],
+  [
+   "Weekend at Bernie's",
+   "weekend at bernie"
+  ],
+  [
+   "Sausage Party",
+   "sausage party"
+  ],
+  [
+   "My Big Fat Greek Wedding",
+   "big fat greek"
+  ],
+  [
+   "My Spy",
+   "^my spy"
+  ],
+  [
+   "Five Nights at Freddy's",
+   "five nights at freddy"
+  ],
+  [
+   "Enola Holmes",
+   "enola holmes"
+  ],
+  [
+   "Extraction",
+   "^extraction"
+  ],
+  [
+   "The Accountant",
+   "^the accountant"
+  ],
+  [
+   "Fall (film)",
+   "^fall( 2|$)"
+  ],
+  [
+   "Gladiator",
+   "^gladiator"
+  ],
+  [
+   "Zombies (Disney)",
+   "^zombies"
+  ],
+  [
+   "Persona",
+   "^persona"
+  ],
+  [
+   "Malcolm in the Middle",
+   "malcolm in the middle"
+  ],
+  [
+   "Van Helsing",
+   "van helsing"
+  ],
+  [
+   "War of the Worlds",
+   "war of the worlds"
+  ],
+  [
+   "Lincoln Lawyer",
+   "lincoln lawyer"
+  ],
+  [
+   "Super Bowl",
+   "super bowl"
+  ],
+  [
+   "King Arthur",
+   "king arthur"
+  ],
+  [
+   "The Muppets",
+   "muppets"
+  ],
+  [
+   "Mr & Mrs Smith",
+   "mr & mrs smith"
+  ],
+  [
+   "Dracula",
+   "^dracula"
+  ],
+  [
+   "Ben 10",
+   "^ben 10"
+  ],
+  [
+   "Finding Nemo",
+   "finding (nemo|dory)"
+  ],
+  [
+   "Meet the Parents",
+   "meet the (parents|fockers)"
+  ],
+  [
+   "Jumanji",
+   "jumanji"
+  ],
+  [
+   "Hellboy",
+   "hellboy"
+  ],
+  [
+   "The Croods",
+   "the croods"
+  ],
+  [
+   "Ted",
+   "^ted( \\d)?$"
+  ],
+  [
+   "Speed",
+   "^speed( 2|$)"
+  ],
+  [
+   "Zoolander",
+   "zoolander"
+  ],
+  [
+   "Planes",
+   "^planes"
+  ],
+  [
+   "TRON",
+   "^tron"
+  ],
+  [
+   "Top Gun",
+   "top gun"
+  ],
+  [
+   "The Hitman's Bodyguard",
+   "hitmans"
+  ],
+  [
+   "Ultraman",
+   "^ultraman"
+  ],
+  [
+   "Big Hero 6",
+   "big hero 6"
+  ],
+  [
+   "Aquarion",
+   "^aquarion"
+  ],
+  [
+   "SSSS / Gridman",
+   "^ssss"
+  ],
+  [
+   "The Strangers",
+   "^the strangers"
+  ],
+  [
+   "The Babysitter",
+   "^the babysitter"
+  ],
+  [
+   "Blade Runner",
+   "blade runner"
+  ],
+  [
+   "Wicked",
+   "^wicked( for good| one|$)"
+  ],
+  [
+   "The Dark Crystal",
+   "dark crystal"
+  ],
+  [
+   "Bottom-Tier Tomozaki",
+   "tomozaki"
+  ],
+  [
+   "Naked Gun",
+   "naked gun"
+  ],
+  [
+   "Alienoid",
+   "^alienoid"
+  ],
+  [
+   "Dragon Raja",
+   "dragon raja"
+  ]
+ ],
+ "block": [
+  {
+   "title": "A Discovery of Witches",
+   "media": null
+  },
+  {
+   "title": "After Earth",
+   "media": null
+  },
+  {
+   "title": "Aliens in the Attic",
+   "media": null
+  },
+  {
+   "title": "Arpeggio of Blue Steel",
+   "media": null
+  },
+  {
+   "title": "Ben 10 Alien Force",
+   "media": null
+  },
+  {
+   "title": "Ben 10 Ultimate Alien",
+   "media": null
+  },
+  {
+   "title": "Blade Dance of the Elementalers",
+   "media": null
+  },
+  {
+   "title": "Blade Runner 2049X",
+   "media": null
+  },
+  {
+   "title": "Captian Earth",
+   "media": null
+  },
+  {
+   "title": "Comet Lucifer",
+   "media": null
+  },
+  {
+   "title": "Dekin no Mogura The Earthbound Mole",
+   "media": null
+  },
+  {
+   "title": "Earth to Echo",
+   "media": null
+  },
+  {
+   "title": "Earth- One Amazing Day",
+   "media": null
+  },
+  {
+   "title": "Echo Valley",
+   "media": null
+  },
+  {
+   "title": "Escape from Planet Earth",
+   "media": null
+  },
+  {
+   "title": "Frozen Planet",
+   "media": null
+  },
+  {
+   "title": "I've Been Killing Slimes For 300 Years And Maxed Out My Level",
+   "media": null
+  },
+  {
+   "title": "InSpectre",
+   "media": null
+  },
+  {
+   "title": "Journey to the Center of the Earth",
+   "media": null
+  },
+  {
+   "title": "Kaiju No 8",
+   "media": null
+  },
+  {
+   "title": "Medieva",
+   "media": null
+  },
+  {
+   "title": "Monsters vs Aliens",
+   "media": null
+  },
+  {
+   "title": "Muv-Luv Alternative Total Eclipse",
+   "media": null
+  },
+  {
+   "title": "Our Last Crusade or the Rise of a New World",
+   "media": null
+  },
+  {
+   "title": "Pitch Perfect Bumper in Berlin S01E01",
+   "media": null
+  },
+  {
+   "title": "Planet Earth II",
+   "media": null
+  },
+  {
+   "title": "Planet Earth III",
+   "media": null
+  },
+  {
+   "title": "Preacher",
+   "media": null
+  },
+  {
+   "title": "Reborn to Master the Blade From Hero-King to Extraordinary Squire",
+   "media": null
+  },
+  {
+   "title": "Remember the Titans",
+   "media": null
+  },
+  {
+   "title": "Scavengers Reign",
+   "media": null
+  },
+  {
+   "title": "The Day The Earth Stood Still",
+   "media": null
+  },
+  {
+   "title": "The Iceblade Sorcerer Shall Rule the World",
+   "media": null
+  },
+  {
+   "title": "The Last Man on Earth",
+   "media": null
+  },
+  {
+   "title": "The Legend of Heroes Trails of Cold Steel - Northern War",
+   "media": null
+  },
+  {
+   "title": "The Man Who Fell to Earth",
+   "media": null
+  },
+  {
+   "title": "The Marvelous Mrs Maisel",
+   "media": null
+  },
+  {
+   "title": "The Penguins of Madagascar",
+   "media": null
+  },
+  {
+   "title": "The Strongest Tank's Labyrinth Raids A Tank with a Rare 9999 Resistance Skill Got Kicked from the Hero's Party",
+   "media": null
+  },
+  {
+   "title": "The Wandering Earth II",
+   "media": null
+  },
+  {
+   "title": "Warrior Nun",
+   "media": null
+  },
+  {
+   "title": "Wrath of the Titans",
+   "media": null
+  },
+  {
+   "title": "Overlord",
+   "media": "Movie"
+  }
+ ]
+}

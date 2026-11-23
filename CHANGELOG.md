@@ -8,6 +8,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Groundwork for **Franchises**: the grouping engine (`src/main/franchises.js`)
+  and its data (233 rules, 46 canonical lists, Star Wars and Marvel
+  timelines). Nothing in the app uses it yet.
+
 ## [3.8.0] - 2026-11-11
 
 ### Added

@@ -82,6 +82,7 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 | `src/main/ffprobe.js` | Locate ffprobe.exe, run it, flatten streams into DB columns |
 | `src/main/ffmpegdl.js` | Download BtbN ffmpeg zip, extract with PowerShell `Expand-Archive` |
 | `src/main/exportCsv.js` | Nine CSVs per export (the ninth is `discs.csv`, one row per copy), timestamped dir + `latest\` copy |
+| `src/main/franchises.js` | Franchise grouping engine (pure): rules, sub-universes, dedupe, Missing from canon, timelines. Data in `src/main/franchise-data/*.json`. Not wired into the app yet |
 | `src/main/discs.js` | Physical discs by barcode: `normalizeUpc`, `scan`, releases / copies / title links, `discs.csv` rows. Pure, shared by both shells |
 | `src/main/discLookup.js` | What is this barcode: own releases, the lookup cache, UPCitemdb; `parseProduct` turns a shop listing into title / format / edition; rate-limit rest |
 | `src/main/tmdb.js` | Optional TMDB search (movie / tv) and poster URL, used by the disc lookup and as a movie poster fallback |
@@ -402,3 +403,25 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   Without it the pass opens (and migrates) the real `%APPDATA%\MediaLedger`
   database. A *relative* profile path is refused by Electron at start-up:
   an error dialog opens, nothing is logged and the run hangs.
+
+### Franchises engine: a faithful port, with two odd conventions (unreleased)
+
+- `src/main/franchises.js` is a line-for-line port of the owner's Python
+  prototype (`franchise_report.py`, 2026-11-22). On the owner's library it
+  reproduces the prototype exactly: 193 franchises, 745 owned, 83 missing,
+  1,828 unassigned, same order, same timeline ownership. Check that after
+  any change with
+  `node docs/_tools/franchise-parity.js <franchise-pack/sample_output>`.
+  The sample output is the owner's whole library list: never commit it.
+- **Franchise and sub-universe rules match the RAW title, case-insensitively.
+  Canon and timeline regexes match the NORMALISED title (`nz`), case-
+  sensitively, with `-` in the regex read as a space.** The handoff says
+  everything is normalised; the code does not, and parity depends on it.
+- **The data is seed data written from memory**, not checked against a
+  source (the handoff says so). Say that wherever it is shown.
+- Known gaps found while porting, in the data not the code: "The Fate of the
+  Furious" matches no rule; Marvel's "Blade" lands in the MCU sub-universe;
+  the two Dune films share one canon regex (`^dune$`), so owning either
+  hides the other from Missing.
+- "Upcoming" is a canon year after the current year, passed in as `year`.
+  The prototype hard-coded 2027.

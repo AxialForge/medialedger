@@ -1,0 +1,2182 @@
+{
+ "Star Wars": [
+  [
+   "The Phantom Menace",
+   "Movie",
+   "1999",
+   "phantom menace"
+  ],
+  [
+   "Attack of the Clones",
+   "Movie",
+   "2002",
+   "attack of the clones"
+  ],
+  [
+   "Revenge of the Sith",
+   "Movie",
+   "2005",
+   "revenge of the sith"
+  ],
+  [
+   "A New Hope",
+   "Movie",
+   "1977",
+   "new hope"
+  ],
+  [
+   "The Empire Strikes Back",
+   "Movie",
+   "1980",
+   "empire strikes"
+  ],
+  [
+   "Return of the Jedi",
+   "Movie",
+   "1983",
+   "return of the jedi"
+  ],
+  [
+   "The Force Awakens",
+   "Movie",
+   "2015",
+   "force awakens"
+  ],
+  [
+   "The Last Jedi",
+   "Movie",
+   "2017",
+   "last jedi"
+  ],
+  [
+   "The Rise of Skywalker",
+   "Movie",
+   "2019",
+   "rise of skywalker"
+  ],
+  [
+   "Rogue One",
+   "Movie",
+   "2016",
+   "rogue one"
+  ],
+  [
+   "Solo: A Star Wars Story",
+   "Movie",
+   "2018",
+   "solo"
+  ],
+  [
+   "The Mandalorian and Grogu",
+   "Movie",
+   "2026",
+   "grogu"
+  ],
+  [
+   "The Clone Wars (series)",
+   "TV",
+   "2008",
+   "clone wars"
+  ],
+  [
+   "The Mandalorian",
+   "TV",
+   "2019",
+   "^the mandalorian$"
+  ],
+  [
+   "The Book of Boba Fett",
+   "TV",
+   "2021",
+   "boba fett"
+  ],
+  [
+   "Obi-Wan Kenobi",
+   "TV",
+   "2022",
+   "obi-wan"
+  ],
+  [
+   "Andor",
+   "TV",
+   "2022",
+   "andor"
+  ],
+  [
+   "Ahsoka",
+   "TV",
+   "2023",
+   "ahsoka"
+  ],
+  [
+   "The Bad Batch",
+   "TV",
+   "2021",
+   "bad batch"
+  ],
+  [
+   "Star Wars Rebels",
+   "TV",
+   "2014",
+   "rebels"
+  ],
+  [
+   "Tales of the Jedi",
+   "TV",
+   "2022",
+   "tales of the jedi"
+  ],
+  [
+   "Tales of the Empire",
+   "TV",
+   "2024",
+   "tales of the empire"
+  ],
+  [
+   "Star Wars: Visions",
+   "TV",
+   "2021",
+   "visions"
+  ],
+  [
+   "The Acolyte",
+   "TV",
+   "2024",
+   "acolyte"
+  ],
+  [
+   "Skeleton Crew",
+   "TV",
+   "2024",
+   "skeleton crew"
+  ],
+  [
+   "Star Wars Resistance",
+   "TV",
+   "2018",
+   "resistance"
+  ]
+ ],
+ "Dune": [
+  [
+   "Dune (1984)",
+   "Movie",
+   "1984",
+   "^dune$"
+  ],
+  [
+   "Dune (2021)",
+   "Movie",
+   "2021",
+   "^dune$"
+  ],
+  [
+   "Dune: Part Two",
+   "Movie",
+   "2024",
+   "part two"
+  ],
+  [
+   "Dune: Prophecy",
+   "TV",
+   "2024",
+   "prophecy"
+  ],
+  [
+   "Dune: Part Three",
+   "Movie",
+   "2026",
+   "part three"
+  ]
+ ],
+ "Wizarding World": [
+  [
+   "Philosopher's Stone",
+   "Movie",
+   "2001",
+   "philosophers stone"
+  ],
+  [
+   "Chamber of Secrets",
+   "Movie",
+   "2002",
+   "chamber of secrets"
+  ],
+  [
+   "Prisoner of Azkaban",
+   "Movie",
+   "2004",
+   "azkaban"
+  ],
+  [
+   "Goblet of Fire",
+   "Movie",
+   "2005",
+   "goblet"
+  ],
+  [
+   "Order of the Phoenix",
+   "Movie",
+   "2007",
+   "order of the phoenix"
+  ],
+  [
+   "Half-Blood Prince",
+   "Movie",
+   "2009",
+   "half-blood"
+  ],
+  [
+   "Deathly Hallows Part 1",
+   "Movie",
+   "2010",
+   "hallows part 1"
+  ],
+  [
+   "Deathly Hallows Part 2",
+   "Movie",
+   "2011",
+   "(hallows part 2|8 and)"
+  ],
+  [
+   "Fantastic Beasts and Where to Find Them",
+   "Movie",
+   "2016",
+   "where to find"
+  ],
+  [
+   "The Crimes of Grindelwald",
+   "Movie",
+   "2018",
+   "grindelwald"
+  ],
+  [
+   "The Secrets of Dumbledore",
+   "Movie",
+   "2022",
+   "dumbledore"
+  ]
+ ],
+ "Middle-earth": [
+  [
+   "The Fellowship of the Ring",
+   "Movie",
+   "2001",
+   "fellowship"
+  ],
+  [
+   "The Two Towers",
+   "Movie",
+   "2002",
+   "two towers"
+  ],
+  [
+   "The Return of the King",
+   "Movie",
+   "2003",
+   "return of the king"
+  ],
+  [
+   "An Unexpected Journey",
+   "Movie",
+   "2012",
+   "unexpected journey"
+  ],
+  [
+   "The Desolation of Smaug",
+   "Movie",
+   "2013",
+   "smaug"
+  ],
+  [
+   "The Battle of the Five Armies",
+   "Movie",
+   "2014",
+   "five armies"
+  ],
+  [
+   "The Rings of Power",
+   "TV",
+   "2022",
+   "rings of power"
+  ],
+  [
+   "The War of the Rohirrim",
+   "Movie",
+   "2024",
+   "rohirrim"
+  ]
+ ],
+ "James Bond": [
+  [
+   "Dr. No",
+   "Movie",
+   "1962",
+   "dr\\.? no"
+  ],
+  [
+   "From Russia with Love",
+   "Movie",
+   "1963",
+   "from russia"
+  ],
+  [
+   "Goldfinger",
+   "Movie",
+   "1964",
+   "goldfinger"
+  ],
+  [
+   "Thunderball",
+   "Movie",
+   "1965",
+   "thunderball"
+  ],
+  [
+   "You Only Live Twice",
+   "Movie",
+   "1967",
+   "only live twice"
+  ],
+  [
+   "On Her Majesty's Secret Service",
+   "Movie",
+   "1969",
+   "majesty"
+  ],
+  [
+   "Diamonds Are Forever",
+   "Movie",
+   "1971",
+   "diamonds"
+  ],
+  [
+   "Live and Let Die",
+   "Movie",
+   "1973",
+   "live and let die"
+  ],
+  [
+   "The Man with the Golden Gun",
+   "Movie",
+   "1974",
+   "golden gun"
+  ],
+  [
+   "The Spy Who Loved Me",
+   "Movie",
+   "1977",
+   "spy who loved"
+  ],
+  [
+   "Moonraker",
+   "Movie",
+   "1979",
+   "moonraker"
+  ],
+  [
+   "For Your Eyes Only",
+   "Movie",
+   "1981",
+   "eyes only"
+  ],
+  [
+   "Octopussy",
+   "Movie",
+   "1983",
+   "octopussy"
+  ],
+  [
+   "A View to a Kill",
+   "Movie",
+   "1985",
+   "view to a kill"
+  ],
+  [
+   "The Living Daylights",
+   "Movie",
+   "1987",
+   "daylights"
+  ],
+  [
+   "Licence to Kill",
+   "Movie",
+   "1989",
+   "licen[cs]e to kill"
+  ],
+  [
+   "GoldenEye",
+   "Movie",
+   "1995",
+   "goldeneye"
+  ],
+  [
+   "Tomorrow Never Dies",
+   "Movie",
+   "1997",
+   "tomorrow never"
+  ],
+  [
+   "The World Is Not Enough",
+   "Movie",
+   "1999",
+   "not enough"
+  ],
+  [
+   "Die Another Day",
+   "Movie",
+   "2002",
+   "die another"
+  ],
+  [
+   "Casino Royale",
+   "Movie",
+   "2006",
+   "casino royale"
+  ],
+  [
+   "Quantum of Solace",
+   "Movie",
+   "2008",
+   "quantum"
+  ],
+  [
+   "Skyfall",
+   "Movie",
+   "2012",
+   "skyfall"
+  ],
+  [
+   "Spectre",
+   "Movie",
+   "2015",
+   "spectre"
+  ],
+  [
+   "No Time to Die",
+   "Movie",
+   "2021",
+   "no time to die"
+  ]
+ ],
+ "Mission: Impossible": [
+  [
+   "Mission: Impossible",
+   "Movie",
+   "1996",
+   "(mission impossible$|mission impossible 1)"
+  ],
+  [
+   "Mission: Impossible 2",
+   "Movie",
+   "2000",
+   "impossible 2"
+  ],
+  [
+   "Mission: Impossible III",
+   "Movie",
+   "2006",
+   "impossible 3"
+  ],
+  [
+   "Ghost Protocol",
+   "Movie",
+   "2011",
+   "ghost protocol"
+  ],
+  [
+   "Rogue Nation",
+   "Movie",
+   "2015",
+   "rogue nation"
+  ],
+  [
+   "Fallout",
+   "Movie",
+   "2018",
+   "(impossible 6|fallout)"
+  ],
+  [
+   "Dead Reckoning Part One",
+   "Movie",
+   "2023",
+   "dead reckoning"
+  ],
+  [
+   "The Final Reckoning",
+   "Movie",
+   "2025",
+   "final reckoning"
+  ]
+ ],
+ "Fast & Furious": [
+  [
+   "The Fast and the Furious",
+   "Movie",
+   "2001",
+   "^the fast and the furious$"
+  ],
+  [
+   "2 Fast 2 Furious",
+   "Movie",
+   "2003",
+   "2 fast"
+  ],
+  [
+   "Tokyo Drift",
+   "Movie",
+   "2006",
+   "tokyo drift"
+  ],
+  [
+   "Fast & Furious",
+   "Movie",
+   "2009",
+   "^fast & furious$"
+  ],
+  [
+   "Fast Five",
+   "Movie",
+   "2011",
+   "fast five"
+  ],
+  [
+   "Fast & Furious 6",
+   "Movie",
+   "2013",
+   "furious 6"
+  ],
+  [
+   "Furious 7",
+   "Movie",
+   "2015",
+   "furious 7"
+  ],
+  [
+   "The Fate of the Furious",
+   "Movie",
+   "2017",
+   "fate of the furious"
+  ],
+  [
+   "Hobbs & Shaw",
+   "Movie",
+   "2019",
+   "hobbs"
+  ],
+  [
+   "F9",
+   "Movie",
+   "2021",
+   "\\bf9\\b"
+  ],
+  [
+   "Fast X",
+   "Movie",
+   "2023",
+   "fast x"
+  ]
+ ],
+ "Jurassic Park / World": [
+  [
+   "Jurassic Park",
+   "Movie",
+   "1993",
+   "^jurassic park$"
+  ],
+  [
+   "The Lost World",
+   "Movie",
+   "1997",
+   "lost world"
+  ],
+  [
+   "Jurassic Park III",
+   "Movie",
+   "2001",
+   "park (3|iii)"
+  ],
+  [
+   "Jurassic World",
+   "Movie",
+   "2015",
+   "^jurassic world$"
+  ],
+  [
+   "Fallen Kingdom",
+   "Movie",
+   "2018",
+   "fallen kingdom"
+  ],
+  [
+   "Dominion",
+   "Movie",
+   "2022",
+   "dominion"
+  ],
+  [
+   "Jurassic World Rebirth",
+   "Movie",
+   "2025",
+   "rebirth"
+  ],
+  [
+   "Camp Cretaceous",
+   "TV",
+   "2020",
+   "cretaceous"
+  ],
+  [
+   "Chaos Theory",
+   "TV",
+   "2024",
+   "chaos theory"
+  ]
+ ],
+ "Terminator": [
+  [
+   "The Terminator",
+   "Movie",
+   "1984",
+   "^the terminator$"
+  ],
+  [
+   "Judgment Day",
+   "Movie",
+   "1991",
+   "judgment day"
+  ],
+  [
+   "Rise of the Machines",
+   "Movie",
+   "2003",
+   "rise of the machines"
+  ],
+  [
+   "Salvation",
+   "Movie",
+   "2009",
+   "salvation"
+  ],
+  [
+   "Genisys",
+   "Movie",
+   "2015",
+   "genisys"
+  ],
+  [
+   "Dark Fate",
+   "Movie",
+   "2019",
+   "dark fate"
+  ],
+  [
+   "Terminator Zero",
+   "TV",
+   "2024",
+   "zero"
+  ]
+ ],
+ "The Matrix": [
+  [
+   "The Matrix",
+   "Movie",
+   "1999",
+   "^the matrix$"
+  ],
+  [
+   "The Matrix Reloaded",
+   "Movie",
+   "2003",
+   "reloaded"
+  ],
+  [
+   "The Matrix Revolutions",
+   "Movie",
+   "2003",
+   "revolutions"
+  ],
+  [
+   "The Animatrix",
+   "Movie",
+   "2003",
+   "animatrix"
+  ],
+  [
+   "The Matrix Resurrections",
+   "Movie",
+   "2021",
+   "resurrections"
+  ]
+ ],
+ "Indiana Jones": [
+  [
+   "Raiders of the Lost Ark",
+   "Movie",
+   "1981",
+   "raiders"
+  ],
+  [
+   "Temple of Doom",
+   "Movie",
+   "1984",
+   "temple of doom"
+  ],
+  [
+   "The Last Crusade",
+   "Movie",
+   "1989",
+   "last crusade"
+  ],
+  [
+   "Kingdom of the Crystal Skull",
+   "Movie",
+   "2008",
+   "crystal skull"
+  ],
+  [
+   "Dial of Destiny",
+   "Movie",
+   "2023",
+   "dial of destiny"
+  ]
+ ],
+ "Pirates of the Caribbean": [
+  [
+   "The Curse of the Black Pearl",
+   "Movie",
+   "2003",
+   "black pearl"
+  ],
+  [
+   "Dead Man's Chest",
+   "Movie",
+   "2006",
+   "dead mans chest"
+  ],
+  [
+   "At World's End",
+   "Movie",
+   "2007",
+   "worlds end"
+  ],
+  [
+   "On Stranger Tides",
+   "Movie",
+   "2011",
+   "stranger tides"
+  ],
+  [
+   "Dead Men Tell No Tales",
+   "Movie",
+   "2017",
+   "dead men tell"
+  ]
+ ],
+ "John Wick": [
+  [
+   "John Wick",
+   "Movie",
+   "2014",
+   "chapter 1"
+  ],
+  [
+   "Chapter 2",
+   "Movie",
+   "2017",
+   "chapter 2"
+  ],
+  [
+   "Chapter 3 - Parabellum",
+   "Movie",
+   "2019",
+   "chapter 3"
+  ],
+  [
+   "Chapter 4",
+   "Movie",
+   "2023",
+   "chapter 4"
+  ],
+  [
+   "The Continental",
+   "TV",
+   "2023",
+   "continental"
+  ],
+  [
+   "Ballerina",
+   "Movie",
+   "2025",
+   "ballerina"
+  ]
+ ],
+ "Transformers": [
+  [
+   "Transformers",
+   "Movie",
+   "2007",
+   "transformers 1"
+  ],
+  [
+   "Revenge of the Fallen",
+   "Movie",
+   "2009",
+   "revenge of the fallen"
+  ],
+  [
+   "Dark of the Moon",
+   "Movie",
+   "2011",
+   "dark of the moon"
+  ],
+  [
+   "Age of Extinction",
+   "Movie",
+   "2014",
+   "extinction"
+  ],
+  [
+   "The Last Knight",
+   "Movie",
+   "2017",
+   "last knight"
+  ],
+  [
+   "Bumblebee",
+   "Movie",
+   "2018",
+   "bumblebee"
+  ],
+  [
+   "Rise of the Beasts",
+   "Movie",
+   "2023",
+   "beasts"
+  ],
+  [
+   "Transformers One",
+   "Movie",
+   "2024",
+   "transformers one"
+  ]
+ ],
+ "Planet of the Apes": [
+  [
+   "Rise of the Planet of the Apes",
+   "Movie",
+   "2011",
+   "^rise of the planet"
+  ],
+  [
+   "Dawn of the Planet of the Apes",
+   "Movie",
+   "2014",
+   "dawn"
+  ],
+  [
+   "War for the Planet of the Apes",
+   "Movie",
+   "2017",
+   "war for"
+  ],
+  [
+   "Kingdom of the Planet of the Apes",
+   "Movie",
+   "2024",
+   "kingdom"
+  ]
+ ],
+ "Hunger Games": [
+  [
+   "The Hunger Games",
+   "Movie",
+   "2012",
+   "games 1"
+  ],
+  [
+   "Catching Fire",
+   "Movie",
+   "2013",
+   "catching fire"
+  ],
+  [
+   "Mockingjay Part 1",
+   "Movie",
+   "2014",
+   "games 3"
+  ],
+  [
+   "Mockingjay Part 2",
+   "Movie",
+   "2015",
+   "games 4"
+  ],
+  [
+   "The Ballad of Songbirds and Snakes",
+   "Movie",
+   "2023",
+   "songbirds"
+  ],
+  [
+   "Sunrise on the Reaping",
+   "Movie",
+   "2026",
+   "sunrise"
+  ]
+ ],
+ "Kingsman": [
+  [
+   "The Secret Service",
+   "Movie",
+   "2014",
+   "secret service"
+  ],
+  [
+   "The Golden Circle",
+   "Movie",
+   "2017",
+   "golden circle"
+  ],
+  [
+   "The King's Man",
+   "Movie",
+   "2021",
+   "kings man"
+  ]
+ ],
+ "Toy Story": [
+  [
+   "Toy Story",
+   "Movie",
+   "1995",
+   "toy story 1"
+  ],
+  [
+   "Toy Story 2",
+   "Movie",
+   "1999",
+   "toy story 2"
+  ],
+  [
+   "Toy Story 3",
+   "Movie",
+   "2010",
+   "toy story 3"
+  ],
+  [
+   "Toy Story 4",
+   "Movie",
+   "2019",
+   "toy story 4"
+  ],
+  [
+   "Lightyear",
+   "Movie",
+   "2022",
+   "lightyear"
+  ],
+  [
+   "Toy Story 5",
+   "Movie",
+   "2026",
+   "toy story 5"
+  ]
+ ],
+ "Shrek": [
+  [
+   "Shrek",
+   "Movie",
+   "2001",
+   "^shrek$"
+  ],
+  [
+   "Shrek 2",
+   "Movie",
+   "2004",
+   "shrek 2"
+  ],
+  [
+   "Shrek the Third",
+   "Movie",
+   "2007",
+   "third"
+  ],
+  [
+   "Shrek Forever After",
+   "Movie",
+   "2010",
+   "forever after"
+  ],
+  [
+   "Puss in Boots",
+   "Movie",
+   "2011",
+   "^puss in boots$"
+  ],
+  [
+   "Puss in Boots: The Last Wish",
+   "Movie",
+   "2022",
+   "last wish"
+  ],
+  [
+   "Shrek 5",
+   "Movie",
+   "2026",
+   "shrek 5"
+  ]
+ ],
+ "How to Train Your Dragon": [
+  [
+   "How to Train Your Dragon",
+   "Movie",
+   "2010",
+   "dragon( 1)?$"
+  ],
+  [
+   "How to Train Your Dragon 2",
+   "Movie",
+   "2014",
+   "dragon 2"
+  ],
+  [
+   "The Hidden World",
+   "Movie",
+   "2019",
+   "hidden world"
+  ],
+  [
+   "How to Train Your Dragon (live action)",
+   "Movie",
+   "2025",
+   "live|2025"
+  ]
+ ],
+ "Kung Fu Panda": [
+  [
+   "Kung Fu Panda",
+   "Movie",
+   "2008",
+   "panda 1"
+  ],
+  [
+   "Kung Fu Panda 2",
+   "Movie",
+   "2011",
+   "panda 2"
+  ],
+  [
+   "Kung Fu Panda 3",
+   "Movie",
+   "2016",
+   "panda 3"
+  ],
+  [
+   "Kung Fu Panda 4",
+   "Movie",
+   "2024",
+   "panda 4"
+  ]
+ ],
+ "Despicable Me / Minions": [
+  [
+   "Despicable Me",
+   "Movie",
+   "2010",
+   "despicable me$"
+  ],
+  [
+   "Despicable Me 2",
+   "Movie",
+   "2013",
+   "me 2"
+  ],
+  [
+   "Minions",
+   "Movie",
+   "2015",
+   "^minions$"
+  ],
+  [
+   "Despicable Me 3",
+   "Movie",
+   "2017",
+   "me 3"
+  ],
+  [
+   "Minions: The Rise of Gru",
+   "Movie",
+   "2022",
+   "rise of gru"
+  ],
+  [
+   "Despicable Me 4",
+   "Movie",
+   "2024",
+   "me 4"
+  ],
+  [
+   "Minions & Monsters",
+   "Movie",
+   "2026",
+   "monsters"
+  ]
+ ],
+ "Back to the Future": [
+  [
+   "Back to the Future",
+   "Movie",
+   "1985",
+   "future$"
+  ],
+  [
+   "Part II",
+   "Movie",
+   "1989",
+   "part ii"
+  ],
+  [
+   "Part III",
+   "Movie",
+   "1990",
+   "part iii"
+  ]
+ ],
+ "Die Hard": [
+  [
+   "Die Hard",
+   "Movie",
+   "1988",
+   "^die hard$"
+  ],
+  [
+   "Die Hard 2",
+   "Movie",
+   "1990",
+   "die hard 2"
+  ],
+  [
+   "Die Hard with a Vengeance",
+   "Movie",
+   "1995",
+   "vengeance"
+  ],
+  [
+   "Live Free or Die Hard",
+   "Movie",
+   "2007",
+   "live free"
+  ],
+  [
+   "A Good Day to Die Hard",
+   "Movie",
+   "2013",
+   "good day"
+  ]
+ ],
+ "Men in Black": [
+  [
+   "Men in Black",
+   "Movie",
+   "1997",
+   "black 1"
+  ],
+  [
+   "Men in Black II",
+   "Movie",
+   "2002",
+   "black 2"
+  ],
+  [
+   "Men in Black 3",
+   "Movie",
+   "2012",
+   "black 3"
+  ],
+  [
+   "Men in Black: International",
+   "Movie",
+   "2019",
+   "international"
+  ]
+ ],
+ "Bad Boys": [
+  [
+   "Bad Boys",
+   "Movie",
+   "1995",
+   "^bad boys$"
+  ],
+  [
+   "Bad Boys II",
+   "Movie",
+   "2003",
+   "boys ii"
+  ],
+  [
+   "Bad Boys for Life",
+   "Movie",
+   "2020",
+   "for life"
+  ],
+  [
+   "Bad Boys: Ride or Die",
+   "Movie",
+   "2024",
+   "ride or die"
+  ]
+ ],
+ "Evangelion / Rebuild": [
+  [
+   "Neon Genesis Evangelion (series)",
+   "Anime",
+   "1995",
+   "^neon genesis"
+  ],
+  [
+   "Death & Rebirth",
+   "Movie",
+   "1997",
+   "death"
+  ],
+  [
+   "The End of Evangelion",
+   "Movie",
+   "1997",
+   "end of evangelion"
+  ],
+  [
+   "Evangelion 1.11",
+   "Movie",
+   "2007",
+   "1 11"
+  ],
+  [
+   "Evangelion 2.22",
+   "Movie",
+   "2009",
+   "2 22"
+  ],
+  [
+   "Evangelion 3.33",
+   "Movie",
+   "2012",
+   "3 33"
+  ],
+  [
+   "Evangelion 3.0+1.0",
+   "Movie",
+   "2021",
+   "3 0\\+1"
+  ]
+ ],
+ "Code Geass": [
+  [
+   "Code Geass: Lelouch of the Rebellion (series)",
+   "Anime",
+   "2006",
+   "^code geass$"
+  ],
+  [
+   "Lelouch of the Rebellion I",
+   "Movie",
+   "2017",
+   "rebellion 1"
+  ],
+  [
+   "Lelouch of the Rebellion II",
+   "Movie",
+   "2018",
+   "rebellion 2"
+  ],
+  [
+   "Lelouch of the Rebellion III",
+   "Movie",
+   "2018",
+   "rebellion 3"
+  ],
+  [
+   "Akito the Exiled",
+   "Anime",
+   "2012",
+   "akito"
+  ],
+  [
+   "Lelouch of the Re;surrection",
+   "Movie",
+   "2019",
+   "resurrection"
+  ]
+ ],
+ "MonsterVerse / Godzilla": [
+  [
+   "Godzilla (2014)",
+   "Movie",
+   "2014",
+   "^godzilla$"
+  ],
+  [
+   "Kong: Skull Island",
+   "Movie",
+   "2017",
+   "skull island"
+  ],
+  [
+   "Godzilla: King of the Monsters",
+   "Movie",
+   "2019",
+   "king of the monsters"
+  ],
+  [
+   "Godzilla vs. Kong",
+   "Movie",
+   "2021",
+   "vs kong"
+  ],
+  [
+   "Godzilla x Kong: The New Empire",
+   "Movie",
+   "2024",
+   "new empire"
+  ],
+  [
+   "Monarch: Legacy of Monsters",
+   "TV",
+   "2023",
+   "monarch"
+  ],
+  [
+   "Godzilla Minus One",
+   "Movie",
+   "2023",
+   "minus one"
+  ]
+ ],
+ "Avatar (Cameron)": [
+  [
+   "Avatar",
+   "Movie",
+   "2009",
+   "^avatar$"
+  ],
+  [
+   "Avatar: The Way of Water",
+   "Movie",
+   "2022",
+   "way of water"
+  ],
+  [
+   "Avatar: Fire and Ash",
+   "Movie",
+   "2025",
+   "fire and ash"
+  ]
+ ],
+ "Avatar: The Last Airbender": [
+  [
+   "Avatar: The Last Airbender (animated)",
+   "TV",
+   "2005",
+   "^avatar the last airbender$"
+  ],
+  [
+   "The Legend of Korra",
+   "TV",
+   "2012",
+   "korra"
+  ],
+  [
+   "Avatar: The Last Airbender (live action)",
+   "TV",
+   "2024",
+   "2024"
+  ]
+ ],
+ "Alien / Predator": [
+  [
+   "Alien",
+   "Movie",
+   "1979",
+   "^alien$"
+  ],
+  [
+   "Aliens",
+   "Movie",
+   "1986",
+   "^aliens$"
+  ],
+  [
+   "Alien 3",
+   "Movie",
+   "1992",
+   "alien 3"
+  ],
+  [
+   "Alien Resurrection",
+   "Movie",
+   "1997",
+   "resurrection"
+  ],
+  [
+   "Alien vs. Predator",
+   "Movie",
+   "2004",
+   "alien vs"
+  ],
+  [
+   "Predator",
+   "Movie",
+   "1987",
+   "^predator$"
+  ],
+  [
+   "Prey",
+   "Movie",
+   "2022",
+   "^prey$"
+  ],
+  [
+   "Alien: Romulus",
+   "Movie",
+   "2024",
+   "romulus"
+  ],
+  [
+   "Predator: Badlands",
+   "Movie",
+   "2025",
+   "badlands"
+  ],
+  [
+   "Alien: Earth",
+   "TV",
+   "2025",
+   "alien earth"
+  ]
+ ],
+ "Star Trek": [
+  [
+   "Star Trek (2009)",
+   "Movie",
+   "2009",
+   "^star trek$"
+  ],
+  [
+   "Star Trek Into Darkness",
+   "Movie",
+   "2013",
+   "darkness"
+  ],
+  [
+   "Star Trek Beyond",
+   "Movie",
+   "2016",
+   "beyond"
+  ],
+  [
+   "Star Trek: The Next Generation",
+   "TV",
+   "1987",
+   "next generation"
+  ],
+  [
+   "Star Trek: Deep Space Nine",
+   "TV",
+   "1993",
+   "deep space"
+  ],
+  [
+   "Star Trek: Voyager",
+   "TV",
+   "1995",
+   "voyager"
+  ],
+  [
+   "Star Trek: Enterprise",
+   "TV",
+   "2001",
+   "enterprise"
+  ],
+  [
+   "Star Trek: Discovery",
+   "TV",
+   "2017",
+   "discovery"
+  ],
+  [
+   "Star Trek: Picard",
+   "TV",
+   "2020",
+   "picard"
+  ],
+  [
+   "Star Trek: Lower Decks",
+   "TV",
+   "2020",
+   "lower decks"
+  ],
+  [
+   "Star Trek: Prodigy",
+   "TV",
+   "2021",
+   "prodigy"
+  ],
+  [
+   "Star Trek: Strange New Worlds",
+   "TV",
+   "2022",
+   "strange new worlds"
+  ]
+ ],
+ "Percy Jackson": [
+  [
+   "The Lightning Thief",
+   "Movie",
+   "2010",
+   "lightning thief"
+  ],
+  [
+   "Sea of Monsters",
+   "Movie",
+   "2013",
+   "sea of monsters"
+  ],
+  [
+   "Percy Jackson and the Olympians",
+   "TV",
+   "2023",
+   "olympians"
+  ]
+ ],
+ "Mad Max": [
+  [
+   "Mad Max",
+   "Movie",
+   "1979",
+   "^mad max$"
+  ],
+  [
+   "The Road Warrior",
+   "Movie",
+   "1981",
+   "road warrior"
+  ],
+  [
+   "Beyond Thunderdome",
+   "Movie",
+   "1985",
+   "thunderdome"
+  ],
+  [
+   "Fury Road",
+   "Movie",
+   "2015",
+   "fury road"
+  ],
+  [
+   "Furiosa",
+   "Movie",
+   "2024",
+   "furiosa"
+  ]
+ ],
+ "Spider-Verse": [
+  [
+   "Into the Spider-Verse",
+   "Movie",
+   "2018",
+   "into"
+  ],
+  [
+   "Across the Spider-Verse",
+   "Movie",
+   "2023",
+   "across"
+  ],
+  [
+   "Beyond the Spider-Verse",
+   "Movie",
+   "2027",
+   "beyond"
+  ]
+ ],
+ "Doctor Who": [
+  [
+   "Doctor Who (2005)",
+   "TV",
+   "2005",
+   "2005"
+  ],
+  [
+   "Doctor Who (2023)",
+   "TV",
+   "2023",
+   "2023"
+  ],
+  [
+   "Torchwood",
+   "TV",
+   "2006",
+   "torchwood"
+  ]
+ ],
+ "Game of Thrones": [
+  [
+   "Game of Thrones",
+   "TV",
+   "2011",
+   "game of thrones"
+  ],
+  [
+   "House of the Dragon",
+   "TV",
+   "2022",
+   "house of the dragon"
+  ],
+  [
+   "A Knight of the Seven Kingdoms",
+   "TV",
+   "2026",
+   "knight of the seven"
+  ]
+ ],
+ "Ice Age": [
+  [
+   "Ice Age",
+   "Movie",
+   "2002",
+   "^ice age$"
+  ],
+  [
+   "The Meltdown",
+   "Movie",
+   "2006",
+   "meltdown"
+  ],
+  [
+   "Dawn of the Dinosaurs",
+   "Movie",
+   "2009",
+   "dinosaurs"
+  ],
+  [
+   "Continental Drift",
+   "Movie",
+   "2012",
+   "continental"
+  ],
+  [
+   "Collision Course",
+   "Movie",
+   "2016",
+   "collision"
+  ]
+ ],
+ "Madagascar": [
+  [
+   "Madagascar",
+   "Movie",
+   "2005",
+   "^madagascar$"
+  ],
+  [
+   "Escape 2 Africa",
+   "Movie",
+   "2008",
+   "escape 2"
+  ],
+  [
+   "Europe's Most Wanted",
+   "Movie",
+   "2012",
+   "europes"
+  ],
+  [
+   "Penguins of Madagascar",
+   "Movie",
+   "2014",
+   "penguins"
+  ]
+ ],
+ "Pitch Perfect": [
+  [
+   "Pitch Perfect",
+   "Movie",
+   "2012",
+   "^pitch perfect$"
+  ],
+  [
+   "Pitch Perfect 2",
+   "Movie",
+   "2015",
+   "perfect 2"
+  ],
+  [
+   "Pitch Perfect 3",
+   "Movie",
+   "2017",
+   "perfect 3"
+  ]
+ ],
+ "Rocky / Creed": [
+  [
+   "Creed",
+   "Movie",
+   "2015",
+   "^creed$"
+  ],
+  [
+   "Creed II",
+   "Movie",
+   "2018",
+   "creed ii"
+  ],
+  [
+   "Creed III",
+   "Movie",
+   "2023",
+   "creed iii"
+  ]
+ ],
+ "Ghostbusters": [
+  [
+   "Ghostbusters",
+   "Movie",
+   "1984",
+   "^ghostbusters$"
+  ],
+  [
+   "Ghostbusters II",
+   "Movie",
+   "1989",
+   "ii"
+  ],
+  [
+   "Ghostbusters (2016)",
+   "Movie",
+   "2016",
+   "2016"
+  ],
+  [
+   "Afterlife",
+   "Movie",
+   "2021",
+   "afterlife"
+  ],
+  [
+   "Frozen Empire",
+   "Movie",
+   "2024",
+   "frozen empire"
+  ]
+ ],
+ "Frozen": [
+  [
+   "Frozen",
+   "Movie",
+   "2013",
+   "^frozen$"
+  ],
+  [
+   "Frozen II",
+   "Movie",
+   "2019",
+   "ii"
+  ],
+  [
+   "Frozen III",
+   "Movie",
+   "2027",
+   "iii"
+  ]
+ ],
+ "Incredibles": [
+  [
+   "The Incredibles",
+   "Movie",
+   "2004",
+   "^the incredibles$"
+  ],
+  [
+   "Incredibles 2",
+   "Movie",
+   "2018",
+   "incredibles 2"
+  ],
+  [
+   "Incredibles 3",
+   "Movie",
+   "2028",
+   "incredibles 3"
+  ]
+ ],
+ "Marvel (MCU & Marvel)": [
+  [
+   "Captain America: The First Avenger",
+   "Movie",
+   "2011",
+   "captain america the first avenger"
+  ],
+  [
+   "Marvel's Agent Carter",
+   "TV",
+   "2015",
+   "agent carter"
+  ],
+  [
+   "Captain Marvel",
+   "Movie",
+   "2019",
+   "^captain marvel$"
+  ],
+  [
+   "Eternals",
+   "Movie",
+   "2021",
+   "^eternals$"
+  ],
+  [
+   "Iron Man",
+   "Movie",
+   "2008",
+   "^iron man 1$|^iron man$"
+  ],
+  [
+   "The Incredible Hulk",
+   "Movie",
+   "2008",
+   "incredible hulk"
+  ],
+  [
+   "Iron Man 2",
+   "Movie",
+   "2010",
+   "iron man 2"
+  ],
+  [
+   "Thor",
+   "Movie",
+   "2011",
+   "^thor$"
+  ],
+  [
+   "The Avengers",
+   "Movie",
+   "2012",
+   "^the avengers$"
+  ],
+  [
+   "Iron Man 3",
+   "Movie",
+   "2013",
+   "iron man 3"
+  ],
+  [
+   "Thor: The Dark World",
+   "Movie",
+   "2013",
+   "dark world"
+  ],
+  [
+   "Agents of S.H.I.E.L.D.",
+   "TV",
+   "2013",
+   "agents of shield"
+  ],
+  [
+   "Captain America: The Winter Soldier",
+   "Movie",
+   "2014",
+   "winter soldier"
+  ],
+  [
+   "Guardians of the Galaxy",
+   "Movie",
+   "2014",
+   "^guardians of the galaxy$"
+  ],
+  [
+   "Guardians of the Galaxy Vol. 2",
+   "Movie",
+   "2017",
+   "vol 2"
+  ],
+  [
+   "Marvel's Daredevil",
+   "TV",
+   "2015",
+   "marvels daredevil"
+  ],
+  [
+   "Marvel's Jessica Jones",
+   "TV",
+   "2015",
+   "jessica jones"
+  ],
+  [
+   "Avengers: Age of Ultron",
+   "Movie",
+   "2015",
+   "age of ultron"
+  ],
+  [
+   "Ant-Man",
+   "Movie",
+   "2015",
+   "^ant man$"
+  ],
+  [
+   "Marvel's Luke Cage",
+   "TV",
+   "2016",
+   "marvels luke cage"
+  ],
+  [
+   "Captain America: Civil War",
+   "Movie",
+   "2016",
+   "civil war"
+  ],
+  [
+   "Black Widow",
+   "Movie",
+   "2021",
+   "black widow"
+  ],
+  [
+   "Black Panther",
+   "Movie",
+   "2018",
+   "^black panther$"
+  ],
+  [
+   "Spider-Man: Homecoming",
+   "Movie",
+   "2017",
+   "homecoming"
+  ],
+  [
+   "Doctor Strange",
+   "Movie",
+   "2016",
+   "^doctor strange$"
+  ],
+  [
+   "Ant-Man and the Wasp",
+   "Movie",
+   "2018",
+   "^ant man and the wasp$"
+  ],
+  [
+   "Marvel's Iron Fist",
+   "TV",
+   "2017",
+   "iron fist"
+  ],
+  [
+   "Marvel's The Defenders",
+   "TV",
+   "2017",
+   "defenders"
+  ],
+  [
+   "Thor: Ragnarok",
+   "Movie",
+   "2017",
+   "ragnarok"
+  ],
+  [
+   "Avengers: Infinity War",
+   "Movie",
+   "2018",
+   "infinity war"
+  ],
+  [
+   "Avengers: Endgame",
+   "Movie",
+   "2019",
+   "endgame"
+  ],
+  [
+   "WandaVision",
+   "TV",
+   "2021",
+   "wandavision"
+  ],
+  [
+   "The Falcon and the Winter Soldier",
+   "TV",
+   "2021",
+   "falcon and the winter"
+  ],
+  [
+   "Spider-Man: Far From Home",
+   "Movie",
+   "2019",
+   "far from home"
+  ],
+  [
+   "Shang-Chi and the Legend of the Ten Rings",
+   "Movie",
+   "2021",
+   "shang chi"
+  ],
+  [
+   "Hawkeye",
+   "TV",
+   "2021",
+   "^hawkeye$"
+  ],
+  [
+   "Spider-Man: No Way Home",
+   "Movie",
+   "2021",
+   "no way home"
+  ],
+  [
+   "Doctor Strange in the Multiverse of Madness",
+   "Movie",
+   "2022",
+   "multiverse of madness"
+  ],
+  [
+   "Moon Knight",
+   "TV",
+   "2022",
+   "moon knight"
+  ],
+  [
+   "Ms. Marvel",
+   "TV",
+   "2022",
+   "ms marvel"
+  ],
+  [
+   "Werewolf by Night",
+   "TV",
+   "2022",
+   "werewolf by night"
+  ],
+  [
+   "Thor: Love and Thunder",
+   "Movie",
+   "2022",
+   "love and thunder"
+  ],
+  [
+   "She-Hulk: Attorney at Law",
+   "TV",
+   "2022",
+   "she hulk"
+  ],
+  [
+   "Black Panther: Wakanda Forever",
+   "Movie",
+   "2022",
+   "wakanda forever"
+  ],
+  [
+   "Ant-Man and the Wasp: Quantumania",
+   "Movie",
+   "2023",
+   "quantumania"
+  ],
+  [
+   "Guardians of the Galaxy Holiday Special",
+   "TV",
+   "2022",
+   "holiday special"
+  ],
+  [
+   "Guardians of the Galaxy Vol. 3",
+   "Movie",
+   "2023",
+   "vol 3"
+  ],
+  [
+   "Secret Invasion",
+   "TV",
+   "2023",
+   "secret invasion"
+  ],
+  [
+   "The Marvels",
+   "Movie",
+   "2023",
+   "^the marvels$"
+  ],
+  [
+   "Echo",
+   "TV",
+   "2024",
+   "^echo$"
+  ],
+  [
+   "Captain America: Brave New World",
+   "Movie",
+   "2025",
+   "brave new world"
+  ],
+  [
+   "Daredevil: Born Again",
+   "TV",
+   "2025",
+   "born again"
+  ],
+  [
+   "Thunderbolts*",
+   "Movie",
+   "2025",
+   "thunderbolts"
+  ],
+  [
+   "Ironheart",
+   "TV",
+   "2025",
+   "ironheart"
+  ],
+  [
+   "Agatha All Along",
+   "TV",
+   "2024",
+   "agatha"
+  ],
+  [
+   "Deadpool & Wolverine",
+   "Movie",
+   "2024",
+   "deadpool and wolverine|deadpool & wolverine"
+  ],
+  [
+   "Loki",
+   "TV",
+   "2021",
+   "^loki$"
+  ],
+  [
+   "What If...?",
+   "TV",
+   "2021",
+   "what if"
+  ],
+  [
+   "The Fantastic Four: First Steps",
+   "Movie",
+   "2025",
+   "fantastic 4 first steps|fantastic four first steps"
+  ],
+  [
+   "Spider-Man: Brand New Day",
+   "Movie",
+   "2026",
+   "brand new day"
+  ],
+  [
+   "Avengers: Doomsday",
+   "Movie",
+   "2026",
+   "doomsday"
+  ]
+ ]
+}

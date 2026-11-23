@@ -1,0 +1,50 @@
+{
+ "Marvel (MCU & Marvel)": {
+  "default": "MCU",
+  "rules": [
+   [
+    "Spider-Verse",
+    "spider-verse|spide-verse"
+   ],
+   [
+    "Sony Spider-Man Universe",
+    "venom|morbius|madame web|kraven"
+   ],
+   [
+    "Sony Spider-Man (Raimi/Webb)",
+    "amazing spider-man"
+   ],
+   [
+    "Fox X-Men Universe",
+    "x-men|wolverine|^logan|deadpool [12]|once upon a deadpool|dark phoenix|new mutants|fantastic four( rise|$)"
+   ],
+   [
+    "Netflix Marvel",
+    "marvel'?s? (daredevil|the defenders|iron fist|luke cage)|marvels (iron fist|luke cage)|jessica jones|punisher"
+   ],
+   [
+    "Marvel Animation",
+    "x-men evolution|animated series|worlds greatest"
+   ],
+   [
+    "Other Marvel Films",
+    "^daredevil$|ghost rider|blade trinity|fantastic four"
+   ]
+  ]
+ },
+ "DC": {
+  "movie_animated": "DC Animated Films",
+  "movie_live": "DC Live-Action Films",
+  "tv_rules": [
+   [
+    "Arrowverse & Related",
+    "^(arrow|the flash|supergirl|legends of tomorrow|superman and lois|constantine)$"
+   ],
+   [
+    "DC Animation (TV)",
+    "justice league|batman|young justice|harley|creature"
+   ]
+  ],
+  "tv_default": "Other DC TV"
+ }
+}
