@@ -5,7 +5,7 @@
 const fs = require('fs'), path = require('path');
 const F = require('../../src/main/franchises.js');
 const S = process.argv[2];
-if (!S || !fs.existsSync(path.join(S, 'items.json'))) { console.error('usage: node docs/_tools/franchise-parity.js <the prototype's sample_output folder>'); process.exit(2); }
+if (!S || !fs.existsSync(path.join(S, 'items.json'))) { console.error('usage: node docs/_tools/franchise-parity.js <the sample_output folder of the prototype>'); process.exit(2); }
 const golden = JSON.parse(fs.readFileSync(path.join(S, 'items.json'), 'utf8'));
 const un = fs.readFileSync(path.join(S, 'unassigned.csv'), 'utf8').replace(/^\uFEFF/, '').split(/\r?\n/).slice(1).filter(Boolean).map(l => { const i = l.indexOf(','); let t = l.slice(i + 1); if (t.startsWith('"')) t = t.slice(1, -1).replace(/""/g, '"'); return { media: l.slice(0, i), title: t }; });
 const html = fs.readFileSync(path.join(S, 'index.html'), 'utf8');
