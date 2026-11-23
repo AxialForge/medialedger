@@ -28,7 +28,7 @@
    ],
    [
     "Other Marvel Films",
-    "^daredevil$|ghost rider|blade trinity|fantastic four"
+    "^daredevil$|ghost rider|^blade( ii| 2|[: -]+trinity)?$|blade trinity|fantastic four"
    ]
   ]
  },

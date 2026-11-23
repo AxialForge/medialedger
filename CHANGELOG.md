@@ -6,11 +6,40 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.9.0] - 2026-11-22
+
 ### Added
 
-- Groundwork for **Franchises**: the grouping engine (`src/main/franchises.js`)
-  and its data (233 rules, 46 canonical lists, Star Wars and Marvel
-  timelines). Nothing in the app uses it yet.
+- **Franchises.** After each scan the library is sorted into franchises across
+  movies, TV and anime. Each franchise is a collection marked Franchise that
+  lists what you have and what is missing, in release order. They sit beside
+  your own collections and the ones from Plex, so covers, CSV export and the
+  portal Sets tab work for them unchanged. Titles you add to a franchise
+  yourself stay.
+- The Collections page has a filter for Yours, From Plex and Franchises, an
+  Update now button, and a switch to stop franchises following each scan.
+- **Titles in no franchise**: a list of everything no franchise claims, with
+  Assign to put a title in an existing or a new franchise. Taking a title out
+  of a franchise, or hiding one missing title, is remembered. Every decision
+  is listed and can be undone.
+- The grouping engine and its data (233 rules, 46 canonical lists) come from
+  the owner's prototype. The lists of what belongs to a franchise were
+  written from memory, not checked against a source.
+
+### Fixed
+
+- The Fate of the Furious, The Fast and the Furious, F9 and Fast X now land
+  in Fast & Furious.
+- The 1998 Blade films are no longer filed under the MCU.
+- Dune (1984) and Dune (2021) are told apart, so owning one no longer hides
+  the other from the missing list.
+
+### Changed
+
+- The collections list reads the library once for all collections instead of
+  once per collection.
+- Schema v22: `collection_items.from_franchise`, `franchise_rules`,
+  `franchise_blocks`.
 
 ## [3.8.0] - 2026-11-11
 

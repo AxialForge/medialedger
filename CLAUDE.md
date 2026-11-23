@@ -82,7 +82,7 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 | `src/main/ffprobe.js` | Locate ffprobe.exe, run it, flatten streams into DB columns |
 | `src/main/ffmpegdl.js` | Download BtbN ffmpeg zip, extract with PowerShell `Expand-Archive` |
 | `src/main/exportCsv.js` | Nine CSVs per export (the ninth is `discs.csv`, one row per copy), timestamped dir + `latest\` copy |
-| `src/main/franchises.js` | Franchise grouping engine (pure): rules, sub-universes, dedupe, Missing from canon, timelines. Data in `src/main/franchise-data/*.json`. Not wired into the app yet |
+| `src/main/franchises.js` | Franchise grouping engine (pure): rules, sub-universes, dedupe, Missing from canon, timelines. Data in `src/main/franchise-data/*.json`. Used by `src/main/franchiseSync.js`, which keeps one collection per franchise. |
 | `src/main/discs.js` | Physical discs by barcode: `normalizeUpc`, `scan`, releases / copies / title links, `discs.csv` rows. Pure, shared by both shells |
 | `src/main/discLookup.js` | What is this barcode: own releases, the lookup cache, UPCitemdb; `parseProduct` turns a shop listing into title / format / edition; rate-limit rest |
 | `src/main/tmdb.js` | Optional TMDB search (movie / tv) and poster URL, used by the disc lookup and as a movie poster fallback |
@@ -404,7 +404,34 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   database. A *relative* profile path is refused by Electron at start-up:
   an error dialog opens, nothing is logged and the run hangs.
 
-### Franchises engine: a faithful port, with two odd conventions (unreleased)
+### Franchises are collections (3.9.0)
+
+- `src/main/franchiseSync.js` keeps one collection per franchise: source
+  `franchise`, found again by `collections.plex_key = 'fr:<name>'` (so it can
+  be renamed), rows it placed marked `from_franchise=1`. It runs at the end
+  of `runScan` unless `settings.franchises.auto` is false.
+- **It syncs by difference, never delete-and-refill.** The Plex mirror
+  refills; this must not, because notes and hand-added titles hang off the
+  row ids. Only `from_franchise=1` rows are ever removed.
+- **Do not call `collections.reorder`/`sortByRelease` inside
+  `db.transaction`.** `Db.transaction` is a bare BEGIN/COMMIT and does not
+  nest; `reorder` opens its own. The sync collects the changed ids and
+  orders them after its transaction closes.
+- Removing a `from_franchise` row in the UI records a decision
+  (`franchise_blocks`) instead of deleting the row, because a deleted row
+  comes back on the next scan. Decisions are layered over the shipped JSON
+  through `loadData(dir, user)`; never write them into `franchise-data/`.
+- `collections.list()` enriches every item in one pass. With 190 franchise
+  sets, a pass per collection took 450 ms on the owner's library; one pass
+  takes 20 ms. Keep it that way.
+- The data has moved on from the prototype in three places (Fast & Furious
+  rule, Blade sub-universe, the two Dune canon entries) and `missing()` also
+  tries "title year" for films. `docs/_tools/franchise-parity.js` therefore
+  reports those differences now; anything else it reports is a regression.
+- Not built yet: sub-universe panels, the release and in-universe timelines,
+  TMDB updates of the canonical lists.
+
+### Franchises engine: a faithful port, with two odd conventions
 
 - `src/main/franchises.js` is a line-for-line port of the owner's Python
   prototype (`franchise_report.py`, 2026-11-22). On the owner's library it

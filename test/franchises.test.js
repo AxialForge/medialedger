@@ -84,6 +84,18 @@ assert.deepStrictEqual(out.stats, { franchises: new Set(out.items.map(o => o.fra
 // ---- (d) Missing follows what is owned
 const gaps = (f) => out.items.filter(o => o.franchise === f && o.status !== 'Owned').map(o => o.title);
 assert.deepStrictEqual(gaps('Dune'), ['Dune: Prophecy', 'Dune: Part Three'].sort(), 'owned Dune titles are not missing; the rest of the canon is');
+// two films of one name each have a canon entry: owning one does not hide the other
+{
+  const one = F.build([{ media: 'Movie', title: 'Dune', year: 2021, size_gb: 20 }], data, { year: 2026 });
+  const miss = one.items.filter(o => o.status !== 'Owned').map(o => o.title);
+  assert.ok(miss.includes('Dune (1984)') && !miss.includes('Dune (2021)'), 'owning the 2021 film still lists the 1984 one');
+  const named = F.build([{ media: 'Movie', title: 'Dune (1984)', year: 1984, size_gb: 8 }], data, { year: 2026 }).items.filter(o => o.status !== 'Owned').map(o => o.title);
+  assert.ok(named.includes('Dune (2021)') && !named.includes('Dune (1984)'), 'a year in the title works the same');
+}
+// the Fast & Furious films whose titles drop the series name
+for (const x of ['The Fate of the Furious', 'The Fast and the Furious', 'Furious 7', 'F9', 'Fast X', 'Fast & Furious 6']) assert.strictEqual(fr(x), 'Fast & Furious', x);
+assert.strictEqual(sub('Blade'), 'Other Marvel Films', 'the 1998 Blade is not an MCU film');
+assert.strictEqual(sub('Blade II'), 'Other Marvel Films'); assert.strictEqual(sub('Blade: Trinity'), 'Other Marvel Films');
 assert.ok(gaps('Star Wars').includes('The Empire Strikes Back') && !gaps('Star Wars').includes('A New Hope') && !gaps('Star Wars').includes('Andor'));
 assert.strictEqual(out.items.filter(o => o.franchise === 'Middle-earth').length, 0, 'a franchise with nothing owned lists nothing as missing');
 assert.ok(out.items.every(o => o.status !== 'Owned' ? o.size_gb === 0 && o.dupes === 0 : true));

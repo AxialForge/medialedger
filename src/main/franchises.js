@@ -14,6 +14,9 @@
 // were written from memory, not checked against a source. They are seed data. The rules are regex heuristics and
 // some names are ambiguous (Avatar, Dune 1984 vs 2021, Spider-Man across three studios).
 //
+// Where this has moved on from the prototype (3.9.0): missing() also tries "title year" for a film; the Fast & Furious
+// rule, the Blade sub-universe rule and the two Dune canon entries were corrected. Everything else is still the port.
+//
 // Two matching conventions come from the prototype and must not be "tidied":
 //   - franchise rules and sub-universe rules run on the RAW title, case-insensitively
 //   - canon and timeline regexes run on the NORMALISED title (nz), case-sensitively, with "-" in the regex read as a space
@@ -120,7 +123,8 @@ function missing(owned, data, { year = new Date().getFullYear() } = {}) {
   for (const [fr, list] of Object.entries(data.canon)) {
     const its = owned.filter(o => o.franchise === fr);
     if (!its.length) continue;
-    const names = its.map(o => nz(o.title));
+    // a film answers to its title and to "title year", so two films of one name (Dune 1984, Dune 2021) can each be listed
+    const names = its.flatMap(o => { const n = nz(o.title); return o.media === 'Movie' && o.year && !n.includes(String(o.year)) ? [n, `${n} ${o.year}`] : [n]; });
     for (const [name, media, y, re] of list) {
       const rx = new RegExp(re.replace(/-/g, ' '));
       if (names.some(n => rx.test(n))) continue;

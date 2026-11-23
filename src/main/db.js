@@ -495,6 +495,17 @@ const MIGRATIONS = [
       ALTER TABLE disc_copies ADD COLUMN loaned_on TEXT;  -- the day a copy went out, cleared when it comes back
     `,
   },
+  {
+    version: 22, name: 'franchises as collections',
+    sql: `
+      -- A franchise is a collection with source 'franchise' and plex_key 'fr:<name>'. The rows the sync put there are marked.
+      ALTER TABLE collection_items ADD COLUMN from_franchise INTEGER DEFAULT 0;
+      -- The owner's decisions, layered over the shipped rules and never written into them.
+      CREATE TABLE IF NOT EXISTS franchise_rules (id INTEGER PRIMARY KEY, franchise TEXT NOT NULL, pattern TEXT NOT NULL, title TEXT, created TEXT);
+      -- kind 'title': not part of any franchise. kind 'missing': do not list this canonical title as missing.
+      CREATE TABLE IF NOT EXISTS franchise_blocks (id INTEGER PRIMARY KEY, kind TEXT NOT NULL DEFAULT 'title', title TEXT NOT NULL, media TEXT, franchise TEXT, created TEXT);
+    `,
+  },
 ];
 
 class Db {

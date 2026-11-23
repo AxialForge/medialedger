@@ -1,6 +1,8 @@
 'use strict';
 // Collections: named sets of titles across TV, anime and movies ("the Marvel universe", "Pirates of the Caribbean").
 //
+// A collection is yours (source 'manual'), mirrored from Plex (source 'plex'), or a franchise the library was sorted
+// into (source 'franchise', kept by franchiseSync.js).
 // A collection is yours (source 'manual') or mirrored from Plex (source 'plex'). Plex collections are read, never
 // written: each Plex sync replaces the items it put there (from_plex=1) and leaves the ones you added by hand.
 // An item points at a library title (library_type + title_key: the series name, or a movie's group_key) or is a
@@ -29,7 +31,7 @@ function createCollections(db) {
       const r = it.title_key ? found.get(it.library_type + '|' + it.title_key) : null;
       const ps = r && r.show_key ? showYears.get(r.show_key) : null;
       return {
-        id: it.id, position: it.position, library_type: it.library_type, title_key: it.title_key, note: it.note, from_plex: !!it.from_plex,
+        id: it.id, position: it.position, library_type: it.library_type, title_key: it.title_key, note: it.note, from_plex: !!it.from_plex, from_franchise: !!it.from_franchise,
         title: r ? r.title : it.title, year: r ? (it.library_type === 'movie' ? r.year : ps && ps.year) || it.year : it.year,
         present: !!r, files: r ? (r.files || r.episodes) : 0, episodes: r && r.episodes != null ? r.episodes : null, seasons: r ? r.seasons || null : null,
         bytes: r ? r.bytes : 0, seconds: r ? r.seconds : 0, resolutions: r ? r.resolutions : null, hdr: r ? r.hdr : null,
@@ -42,9 +44,11 @@ function createCollections(db) {
   function list(adultFilter = '') {
     const cols = db.all('SELECT * FROM collections ORDER BY name COLLATE NOCASE');
     const items = db.all('SELECT * FROM collection_items ORDER BY collection_id, position');
-    const by = new Map(); for (const it of items) { if (!by.has(it.collection_id)) by.set(it.collection_id, []); by.get(it.collection_id).push(it); }
+    // one pass over the library for every collection at once: with a couple of hundred franchise sets, a pass each is slow
+    const rich = enrich(items, adultFilter);
+    const by = new Map(); items.forEach((it, n) => { if (!by.has(it.collection_id)) by.set(it.collection_id, []); by.get(it.collection_id).push(rich[n]); });
     return cols.map(c => {
-      const its = enrich(by.get(c.id) || [], adultFilter);
+      const its = by.get(c.id) || [];
       const present = its.filter(i => i.present);
       return { id: c.id, name: c.name, note: c.note, source: c.source, plex_key: c.plex_key, created: c.created, updated: c.updated,
         items: its.length, present: present.length, missing: its.length - present.length, bytes: present.reduce((a, i) => a + (i.bytes || 0), 0), seconds: present.reduce((a, i) => a + (i.seconds || 0), 0),

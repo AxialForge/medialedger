@@ -34,7 +34,7 @@
   ],
   [
    "Fast & Furious",
-   "fast (&|and) furious|fast five|furious 7|hobbs|2 fast|tokyo drift"
+   "fast (&|and) (the )?furious|fast five|furious \\d|fate of the furious|\\bf9\\b|fast x\\b|hobbs|2 fast|tokyo drift"
   ],
   [
    "James Bond",
