@@ -16,10 +16,12 @@ fs.writeFileSync(path.join(dir, 'a.csv'), a);
 const zip = writeZip(path.join(dir, 'out.zip'), [{ name: 'sub/a.csv', file: path.join(dir, 'a.csv') }, { name: 'b.bin', data: b }]);
 assert.ok(fs.statSync(zip).size > 22 && fs.statSync(zip).size < a.length, 'compressed and non-trivial');
 
-// Round-trip through the platform's own extractor (Expand-Archive on Windows, unzip elsewhere)
+// Round-trip through the platform's own extractor (tar.exe on Windows, which reads zip; unzip elsewhere).
+// Not Expand-Archive: started from PowerShell 7, Windows PowerShell 5.1 inherits PSModulePath, loads version 7's
+// Archive module, fails with a non-terminating error and still exits 0. That broke CI from 3.9.0 to 3.11.0.
 const out = path.join(dir, 'x'); fs.mkdirSync(out);
 try {
-  if (process.platform === 'win32') execFileSync('powershell', ['-NoProfile', '-Command', `Expand-Archive -LiteralPath '${zip}' -DestinationPath '${out}' -Force`]);
+  if (process.platform === 'win32') execFileSync(path.join(process.env.SystemRoot || 'C:\Windows', 'System32', 'tar.exe'), ['-xf', zip, '-C', out]);
   else execFileSync('unzip', ['-q', zip, '-d', out]);
 } catch (e) { console.log('zip tests: extraction skipped (' + e.message.split('\n')[0] + ')'); process.exit(0); }
 assert.strictEqual(fs.readFileSync(path.join(out, 'sub', 'a.csv'), 'utf8'), a);

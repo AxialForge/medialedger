@@ -404,6 +404,25 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   database. A *relative* profile path is refused by Electron at start-up:
   an error dialog opens, nothing is logged and the run hangs.
 
+### A pushed tag is not a release: check the build (3.11.1)
+
+- Symptom: `sudo medialedger-update` on the Pi said "updated to 3.7.1" after
+  four newer tags had been pushed. Cause: the tag build failed in `npm test`
+  each time, so no release was published, and the updater installs
+  `releases/latest`. Nobody looked at the run.
+- After the owner pushes a tag, run `gh run list --limit 3` and
+  `gh release list --limit 3` before saying a version is out.
+- The failing test was `test/zip.test.js` calling `powershell
+  Expand-Archive`. On the runner the step runs in PowerShell 7; the child
+  Windows PowerShell 5.1 inherits `PSModulePath`, loads 7's Archive module,
+  prints "Cannot find an overload for ExtractToDirectory" as a
+  non-terminating error and exits 0. The test now uses `tar.exe`.
+  `src/main/ffmpegdl.js` still calls Expand-Archive and would fail the same
+  way if the app were started from a PowerShell 7 window.
+- `releases/latest` follows the release created last, not the highest
+  version: 3.7.1 and 3.8.0 built at the same time and 3.7.1 finished second,
+  so it was "Latest". Do not push two tags at once.
+
 ### Franchises are collections (3.9.0)
 
 - `src/main/franchiseSync.js` keeps one collection per franchise: source

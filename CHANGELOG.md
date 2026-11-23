@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.11.1] - 2026-11-23
+
+### Fixed
+
+- The release build failed for 3.9.0, 3.10.0, 3.10.1 and 3.11.0, so none of
+  them was published and the Pi updater stayed on 3.7.1. A test of the zip
+  writer unpacked its archive with PowerShell's Expand-Archive, which stopped
+  working on the build machine. It now uses tar. This release carries
+  everything from those four.
+
 ## [3.11.0] - 2026-11-23
 
 ### Added
