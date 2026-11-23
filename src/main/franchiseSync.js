@@ -119,7 +119,30 @@ function createFranchises(db, collections) {
   /** The franchise a collection stands for, or null. */
   function nameOf(collectionId) { const c = db.get("SELECT plex_key FROM collections WHERE id=? AND source='franchise'", Number(collectionId)); return c && c.plex_key ? String(c.plex_key).slice(3) : null; }
 
-  return { sync, unassigned, names, assign, block, undo, decisions, nameOf, library };
+  /** The order sub-universes are shown in: the order the data lists them, the catch-all last. */
+  function subOrder(fr, SG) {
+    const g = SG[fr]; if (!g) return [];
+    if (g.rules) return [g.default, ...g.rules.map(r => r[0])];
+    return [g.movie_live, g.movie_animated, ...(g.tv_rules || []).map(r => r[0]), g.tv_default].filter(Boolean);
+  }
+  /**
+   * What a franchise page shows beyond the plain list: which sub-universe each owned title is in, and the timeline
+   * (every entry with its release date, its point in the story, its era, and whether it is in the library).
+   * Worked out on the spot from the engine, never stored: it is a pure function of the titles and the data.
+   */
+  function view(collectionId, adultFilter = '') {
+    const fr = nameOf(collectionId); if (!fr) return null;
+    const d = data(); const owned = F.assign(library(adultFilter), d).owned.filter(o => o.franchise === fr);
+    const subs = {}; for (const o of owned) if (o.sub) subs[o.library_type + '|' + o.title_key] = o.sub;
+    const tl = d.timelines[fr] ? F.timelines(owned, d) : null;
+    return {
+      franchise: fr, subs, subOrder: subOrder(fr, d.subgroups),
+      eras: tl ? tl.eras[fr] : [],
+      timeline: tl ? tl.entries[fr].map(e => ({ title: e.title, media: e.media, rel: e.rel, chron: e.chron, label: e.label, era: e.era, owned: e.owned, library_type: e.item ? e.item.library_type : null, title_key: e.item ? e.item.title_key : null, file: e.file })) : [],
+    };
+  }
+
+  return { sync, unassigned, names, assign, block, undo, decisions, nameOf, library, view };
 }
 
 module.exports = { createFranchises, MEDIA_OF: { movie: 'Movie', tv: 'TV', anime: 'Anime' } };

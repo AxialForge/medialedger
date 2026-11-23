@@ -35,6 +35,20 @@ assert.ok(titles('Star Wars').includes('Andor') && titles('Star Wars').some(t =>
 assert.deepStrictEqual(FR.unassigned().map(u => u.title), ['After Earth', 'Heat', 'Planet Earth']);
 assert.strictEqual(FR.nameOf(col('Dune (franchise)').id), 'Dune');
 
+// ---- the franchise page: sub-universes and the timeline, worked out on the spot
+{
+  const sw = FR.view(col('Star Wars').id);
+  assert.strictEqual(sw.franchise, 'Star Wars'); assert.strictEqual(sw.eras.length, 7); assert.deepStrictEqual(sw.subs, {}, 'Star Wars has no sub-universes');
+  const andor = sw.timeline.find(e => e.title === 'Andor');
+  assert.deepStrictEqual([andor.owned, andor.library_type, andor.title_key], [true, 'tv', 'Andor'], 'an owned entry links to the library title');
+  assert.ok(sw.timeline.some(e => !e.owned && e.title_key === null) && sw.timeline.every(e => /^\d{4}-\d\d-\d\d$/.test(e.rel) && typeof e.chron === 'number'));
+  const mv = FR.view(col('Marvel (MCU & Marvel)').id);
+  assert.deepStrictEqual(mv.subs, { 'movie|venom|2018': 'Sony Spider-Man Universe' }); assert.strictEqual(mv.subOrder[0], 'MCU');
+  assert.ok(mv.subOrder.includes('Sony Spider-Man Universe') && mv.timeline.length > 50);
+  const dn = FR.view(col('Dune (franchise)').id); assert.deepStrictEqual([dn.timeline, dn.eras, dn.subOrder], [[], [], []], 'a franchise with neither still answers');
+  assert.strictEqual(FR.view(mine), null, 'a collection of yours is not a franchise');
+}
+
 // ---- a second sync changes nothing; hand-made additions and notes survive
 const duneId = col('Dune (franchise)').id;
 const handId = C.addItem(duneId, { library_type: 'movie', title_key: 'heat|1995' });

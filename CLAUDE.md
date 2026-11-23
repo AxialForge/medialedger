@@ -428,8 +428,14 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   rule, Blade sub-universe, the two Dune canon entries) and `missing()` also
   tries "title year" for films. `docs/_tools/franchise-parity.js` therefore
   reports those differences now; anything else it reports is a regression.
-- Not built yet: sub-universe panels, the release and in-universe timelines,
-  TMDB updates of the canonical lists.
+- `franchise:view` (3.10.0) gives a franchise page its sub-universes and
+  timeline. Both are computed per request from the engine and **never
+  stored**: they are a pure function of the titles and the JSON, and a stored
+  copy would go stale the moment a rule changes. Timeline dates are
+  `YYYY-MM-DD`; format them at local noon (`frDay`), because `new Date(iso)`
+  reads a bare date as UTC and shows the day before in US time zones.
+- Not built yet: TMDB updates of the canonical lists, more timelines, a
+  source filter on the portal Sets tab.
 
 ### Franchises engine: a faithful port, with two odd conventions
 

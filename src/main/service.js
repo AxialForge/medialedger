@@ -48,7 +48,7 @@ function createService({ userData, log, send, host }) {
   // Every call that can change what the library looks like bumps `dataVersion`; read-only calls do not. Expensive
   // reports (the dashboard) are answered from memory while the version stands and the answer is under a minute old.
   let dataVersion = 0;
-  const READS = /^(data:|app:|collections:(list|get|search|suggest|forTitle|export)$|franchise:(unassigned|names|decisions)$|dup:plan$|scan:(status|list)$|jobs:(list|overdue)$|posters:(status|index|get)$|prefs:get$|log:|roots:(last|check|listDirs)$|meta:(get|status|search)$|plex:(status|test)$|tags:(list|all|get)$|disc:(list|get|forTitle|titles:search|scans:recent|export|lookup|lookup:state|tmdbTest|gaps|locations|copies)$|ratings:list$|requests:list$|override:(list|suggest)$|movie:(plan|batches|batchItems)$|rename:(proposals|history|dry)$|export:list$|collect:get$|db:(stats|backups|restoreList)$|sys:|schedule:(taskStatus|nextInApp)$|update:|adult:status$|settings:get$|web:|notify:test$)/;
+  const READS = /^(data:|app:|collections:(list|get|search|suggest|forTitle|export)$|franchise:(unassigned|names|decisions|view)$|dup:plan$|scan:(status|list)$|jobs:(list|overdue)$|posters:(status|index|get)$|prefs:get$|log:|roots:(last|check|listDirs)$|meta:(get|status|search)$|plex:(status|test)$|tags:(list|all|get)$|disc:(list|get|forTitle|titles:search|scans:recent|export|lookup|lookup:state|tmdbTest|gaps|locations|copies)$|ratings:list$|requests:list$|override:(list|suggest)$|movie:(plan|batches|batchItems)$|rename:(proposals|history|dry)$|export:list$|collect:get$|db:(stats|backups|restoreList)$|sys:|schedule:(taskStatus|nextInApp)$|update:|adult:status$|settings:get$|web:|notify:test$)/;
   const h = (ch, fn) => handlers.set(ch, READS.test(ch) ? fn : (...a) => { dataVersion++; return fn(...a); });
   const remember = (ch, ttlMs, fn) => { const memo = new Map(); h(ch, (...a) => { const key = `${scopeKey()}|${JSON.stringify(a)}`; const hit = memo.get(key); if (hit && hit.v === dataVersion && !scanner.running && Date.now() - hit.t < ttlMs) return hit.r; const r = fn(...a); if (!(r && typeof r.then === 'function')) { if (memo.size > 8) memo.clear(); memo.set(key, { v: dataVersion, t: Date.now(), r }); } return r; }); };
 
@@ -821,6 +821,7 @@ function createService({ userData, log, send, host }) {
   h('franchise:sync', () => syncFranchises(true));
   h('franchise:unassigned', () => franchises().unassigned(AF()));
   h('franchise:names', () => franchises().names());
+  h('franchise:view', (id) => franchises().view(id, AF()));
   h('franchise:decisions', () => franchises().decisions());
   h('franchise:assign', (title, franchise) => { franchises().assign(title, franchise); return syncFranchises(true); });
   h('franchise:block', (o) => { franchises().block(o || {}); return syncFranchises(true); });

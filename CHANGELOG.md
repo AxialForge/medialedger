@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.10.0] - 2026-11-23
+
+### Added
+
+- **Franchise timelines.** Star Wars and Marvel pages show every entry of the
+  saga in release order or in story order, grouped by year or by era, with
+  what is in the library and what is not. Entries you own link to the title.
+- **Group by universe** on the Marvel and DC pages: MCU, Fox X-Men, the Sony
+  films, DC live-action, DC animated and the rest, each under its own
+  heading.
+- Release dates and story years were written from memory, not checked
+  against a source, and the page says so.
+
 ## [3.9.0] - 2026-11-22
 
 ### Added
