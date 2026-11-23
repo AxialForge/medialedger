@@ -437,7 +437,22 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
 - The portal is told only `kind: 'franchise' | 'set'` per collection, not the
   source: whether a set came from Plex is the owner's business. The portal
   Sets tab defaults to sets and searches across both kinds (3.10.1).
-- Not built yet: TMDB updates of the canonical lists, more timelines.
+- TMDB link (3.11.0, `franchise_tmdb`): **`sync()` never uses the network.**
+  Only `tmdbSearch/tmdbLink/tmdbRefresh` fetch, and they store what they
+  got; the sync merges the stored films. A scan with TMDB down therefore
+  behaves exactly like the scan before it.
+- When merging TMDB films, **check the shipped canon list before the owned
+  titles, and test the canon regex against "title year" first.** The canon
+  regexes are what bridge TMDB's spelling ("Star Wars: Episode I - The
+  Phantom Menace") to the library's. Matching by bare name first sent
+  TMDB's Dune (2021) to the Dune (1984) entry and stamped 2021 on it.
+- A link is only ever made by the owner from a search result. Do not
+  auto-link by franchise name: "Alien / Predator" and "Marvel (MCU &
+  Marvel)" each span several TMDB series and a guess would be wrong.
+- The TMDB calls are tested with a fake fetch only. Nobody has run them
+  against the live service yet (no key on the development machine).
+- Not built yet: more timelines; TMDB for TV and anime (TMDB has no series
+  lists for those).
 
 ### Franchises engine: a faithful port, with two odd conventions
 

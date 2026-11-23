@@ -6,6 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.11.0] - 2026-11-23
+
+### Added
+
+- **Franchises can follow TMDB.** On a franchise page, the TMDB button
+  searches TMDB's film series and links the one you pick. From then on a
+  film TMDB lists that you do not have shows as missing, new films appear
+  when TMDB adds them, and release years come from TMDB instead of the
+  built-in list. A franchise can follow more than one series.
+- Timeline release dates that TMDB confirms carry a tick. Where TMDB
+  disagrees with the built-in date, TMDB's date is shown and the old one is
+  in the tooltip.
+- Linked series are read again after a scan once they are a month old, or
+  on request.
+- Optional and off until a free TMDB key is set under Settings, Discs.
+  Films only: TMDB has no series lists for TV or anime. Not yet tried
+  against the live TMDB service.
+
+### Changed
+
+- Schema v23: `franchise_tmdb`.
+
 ## [3.10.1] - 2026-11-23
 
 ### Changed

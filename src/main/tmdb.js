@@ -36,4 +36,17 @@ async function test(key, fetchFn) {
   catch (e) { return { ok: false, message: e.message }; }
 }
 
-module.exports = { searchMovie, searchTv, posterUrl, test };
+/** TMDB's film series ("Star Wars Collection") matching some words. Films only: TMDB has no such thing for television. */
+async function searchCollection(key, q, fetchFn) {
+  const j = await call(key, `/search/collection?query=${encodeURIComponent(String(q || '').trim())}&include_adult=false`, fetchFn);
+  return (j.results || []).slice(0, 12).map(r => ({ id: r.id, name: String(r.name || ''), overview: String(r.overview || '').slice(0, 220) }));
+}
+/** One film series with its films in release order. A film with no date yet (announced, not scheduled) has date null and comes last. */
+async function collection(key, id, fetchFn) {
+  const j = await call(key, `/collection/${Number(id)}`, fetchFn);
+  const parts = (j.parts || []).filter(p => p && p.title).map(p => ({ id: p.id, title: String(p.title), date: /^\d{4}-\d\d-\d\d$/.test(p.release_date || '') ? p.release_date : null }));
+  parts.sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || a.title.localeCompare(b.title));
+  return { id: j.id, name: String(j.name || ''), parts };
+}
+
+module.exports = { searchMovie, searchTv, posterUrl, test, searchCollection, collection };

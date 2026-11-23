@@ -506,6 +506,13 @@ const MIGRATIONS = [
       CREATE TABLE IF NOT EXISTS franchise_blocks (id INTEGER PRIMARY KEY, kind TEXT NOT NULL DEFAULT 'title', title TEXT NOT NULL, media TEXT, franchise TEXT, created TEXT);
     `,
   },
+  {
+    version: 23, name: 'franchise links to TMDB film series',
+    sql: `
+      -- A franchise can follow one or more TMDB collections. parts: JSON [{ id, title, date }], as last fetched.
+      CREATE TABLE IF NOT EXISTS franchise_tmdb (id INTEGER PRIMARY KEY, franchise TEXT NOT NULL, tmdb_id INTEGER NOT NULL, name TEXT, parts TEXT, fetched TEXT, UNIQUE(franchise, tmdb_id));
+    `,
+  },
 ];
 
 class Db {

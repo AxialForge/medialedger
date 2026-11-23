@@ -67,7 +67,7 @@ async function collectionView(id) {
   const edit = canEditCollections();
   const present = c.items.filter(i => i.present), secs = present.reduce((a, i) => a + (i.seconds || 0), 0), bytes = present.reduce((a, i) => a + (i.bytes || 0), 0);
   const watched = present.filter(i => i.watched === 1 || (i.episodes && i.watched === i.episodes)).length;
-  view.innerHTML = `<div class="detail-head"><span class="back" id="back">← Collections</span><h1>${esc(c.name)}</h1>${c.source === 'plex' ? '<span class="badge" title="Mirrored from Plex on each sync; titles you add stay">from Plex</span>' : c.source === 'franchise' ? '<span class="badge" title="Kept up to date after each scan; titles you add stay">Franchise</span>' : ''}<span class="grow"></span><button class="small" id="cExport" title="Download the list as a CSV file">Export CSV</button>${edit ? `<button class="small" id="cRename">Rename / note</button><button class="small" id="cSort" title="Order by release date, then year">Order by release</button><button class="small danger" id="cDelete">Delete</button>` : ''}</div>
+  view.innerHTML = `<div class="detail-head"><span class="back" id="back">← Collections</span><h1>${esc(c.name)}</h1>${c.source === 'plex' ? '<span class="badge" title="Mirrored from Plex on each sync; titles you add stay">from Plex</span>' : c.source === 'franchise' ? '<span class="badge" title="Kept up to date after each scan; titles you add stay">Franchise</span>' : ''}<span class="grow"></span><button class="small" id="cExport" title="Download the list as a CSV file">Export CSV</button>${edit && fv ? `<button class="small" id="cTmdb" title="Follow TMDB's list of the films in this series">TMDB${fv.tmdb.length ? ' ✓' : '…'}</button>` : ''}${edit ? `<button class="small" id="cRename">Rename / note</button><button class="small" id="cSort" title="Order by release date, then year">Order by release</button><button class="small danger" id="cDelete">Delete</button>` : ''}</div>
     ${c.note ? `<p class="muted">${esc(c.note)}</p>` : ''}
     <div class="tiles compact">${tile(c.items.length && present.length === c.items.length ? 'okt' : (c.items.length ? 'warnt' : ''), 'In the library', `${present.length} of ${c.items.length}`, c.items.length - present.length ? `${c.items.length - present.length} to find` : 'complete')}${tile('', 'Runtime', fmtHours(secs), fmtBytes(bytes))}${tile(present.length && watched === present.length ? 'okt' : '', 'Watched', present.length ? `${watched} of ${present.length}` : '—', 'from Plex play counts')}${tile('', 'Kinds', [...new Set(c.items.map(i => i.library_type))].map(t => COL_TYPE[t] || t).join(' · ') || '—')}</div>
     ${edit ? `<div class="card addbox" style="margin:12px 0"><div class="inline"><input type="search" id="cAdd" placeholder="Add a title: type part of its name…" style="flex:1" autocomplete="off"><button class="small" id="cPlace" title="A title you do not own yet, so the set shows the gap">Add a placeholder…</button></div><div class="hits" id="cHits" hidden></div></div>` : ''}
@@ -107,6 +107,7 @@ async function collectionView(id) {
     } catch (err) { toast(err.message, true); }
   };
   if (!edit) return;
+  if ($('#cTmdb')) $('#cTmdb').onclick = () => franchiseTmdbDialog(c, fv);
   $('#cRename').onclick = () => editCollectionDialog(c, (col) => { c.name = col.name; c.note = col.note; route(); });
   $('#cSort').onclick = async () => { try { refresh(await L.collections.sortByRelease(c.id)); toast('Ordered by release date'); } catch (e) { toast(e.message, true); } };
   $('#cDelete').onclick = async () => { if (!confirm(`Delete the collection "${c.name}"? The titles stay in the library.${c.source === 'plex' ? ' The next Plex sync brings it back from Plex.' : c.source === 'franchise' ? ' The next scan brings it back while the library has titles from this franchise.' : ''}`)) return; await L.collections.remove(c.id); location.hash = '#collections'; };
@@ -176,11 +177,42 @@ function franchiseTimeline(fv) {
         <span class="pick"><button class="small ${mode === 'release' ? 'primary' : ''}" data-mode="release" title="The order they came out">Release order</button><button class="small ${mode === 'story' ? 'primary' : ''}" data-mode="story" title="The order the story happens in">Story order</button></span>
         <select id="frTlOnly" class="small"><option value="">Everything</option><option value="have" ${only === 'have' ? 'selected' : ''}>In the library</option><option value="need" ${only === 'need' ? 'selected' : ''}>Not in the library</option></select>
         <button class="small" id="frTlOpen">${open ? 'Hide' : 'Show'}</button></div>
-      ${open ? `<div class="table-wrap short" style="margin-top:10px"><table class="frtl-table"><tbody>${rows.map(({ e, group, when }, n) => `${group !== last ? ((last = group), `<tr class="subhead"><td colspan="6">${esc(group)}</td></tr>`) : ''}<tr class="${e.owned ? '' : 'gone'}"><td class="pos">${n + 1}</td><td class="nowrap muted">${esc(when)}</td><td class="wrap">${e.owned && e.title_key ? `<a href="${colHref(e)}">${esc(e.title)}</a>` : `<b>${esc(e.title)}</b>`}</td><td><span class="badge ${e.media === 'Movie' ? 'movie' : 'tv'}">${esc(e.media)}</span></td><td class="nowrap">${e.owned ? '<span class="ok">in the library</span>' : '<span class="badge warn">not in the library</span>'}</td><td class="nowrap muted tiny">${mode === 'release' ? esc(e.label || '') : frDay(e.rel)}</td></tr>`).join('') || '<tr><td class="empty">Nothing to show.</td></tr>'}</tbody></table></div>
-      <p class="muted tiny" style="margin:8px 0 0">Release dates and story years were written from memory, not checked against a source. Titles with no fixed place in the story come last.</p>` : ''}`;
+      ${open ? `<div class="table-wrap short" style="margin-top:10px"><table class="frtl-table"><tbody>${rows.map(({ e, group, when }, n) => `${group !== last ? ((last = group), `<tr class="subhead"><td colspan="6">${esc(group)}</td></tr>`) : ''}<tr class="${e.owned ? '' : 'gone'}"><td class="pos">${n + 1}</td><td class="nowrap muted">${esc(when)}${mode === 'release' && e.checked ? ` <span class="ok" title="${e.was ? 'TMDB has this date. The list said ' + frDay(e.was) : 'TMDB agrees with this date'}">✓</span>` : ''}</td><td class="wrap">${e.owned && e.title_key ? `<a href="${colHref(e)}">${esc(e.title)}</a>` : `<b>${esc(e.title)}</b>`}</td><td><span class="badge ${e.media === 'Movie' ? 'movie' : 'tv'}">${esc(e.media)}</span></td><td class="nowrap">${e.owned ? '<span class="ok">in the library</span>' : '<span class="badge warn">not in the library</span>'}</td><td class="nowrap muted tiny">${mode === 'release' ? esc(e.label || '') : frDay(e.rel) + (e.checked ? ' <span class="ok">✓</span>' : '')}</td></tr>`).join('') || '<tr><td class="empty">Nothing to show.</td></tr>'}</tbody></table></div>
+      <p class="muted tiny" style="margin:8px 0 0">${fv.timeline.some(e => e.checked) ? `${fv.timeline.filter(e => e.checked).length} release dates carry a ✓: TMDB has them. The rest, and all the story years, were written from memory.` : 'Release dates and story years were written from memory, not checked against a source.'} Titles with no fixed place in the story come last.</p>` : ''}`;
     box.querySelectorAll('button[data-mode]').forEach(b => { b.onclick = () => { mode = frPref('tl', b.dataset.mode, true); if (!open) open = frPref('tlOpen', '1', true) === '1'; paint(); }; });
     $('#frTlOnly').onchange = (ev) => { only = ev.target.value; paint(); };
     $('#frTlOpen').onclick = () => { open = !open; frPref('tlOpen', open ? '1' : '0', true); paint(); };
   };
   paint();
+}
+
+// ---------- a franchise and TMDB: follow TMDB's list of the films in a series ---------------------------
+function franchiseTmdbDialog(c, fv) {
+  const guess = fv.franchise.replace(/\(.*?\)/g, '').split('/')[0].trim();
+  const card = openModal(`<h2>${esc(fv.franchise)} and TMDB</h2>
+    <p class="muted">TMDB keeps a list of the films in a series and when each came out. Link one and this franchise follows it: a film TMDB lists that you do not have shows as missing, new films appear when TMDB adds them, and years come from TMDB. It covers films only. TV and anime stay with the built-in list.</p>
+    ${fv.tmdbKey ? '' : '<div class="status-line">This needs a free TMDB key. Add one under Settings, in the Discs section, then come back.</div>'}
+    <div id="tmLinks"></div>
+    ${fv.tmdbKey ? `<div class="inline" style="margin-top:12px"><input type="search" id="tmQ" value="${esc(guess)}" style="flex:1" placeholder="Name of the film series"><button class="primary" id="tmGo">Search TMDB</button></div><div id="tmHits" style="margin-top:8px"></div>` : ''}
+    <p class="muted tiny" style="margin-top:12px">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+    <div class="actions"><span class="grow"></span><button id="tmClose">Close</button></div>`);
+  let changed = false;
+  const done = () => { closeModal(); if (changed) route(); };
+  $('#tmClose', card).onclick = done;
+  const paintLinks = (list) => {
+    $('#tmLinks', card).innerHTML = list.length ? `<div class="table-wrap short"><table><tbody>${list.map(l => `<tr><td class="wrap"><b>${esc(l.name || 'TMDB series ' + l.tmdb_id)}</b></td><td class="muted nowrap">${l.films} film${l.films === 1 ? '' : 's'}</td><td class="muted tiny nowrap">read ${l.fetched ? dayOf(l.fetched) : 'never'}</td><td class="rowacts"><button class="small" data-unlink="${l.id}">Unlink</button></td></tr>`).join('')}</tbody></table></div>${fv.tmdbKey ? '<div class="inline" style="margin-top:6px"><button class="small" id="tmRefresh">Read them again now</button><span class="muted tiny">They are also read again after a scan, once they are a month old.</span></div>' : ''}` : '<p class="muted">Not linked to anything on TMDB yet.</p>';
+    $('#tmLinks', card).querySelectorAll('button[data-unlink]').forEach(b => { b.onclick = async () => { b.disabled = true; try { await L.franchises.tmdbUnlink(Number(b.dataset.unlink)); changed = true; paintLinks((await L.franchises.view(c.id)).tmdb); } catch (e) { toast(e.message, true); b.disabled = false; } }; });
+    if ($('#tmRefresh', card)) $('#tmRefresh', card).onclick = async (ev) => { ev.target.disabled = true; try { const r = await L.franchises.tmdbRefresh(c.id); changed = true; toast(`${r.done} series read again`); paintLinks((await L.franchises.view(c.id)).tmdb); } catch (e) { toast(e.message, true); ev.target.disabled = false; } };
+  };
+  paintLinks(fv.tmdb);
+  if (!fv.tmdbKey) return;
+  const search = async () => {
+    const box = $('#tmHits', card); box.innerHTML = '<span class="muted tiny">Asking TMDB…</span>';
+    try {
+      const hits = await L.franchises.tmdbSearch($('#tmQ', card).value);
+      box.innerHTML = hits.length ? `<div class="table-wrap short"><table><tbody>${hits.map(h => `<tr><td class="wrap"><b>${esc(h.name)}</b>${h.overview ? `<div class="muted tiny">${esc(h.overview)}</div>` : ''}</td><td class="rowacts"><button class="small primary" data-link="${h.id}">Link</button></td></tr>`).join('')}</tbody></table></div>` : '<span class="muted">TMDB has no film series by that name. Try fewer words.</span>';
+      box.querySelectorAll('button[data-link]').forEach(b => { b.onclick = async () => { b.disabled = true; try { const r = await L.franchises.tmdbLink(c.id, Number(b.dataset.link)); changed = true; toast(`Linked ${r.name}: ${r.films} films`); b.textContent = 'Linked'; paintLinks((await L.franchises.view(c.id)).tmdb); } catch (e) { toast(e.message, true); b.disabled = false; } }; });
+    } catch (e) { box.innerHTML = `<span class="bad">${esc(e.message)}</span>`; }
+  };
+  $('#tmGo', card).onclick = search; $('#tmQ', card).onkeydown = (ev) => { if (ev.key === 'Enter') search(); };
 }

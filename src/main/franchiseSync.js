@@ -13,14 +13,27 @@
 //   franchise_rules   "this title belongs to that franchise"    (tried before the shipped rules)
 //   franchise_blocks  kind 'title':   "this title is not part of any franchise"
 //                     kind 'missing': "stop listing this canonical title as missing"
+//
+// TMDB (optional, needs the owner's free key): a franchise can be linked to TMDB film series. Their films are kept in
+// franchise_tmdb and merged at sync time: a film TMDB lists that is neither owned nor already in the shipped list
+// becomes a missing title, and TMDB's year replaces the one written from memory. The link is always made by hand
+// from a search; nothing is linked on a guess. The network is only touched by the tmdb* functions, never by sync().
 const F = require('./franchises');
+const tmdb = require('./tmdb');
 
 const TYPE = { Movie: 'movie', TV: 'tv', Anime: 'anime' };
 const KEY = (name) => 'fr:' + name;
 
 const rxEscape = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-function createFranchises(db, collections) {
+const noThe = (s) => s.replace(/^the /, '');
+const bare = (t) => noThe(F.nz(String(t).replace(/\(\d{4}\)/g, '')));   // a title as two sources would both spell it
+const yearOfDate = (d) => (d ? Number(String(d).slice(0, 4)) : null);
+const near = (a, b) => !a || !b || Math.abs(Number(a) - Number(b)) <= 1;
+
+function createFranchises(db, collections, opts = {}) {
+  const key = () => String((opts.key ? opts.key() : '') || '').trim();
+  const links = (fr) => (fr ? db.all('SELECT * FROM franchise_tmdb WHERE franchise=? ORDER BY id', fr) : db.all('SELECT * FROM franchise_tmdb ORDER BY id')).map(r => { let parts = []; try { parts = JSON.parse(r.parts || '[]'); } catch { /* an unreadable row counts as empty */ } return { ...r, parts }; });
   const decisions = () => ({
     rules: db.all('SELECT id, franchise, pattern, title, created FROM franchise_rules ORDER BY id DESC'),
     blocks: db.all('SELECT id, kind, title, media, franchise, created FROM franchise_blocks ORDER BY id DESC'),
@@ -49,6 +62,22 @@ function createFranchises(db, collections) {
     const slot = (fr) => { if (!want.has(fr)) want.set(fr, { owned: new Map(), place: new Map() }); return want.get(fr); };
     for (const o of a.owned) slot(o.franchise).owned.set(o.library_type + '|' + o.title_key, o);
     for (const g of gaps) slot(g.franchise).place.set(g.title.toLowerCase(), g);
+    // TMDB's films for the franchises linked to it. The shipped list is the bridge between the two spellings of a title:
+    // a film TMDB names that the shipped list already knows is left to the shipped list, with TMDB's year.
+    for (const l of links()) {
+      const w = want.get(l.franchise); if (!w) continue;
+      const mine = a.owned.filter(o => o.franchise === l.franchise && o.media === 'Movie').map(o => ({ n: bare(o.title), y: Number(o.year) || null }));
+      const canon = (d.canon[l.franchise] || []).filter(c => c[1] === 'Movie').map(c => ({ title: c[0], n: bare(c[0]), y: Number(c[2]) || null, rx: new RegExp(c[3].replace(/-/g, ' ')) }));
+      for (const p of l.parts) {
+        const y = yearOfDate(p.date), raw = F.nz(p.title), n = noThe(raw);
+        const c = canon.find(k => (y && k.rx.test(`${raw} ${y}`)) || (k.rx.test(raw) && near(k.y, y)) || (k.n === n && near(k.y, y)));
+        if (c) { const g = w.place.get(c.title.toLowerCase()); if (g && y) g.year = String(y); continue; }
+        if (mine.some(o => o.n === n && near(o.y, y))) continue;
+        if (hidden.has(`${l.franchise}|Movie|${p.title}`) || w.place.has(p.title.toLowerCase())) continue;
+        w.place.set(p.title.toLowerCase(), { franchise: l.franchise, media: 'Movie', title: p.title, year: y ? String(y) : '' });
+      }
+    }
+    const missingCount = [...want.values()].reduce((n, w) => n + w.place.size, 0);
 
     const now = new Date().toISOString(); const touched = []; let made = 0, added = 0, removed = 0, dropped = 0;
     db.transaction(() => {
@@ -67,7 +96,12 @@ function createFranchises(db, collections) {
         }
         const put = (ref) => { const id = collections.addItem(cid, ref); if (id) { db.run('UPDATE collection_items SET from_franchise=1 WHERE id=?', id); added++; changed = true; } };
         for (const o of w.owned.values()) put({ library_type: o.library_type, title_key: o.title_key });
-        for (const g of w.place.values()) put({ library_type: TYPE[g.media] || 'other', title: g.title, year: g.year });
+        for (const g of w.place.values()) {
+          put({ library_type: TYPE[g.media] || 'other', title: g.title, year: g.year });
+          // a placeholder already there keeps its row; only its year follows a better source
+          const yr = Number(g.year) || null;
+          if (yr && db.run('UPDATE collection_items SET year=? WHERE collection_id=? AND from_franchise=1 AND title_key IS NULL AND title=? COLLATE NOCASE AND COALESCE(year,0)<>?', yr, cid, g.title, yr).changes) changed = true;
+        }
         if (changed) touched.push(cid);
       }
       // a franchise nothing in the library belongs to any more: take back what was put there, and the collection too if that empties it
@@ -78,7 +112,7 @@ function createFranchises(db, collections) {
     });
     // reorder() opens its own transaction, so the ordering happens after the one above has closed
     for (const cid of touched) { try { collections.sortByRelease(cid); } catch (e) { log('franchises: order ' + cid + ': ' + e.message); } }
-    const out = { franchises: want.size, owned: a.owned.length, missing: gaps.length, unassigned: a.unassigned.length, made, added, removed, dropped };
+    const out = { franchises: want.size, owned: a.owned.length, missing: missingCount, unassigned: a.unassigned.length, made, added, removed, dropped };
     log(`franchises: ${out.franchises} sets, ${out.owned} titles, ${out.missing} missing, ${out.unassigned} in none (${made} new, +${added} -${removed})`);
     return out;
   }
@@ -135,14 +169,40 @@ function createFranchises(db, collections) {
     const d = data(); const owned = F.assign(library(adultFilter), d).owned.filter(o => o.franchise === fr);
     const subs = {}; for (const o of owned) if (o.sub) subs[o.library_type + '|' + o.title_key] = o.sub;
     const tl = d.timelines[fr] ? F.timelines(owned, d) : null;
+    const mine = links(fr); const parts = mine.flatMap(l => l.parts).filter(p => p.date).map(p => ({ n: F.nz(p.title), date: p.date }));
+    // a film's release date from TMDB, when a linked series has that film within a year of the date written from memory
+    const checkedDate = (spec) => { if (spec.media !== 'Movie' || !parts.length) return null; const rx = new RegExp(spec.regex.replace(/-/g, ' ')); const hit = parts.find(p => rx.test(p.n) && near(yearOfDate(p.date), yearOfDate(spec.rel))); return hit ? hit.date : null; };
     return {
       franchise: fr, subs, subOrder: subOrder(fr, d.subgroups),
       eras: tl ? tl.eras[fr] : [],
-      timeline: tl ? tl.entries[fr].map(e => ({ title: e.title, media: e.media, rel: e.rel, chron: e.chron, label: e.label, era: e.era, owned: e.owned, library_type: e.item ? e.item.library_type : null, title_key: e.item ? e.item.title_key : null, file: e.file })) : [],
+      tmdb: mine.map(l => ({ id: l.id, tmdb_id: l.tmdb_id, name: l.name, films: l.parts.length, fetched: l.fetched })),
+      timeline: tl ? tl.entries[fr].map((e, n) => { const cd = checkedDate(d.timelines[fr].entries[n]); return { checked: !!cd, was: cd && cd !== e.rel ? e.rel : null, ...e, rel: cd || e.rel }; }).map(e => ({ title: e.title, media: e.media, rel: e.rel, checked: e.checked, was: e.was, chron: e.chron, label: e.label, era: e.era, owned: e.owned, library_type: e.item ? e.item.library_type : null, title_key: e.item ? e.item.title_key : null, file: e.file })) : [],
     };
   }
 
-  return { sync, unassigned, names, assign, block, undo, decisions, nameOf, library, view };
+  // ---- TMDB: the only functions here that use the network
+  const store = (fr, c) => db.run('INSERT INTO franchise_tmdb (franchise, tmdb_id, name, parts, fetched) VALUES (?,?,?,?,?) ON CONFLICT(franchise, tmdb_id) DO UPDATE SET name=excluded.name, parts=excluded.parts, fetched=excluded.fetched', fr, Number(c.id), c.name, JSON.stringify(c.parts), new Date().toISOString());
+  const tmdbSearch = (q) => tmdb.searchCollection(key(), q, opts.fetchFn);
+  /** Link a franchise (by its collection) to one TMDB film series, and fetch its films. */
+  async function tmdbLink(collectionId, tmdbId) {
+    const fr = nameOf(collectionId); if (!fr) throw new Error('That collection is not a franchise');
+    const c = await tmdb.collection(key(), tmdbId, opts.fetchFn); store(fr, c);
+    return { franchise: fr, name: c.name, films: c.parts.length };
+  }
+  function tmdbUnlink(linkId) { return db.run('DELETE FROM franchise_tmdb WHERE id=?', Number(linkId)).changes > 0; }
+  /** Fetch again whatever is older than `maxAgeDays` (0 = everything). Stops at the first failure: the rest wait for next time. */
+  async function tmdbRefresh({ maxAgeDays = 30, franchise = null, log = () => {} } = {}) {
+    if (!key()) return { skipped: 'no key' };
+    const cutoff = new Date(Date.now() - maxAgeDays * 86400000).toISOString();
+    const due = links(franchise).filter(l => !l.fetched || maxAgeDays === 0 || l.fetched < cutoff); let done = 0;
+    for (const l of due) {
+      try { store(l.franchise, await tmdb.collection(key(), l.tmdb_id, opts.fetchFn)); done++; }
+      catch (e) { log(`franchises: TMDB ${l.name}: ${e.message}`); return { due: due.length, done, error: e.message }; }
+    }
+    return { due: due.length, done };
+  }
+
+  return { sync, unassigned, names, assign, block, undo, decisions, nameOf, library, view, tmdbSearch, tmdbLink, tmdbUnlink, tmdbRefresh };
 }
 
 module.exports = { createFranchises, MEDIA_OF: { movie: 'Movie', tv: 'TV', anime: 'Anime' } };

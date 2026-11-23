@@ -79,7 +79,7 @@ const isSensitive = (ch, args) => ch === 'movie:run' ? !!(args[1] && args[1].liv
 const CAP_CHANNELS = {
   scan: ['scan:start', 'scan:cancel', 'meta:refresh'],
   requests: ['requests:update', 'requests:delete'],
-  collections: ['collections:save', 'collections:delete', 'collections:addItem', 'collections:removeItem', 'collections:setNote', 'collections:reorder', 'collections:sortByRelease', 'collections:setCover', 'collections:suggest', 'collections:createFromSuggestion', 'collections:search', 'franchise:sync', 'franchise:unassigned', 'franchise:names', 'franchise:decisions', 'franchise:assign', 'franchise:block', 'franchise:undo'],
+  collections: ['collections:save', 'collections:delete', 'collections:addItem', 'collections:removeItem', 'collections:setNote', 'collections:reorder', 'collections:sortByRelease', 'collections:setCover', 'collections:suggest', 'collections:createFromSuggestion', 'collections:search', 'franchise:sync', 'franchise:unassigned', 'franchise:names', 'franchise:decisions', 'franchise:assign', 'franchise:block', 'franchise:undo', 'franchise:tmdb:search', 'franchise:tmdb:link', 'franchise:tmdb:unlink', 'franchise:tmdb:refresh'],
   fixes: ['override:save', 'override:delete', 'override:suggest', 'override:bulkSource', 'dup:keep', 'dup:clear', 'dup:keepBest', 'dup:plan'],
   metadata: ['meta:search', 'meta:setMatch', 'meta:setManual', 'meta:setNone', 'meta:unlock', 'collect:get', 'collect:set', 'meta:refresh', 'disc:lookup', 'disc:scan', 'disc:release:save', 'disc:copy:add', 'disc:copy:save', 'disc:copy:status', 'disc:title:link', 'disc:title:unlink', 'disc:wishlist:got'],
   tags: ['tags:add', 'tags:remove'],
