@@ -121,7 +121,21 @@
       return;
     }
     let rows; try { rows = await cached('collections'); } catch (e) { if (e.message !== 'invite') view.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
-    view.innerHTML = `<h1>Collections</h1><p class="muted tiny">Sets of films and series that belong together, across the libraries.</p><div class="list">${rows.map(c => `<a class="row ${c.cover ? 'has-poster' : ''}" href="#collections/${c.id}">${c.cover ? poster({ type: c.cover.type, key: c.cover.key, title: c.name }) : ''}<div class="t">${esc(c.name)}</div><div class="s"><span>${c.present} of ${c.items} titles</span>${c.minutes ? `<span>${mins(c.minutes)}</span>` : ''}${c.missing ? `<span class="badge warn">${c.missing} missing</span>` : '<span class="badge ok">complete</span>'}${c.types.map(t => `<span class="badge ${t}">${TYPE[t] || t}</span>`).join('')}</div><div class="strip">${c.preview.map(p => poster({ type: p.type, key: p.key, title: p.title }, 'pmini')).join('')}</div></a>`).join('') || '<div class="empty">No collections yet.</div>'}</div>`;
+    // Hand-made sets and the ones from Plex come first: there are a few of them and someone chose each one.
+    // Franchises are made by the app, a couple of hundred of them, so they wait behind a choice instead of burying the rest.
+    const sets = rows.filter(c => c.kind !== 'franchise').length, frs = rows.length - sets;
+    let kind = store.get('colKind', ''); if (kind !== 'set' && kind !== 'franchise' && kind !== 'all') kind = sets ? 'set' : 'franchise';
+    view.innerHTML = `<h1>Collections</h1><p class="muted tiny">Sets of films and series that belong together, across the libraries.</p>
+      <div class="bar"><input type="search" id="cQ" placeholder="Search…" autocomplete="off">${sets && frs ? `<select id="cKind"><option value="set" ${kind === 'set' ? 'selected' : ''}>Sets (${sets})</option><option value="franchise" ${kind === 'franchise' ? 'selected' : ''}>Franchises (${frs})</option><option value="all" ${kind === 'all' ? 'selected' : ''}>Everything (${rows.length})</option></select>` : ''}<select id="cHave"><option value="">complete or not</option><option value="gaps">with something missing</option><option value="done">complete</option></select></div>
+      <div class="list" id="cList"></div>`;
+    const draw = () => {
+      const q = $('#cQ').value.trim().toLowerCase(), have = $('#cHave').value, k = $('#cKind') ? $('#cKind').value : 'all';
+      // a search looks everywhere: someone typing "star wars" wants it whichever kind it is
+      const list = rows.filter(c => (q ? c.name.toLowerCase().includes(q) : (k === 'all' || c.kind === k)) && (!have || (have === 'gaps') === (c.missing > 0)));
+      $('#cList').innerHTML = list.map(c => `<a class="row ${c.cover ? 'has-poster' : ''}" href="#collections/${c.id}">${c.cover ? poster({ type: c.cover.type, key: c.cover.key, title: c.name }) : ''}<div class="t">${esc(c.name)}</div><div class="s"><span>${c.present} of ${c.items} titles</span>${c.minutes ? `<span>${mins(c.minutes)}</span>` : ''}${c.missing ? `<span class="badge warn">${c.missing} missing</span>` : '<span class="badge ok">complete</span>'}${c.kind === 'franchise' && (q || k === 'all') ? '<span class="badge">franchise</span>' : ''}${c.types.map(t => `<span class="badge ${t}">${TYPE[t] || t}</span>`).join('')}</div><div class="strip">${c.preview.map(p => poster({ type: p.type, key: p.key, title: p.title }, 'pmini')).join('')}</div></a>`).join('') || `<div class="empty">${rows.length ? 'Nothing matches.' : 'No collections yet.'}</div>`;
+    };
+    $('#cQ').oninput = draw; $('#cHave').onchange = draw; if ($('#cKind')) $('#cKind').onchange = () => { store.set('colKind', $('#cKind').value); draw(); };
+    draw();
   }
 
   // ---- Tonight ------------------------------------------------------------------------------------

@@ -434,8 +434,10 @@ Runtime data: `%APPDATA%\MediaLedger\` (`medialedger.db`, `settings.json`,
   copy would go stale the moment a rule changes. Timeline dates are
   `YYYY-MM-DD`; format them at local noon (`frDay`), because `new Date(iso)`
   reads a bare date as UTC and shows the day before in US time zones.
-- Not built yet: TMDB updates of the canonical lists, more timelines, a
-  source filter on the portal Sets tab.
+- The portal is told only `kind: 'franchise' | 'set'` per collection, not the
+  source: whether a set came from Plex is the owner's business. The portal
+  Sets tab defaults to sets and searches across both kinds (3.10.1).
+- Not built yet: TMDB updates of the canonical lists, more timelines.
 
 ### Franchises engine: a faithful port, with two odd conventions
 

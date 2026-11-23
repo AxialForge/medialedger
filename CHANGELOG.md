@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.10.1] - 2026-11-23
+
+### Changed
+
+- **Family portal, Sets tab:** hand-made and Plex sets show first, with
+  franchises behind a Sets / Franchises / Everything choice that the device
+  remembers. A search box looks across both, and a second choice shows only
+  the collections with something missing, or only the complete ones.
+
 ## [3.10.0] - 2026-11-23
 
 ### Added
